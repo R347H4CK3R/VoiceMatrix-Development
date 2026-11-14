@@ -15,6 +15,20 @@ jobs:
     steps:
     - checkout
     - run:
+        name: Select Homebrew Python 3.12 for every native validation step
+        command: |
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          if ! brew list --versions python@3.12 >/dev/null 2>&1; then
+            brew install python@3.12
+          fi
+          PYTHON_BIN="$(brew --prefix python@3.12)/libexec/bin"
+          test -x "$PYTHON_BIN/python3"
+          export PATH="$PYTHON_BIN:$PATH"
+          hash -r
+          printf 'export PATH=%q:$PATH\n' "$PYTHON_BIN" >> "$BASH_ENV"
+          python3 -c 'import platform,sys; print(sys.executable); print(sys.version); assert sys.version_info >= (3,12); assert platform.machine() == "arm64"'
+        no_output_timeout: 10m
+    - run:
         name: Admit native UI runner without downloading resources
         command: python3 tools/native_ui_preflight.py | tee native-ui-preflight.json
     - run:

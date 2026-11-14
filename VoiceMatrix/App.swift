@@ -8,12 +8,13 @@ import AVFoundation
     @StateObject private var audio = AudioStore()
     @StateObject private var characters = CharacterLibrary()
     @StateObject private var rvc = RVCOnlineStudio()
+    @StateObject private var offlineRVC = RVCOnDeviceStudio()
     @StateObject private var localVideo = LocalVideoStudio()
     var body: some Scene {
-        WindowGroup { RootView().environmentObject(studio).environmentObject(audio).environmentObject(characters).environmentObject(rvc).environmentObject(localVideo).preferredColorScheme(.dark).tint(StudioPalette.accent)
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in studio.memoryWarning(); characters.releaseWarmSpeech(); localVideo.memoryWarning() }
+        WindowGroup { RootView().environmentObject(studio).environmentObject(audio).environmentObject(characters).environmentObject(rvc).environmentObject(offlineRVC).environmentObject(localVideo).preferredColorScheme(.dark).tint(StudioPalette.accent)
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in studio.memoryWarning(); characters.releaseWarmSpeech(); localVideo.memoryWarning(); offlineRVC.cancel(reason: "Stopping to release memory.") }
             .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in localVideo.thermalChanged() }
-            .onChange(of: scenePhase, initial: true) { _, phase in characters.setApplicationActive(phase == .active); localVideo.setActive(phase != .background) }
+            .onChange(of: scenePhase, initial: true) { _, phase in characters.setApplicationActive(phase == .active); localVideo.setActive(phase != .background); offlineRVC.setActive(phase != .background) }
             .onChange(of: studio.busy) { _, busy in if busy { characters.releaseWarmSpeech() } }
         }
     }
@@ -72,6 +73,9 @@ struct HomeView: View {
                     NavigationLink { CharacterLibraryView(mode: .conversion) } label: {
                         HomeCard(title: "Change my voice", detail: "Record or import your own words.", icon: "mic.fill")
                     }.accessibilityIdentifier("change-my-voice")
+                    NavigationLink { RVCOnDeviceView() } label: {
+                        HomeCard(title: "On-device RVC", detail: "Diagnostic preview · experimental quality.", icon: "waveform.badge.magnifyingglass")
+                    }.accessibilityIdentifier("on-device-rvc")
                     NavigationLink { RVCOnlineView() } label: {
                         HomeCard(title: "Laptop RVC", detail: "Online speech-to-speech conversion.", icon: "laptopcomputer")
                     }.accessibilityIdentifier("laptop-rvc")

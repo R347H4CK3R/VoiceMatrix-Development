@@ -1,7 +1,7 @@
 name: Current no-stock character UI smoke
 on:
   push:
-    branches-ignore: [codex/iphone-build4]
+    branches-ignore: [codex/iphone-build4, codex/iphone-build5]
     paths:
       - '.github/workflows/voicematrix-049-candidate.yml'
       - 'VoiceMatrix/F5ReferenceEngine.swift'

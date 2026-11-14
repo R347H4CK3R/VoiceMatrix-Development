@@ -1,0 +1,80 @@
+import Foundation
+
+/// Admission is deliberately limited to the previously verified diagnostic graphs.
+/// A manifest cannot authorize arbitrary models by supplying its own hash.
+enum RVCSynthesisAssets {
+    static let verifiedSHA256 = "fadf28f77251f486c48f9b039f62306f07e02e7ffe9be5bde2f7fc33f23360cb"
+    static let maximumBytes = 128 * 1024 * 1024
+    struct Manifest: Codable {
+        let schemaVersion: Int
+        let profile: String
+        let file: String
+        let sha256: String
+        let bytes: Int
+    }
+    static func validateManifest(_ m: Manifest) throws {
+        let accepted: (String, String, Int)
+        switch m.profile {
+        case "rvc-v2-922-cpu": accepted = ("synthesizer.onnx", verifiedSHA256, maximumBytes)
+        case "hubert-147680-cpu": accepted = ("hubert.onnx", "980f264a909ff3d85d513e924304b1c179ff5d17280dda0b011ec01cb366aa68", 384 * 1024 * 1024)
+        default: throw RVCSynthesisFailure.invalidAsset
+        }
+        guard m.schemaVersion == 1, m.file == accepted.0, m.sha256 == accepted.1,
+              (1...accepted.2).contains(m.bytes) else { throw RVCSynthesisFailure.invalidAsset }
+    }
+    static func regularFile(_ url: URL) throws -> Int {
+        guard url.isFileURL, url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).standardizedFileURL == url.resolvingSymlinksInPath().standardizedFileURL else {
+            throw RVCSynthesisFailure.invalidAsset
+        }
+        let info = try url.resourceValues(forKeys: [.isRegularFileKey,.fileSizeKey])
+        guard info.isRegularFile == true, let size = info.fileSize else { throw RVCSynthesisFailure.invalidAsset }
+        return size
+    }
+    static func manifest(at root: URL) throws -> Manifest {
+        let url = root.appendingPathComponent("manifest.json")
+        guard try regularFile(url) <= 4096 else { throw RVCSynthesisFailure.invalidAsset }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let data = try handle.read(upToCount: 4097) ?? Data()
+        guard data.count <= 4096 else { throw RVCSynthesisFailure.invalidAsset }
+        let result = try JSONDecoder().decode(Manifest.self, from: data)
+        try validateManifest(result)
+        return result
+    }
+    /// Make a private, verified snapshot so ORT never reopens a mutable import.
+    /// The iOS caller supplies a streaming CryptoKit SHA256 accumulator.
+    static func snapshot(root: URL, cache: URL, profile: String = "rvc-v2-922-cpu", update: (Data) -> Void,
+                         finish: () -> String) throws -> URL {
+        let m = try manifest(at: root)
+        guard m.profile == profile else { throw RVCSynthesisFailure.invalidAsset }
+        let source = root.appendingPathComponent(m.file)
+        guard try regularFile(source) == m.bytes else { throw RVCSynthesisFailure.invalidAsset }
+        let fm = FileManager.default
+        let folder = cache.appendingPathComponent("rvc-" + UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        var accepted = false
+        defer { if !accepted { try? fm.removeItem(at: folder) } }
+        let destination = folder.appendingPathComponent(m.file)
+        guard fm.createFile(atPath: destination.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
+            throw RVCSynthesisFailure.invalidAsset
+        }
+        let input = try FileHandle(forReadingFrom: source)
+        defer { try? input.close() }
+        let output = try FileHandle(forWritingTo: destination)
+        defer { try? output.close() }
+        var total = 0
+        while true {
+            try Task.checkCancellation()
+            let data = try input.read(upToCount: 1024 * 1024) ?? Data()
+            if data.isEmpty { break }
+            total += data.count
+            guard total <= m.bytes else { throw RVCSynthesisFailure.invalidAsset }
+            update(data)
+            try output.write(contentsOf: data)
+        }
+        guard total == m.bytes, finish() == m.sha256 else { throw RVCSynthesisFailure.invalidAsset }
+        try output.synchronize()
+        accepted = true
+        return destination
+    }
+}

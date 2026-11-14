@@ -1,0 +1,144 @@
+name: VoiceMatrix iPhone build 5 packaging only
+'on':
+  push:
+    branches:
+    - codex/iphone-build5
+  workflow_dispatch: null
+permissions:
+  contents: read
+jobs:
+  resolve:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Freeze exact shared package graph
+      run: 'brew install xcodegen
+
+        mkdir -p VoiceMatrix/Resources/{Phonon,OpenVoice,F5TTS}
+
+        python3 tools/create_diagnostic_collection.py
+
+        xcodegen generate
+
+        xcodebuild -resolvePackageDependencies -project VoiceMatrix.xcodeproj -scheme
+        VoiceMatrix -derivedDataPath native-build > resolve.log 2>&1 || { tail -100
+        resolve.log; exit 1; }
+
+        cp VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+        Package.resolved'
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Character-frozen-dependencies
+        path: Package.resolved
+        if-no-files-found: error
+        retention-days: 14
+  ipa:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - uses: actions/download-artifact@v4
+      with:
+        name: Character-frozen-dependencies
+        path: frozen
+    - uses: actions/cache@v4
+      with:
+        path: character-cache
+        key: character-assets-685e8816-716d2f41
+    - name: Stage pinned shared engines with zero bundled profiles
+      run: "python3 tools/bundle_diarization.py\npython3 tools/bundle_asr.py\npython3\
+        \ tools/character_package.py prepare --cache character-cache --resources character-resources\
+        \  > assets.json\npython3 - <<'PYCODE'\nfrom pathlib import Path\nimport shutil\n\
+        for name in ('Phonon','OpenVoice','F5TTS'):\n    target=Path('VoiceMatrix/Resources')/name\n\
+        \    if target.is_symlink():raise SystemExit('Unexpected resource symlink')\n\
+        \    if target.exists():shutil.rmtree(target)\n    shutil.copytree(Path('character-resources')/name,target)\n\
+        PYCODE"
+    - name: Resolve frozen graph
+      run: 'brew install xcodegen
+
+        mkdir -p VoiceMatrix/Resources/{Phonon,OpenVoice,F5TTS}
+
+        python3 tools/create_diagnostic_collection.py
+
+        xcodegen generate
+
+        mkdir -p VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+
+        cp frozen/Package.resolved VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+        xcodebuild -resolvePackageDependencies -disableAutomaticPackageResolution
+        -onlyUsePackageVersionsFromResolvedFile -project VoiceMatrix.xcodeproj -scheme
+        VoiceMatrix -derivedDataPath native-build > resolve.log 2>&1 || { tail -100
+        resolve.log; exit 1; }
+
+        python3 -m tools.character_evidence source VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+        source-proof.json'
+    - name: Collect dependency licenses and compile unsigned ARM64 app
+      run: 'python3 tools/character_package.py notices --checkouts native-build/SourcePackages/checkouts
+        --resolved VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+        --resources VoiceMatrix/Resources > dependency-notices.json
+
+        xcodebuild -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile
+        -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix
+        -configuration Release -sdk iphoneos -destination ''generic/platform=iOS''
+        -derivedDataPath native-build CODE_SIGNING_ALLOWED=NO build > character-build.log
+        2>&1 || { tail -160 character-build.log; exit 1; }
+
+        mkdir Payload
+
+        cp -R native-build/Build/Products/Release-iphoneos/VoiceMatrix.app Payload/
+
+        cp source-proof.json Payload/VoiceMatrix.app/VoiceMatrix-Source-Proof.json
+
+        python3 tools/package_ipa.py Payload VoiceMatrix-0.4.9-build5.ipa
+
+        python3 tools/character_package.py inspect VoiceMatrix-0.4.9-build5.ipa --expected-version
+        0.4.9 --expected-build 5 --dependency-proof dependency-notices.json > character-inspection.json
+
+        python3 tools/bundle_diarization.py --inspect-ipa VoiceMatrix-0.4.9-build5.ipa
+
+        python3 tools/bundle_asr.py --inspect-ipa VoiceMatrix-0.4.9-build5.ipa
+
+        shasum -a 256 VoiceMatrix-0.4.9-build5.ipa > character-ipa.sha256'
+    - name: Record packaging-only verification boundary
+      run: 'python3 - <<''PYCODE''
+
+        import json,os,pathlib
+
+        pathlib.Path(''packaging-status.json'').write_text(json.dumps(dict(sourceCommit=os.environ[''GITHUB_SHA''],version=''0.4.9'',build=''5'',nativeTestsRun=False,physicalDeviceVerified=False,likenessVerified=False,offlineRVC=False,diagnosticRVCPackImport=True,musicSeparation=False,purpose=''Unsigned
+        iPhone preview; packaging and asset inspection only''),indent=2)+''\n'')
+
+        PYCODE'
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Character-test-IPA
+        path: 'VoiceMatrix-0.4.9-build5.ipa
+
+          character-inspection.json
+
+          character-ipa.sha256
+
+          source-proof.json
+
+          dependency-notices.json
+
+          assets.json
+
+          packaging-status.json'
+        if-no-files-found: error
+        retention-days: 14
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Character-test-build-log
+        path: character-build.log
+        if-no-files-found: error
+        retention-days: 14
+      if: always()
+    needs: resolve

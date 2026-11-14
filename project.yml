@@ -2,6 +2,9 @@ name: VoiceMatrix
 options:
   bundleIdPrefix: com.voicematrix
 packages:
+  ONNXRuntime:
+    url: https://github.com/microsoft/onnxruntime-swift-package-manager.git
+    revision: b7fb7f7dea8a2469e6335d95a61b8f36d0dc83b2
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio.git
     revision: ee78635d23d52379117554ba72358b65a0612447
@@ -15,7 +18,7 @@ settings:
     TARGETED_DEVICE_FAMILY: 1,2
     GENERATE_INFOPLIST_FILE: true
     MARKETING_VERSION: 0.4.9
-    CURRENT_PROJECT_VERSION: '4'
+    CURRENT_PROJECT_VERSION: '5'
     CODE_SIGNING_ALLOWED: false
 targets:
   VoiceMatrix:
@@ -27,6 +30,12 @@ targets:
       - Resources
     - path: Assets.xcassets
     - path: LICENSES/RVC-MIT.txt
+      buildPhase: resources
+    - path: LICENSES/ONNXRuntime-MIT.txt
+      buildPhase: resources
+    - path: LICENSES/Transformers-APACHE-2.0.txt
+      buildPhase: resources
+    - path: LICENSES/FAISS-MIT.txt
       buildPhase: resources
     - path: VoiceMatrix/Resources/Phonon
       type: folder
@@ -47,6 +56,8 @@ targets:
       type: folder
       buildPhase: resources
     dependencies:
+    - package: ONNXRuntime
+      product: onnxruntime
     - package: FluidAudio
     - package: SpeechSwift
       product: F5TTS

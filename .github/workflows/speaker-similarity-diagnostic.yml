@@ -2,7 +2,7 @@ name: Native speaker similarity diagnostic
 on:
   workflow_dispatch:
   push:
-    branches-ignore: [codex/iphone-build4]
+    branches-ignore: [codex/iphone-build4, codex/iphone-build5]
     paths:
     - '.github/workflows/speaker-similarity-diagnostic.yml'
     - 'probes/native-similarity/**'

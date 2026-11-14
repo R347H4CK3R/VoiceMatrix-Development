@@ -95,12 +95,14 @@ enum LocalMediaAcquisition {
     }
     private static func digest(_ url:URL) async throws -> Result {
         let task=Task.detached { () throws -> Result in
-            let v=try url.resourceValues(forKeys:[.isRegularFileKey,.isSymbolicLinkKey,.fileSizeKey])
-            guard v.isRegularFile==true,v.isSymbolicLink != true,let size=v.fileSize,size>0,size<=LocalMediaURLPolicy.maximumBytes else { throw LocalMediaURLPolicy.Failure.changed }
-            let file=try FileHandle(forReadingFrom:url);defer { try? file.close() }
-            var hash=SHA256(),count:Int64=0
-            while let bytes=try file.read(upToCount:1_048_576),!bytes.isEmpty { try Task.checkCancellation();count += Int64(bytes.count);guard count<=LocalMediaURLPolicy.maximumBytes else { throw LocalMediaURLPolicy.Failure.bounds };hash.update(data:bytes) }
-            guard count==size else { throw LocalMediaURLPolicy.Failure.changed }
+            var hash=SHA256()
+            let count: Int64
+            do {
+                count = try RetainedMediaReader.read(url, maximumBytes: LocalMediaURLPolicy.maximumBytes) {
+                    hash.update(data: $0)
+                }
+            } catch is CancellationError { throw CancellationError() }
+            catch { throw LocalMediaURLPolicy.Failure.changed }
             return Result(file:url.lastPathComponent,sha256:hash.finalize().map{String(format:"%02x",$0)}.joined(),bytes:count)
         }
         return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }

@@ -319,9 +319,13 @@ import CryptoKit
                 guard let name = current?.sourceFile, let expectedHash = current?.sourceSHA256 else { throw LocalError.source }
                 let retained = jobFolder.appendingPathComponent(name)
                 let digestTask = Task.detached { () throws -> String in
-                    let handle = try FileHandle(forReadingFrom: retained); defer { try? handle.close() }
                     var hash = SHA256()
-                    while let bytes = try handle.read(upToCount: 1_048_576), !bytes.isEmpty { try Task.checkCancellation(); hash.update(data: bytes) }
+                    do {
+                        try RetainedMediaReader.read(retained, maximumBytes: LocalMediaURLPolicy.maximumBytes) {
+                            hash.update(data: $0)
+                        }
+                    } catch is CancellationError { throw CancellationError() }
+                    catch { throw LocalError.source }
                     return hash.finalize().map { String(format: "%02x", $0) }.joined()
                 }
                 let actualHash = try await withTaskCancellationHandler { try await digestTask.value } onCancel: { digestTask.cancel() }

@@ -1,3 +1,27 @@
+# Private VoiceMatrix development
+
+This branch continues the standalone iPhone implementation imported at
+`ff656089e7879a1e6a02be02bf24ccf5d00f7d05`. It is not a verified 1.0.0 release.
+The implementation includes on-device media analysis, reference-conditioned previews,
+retained speaker receipts and a durable live diagnostic journal. Existing voices and
+published releases are preserved. See [current development evidence](docs/CODEX-NON-MAC-VERIFICATION.md)
+and [standalone workflow](docs/STANDALONE-LOCAL-STUDIO.md).
+
+With Python 3.12+, PyYAML and a real Swift compiler available, run
+`python3 tools/portable_studio_gate.py`. It fails on skipped checks and does not
+require macOS, a laptop companion, model downloads or a paid service. The wider
+repository suite is `python3 -m unittest discover -s tests -v`.
+
+No IPA is produced by these portable checks. Native iOS compilation, audio/model
+inference, SideStore installation and physical-device acceptance remain separate.
+
+---
+
+## Historical release README
+
+The release/install information below describes earlier published builds, not the
+current private standalone candidate or its verification status.
+
 # VoiceMatrix
 
 Native ARM64 voice studio for iPhone 16 Plus, LiveContainer and Strata. **0.4.5 build 1 adds long speech, saved/shared audio controls and public suggestion drafts.** It is not the completed autonomous video-to-voice project.

@@ -6,7 +6,7 @@ parameters:
     default: false
   xcode-version:
     type: string
-    default: 26.0.1
+    default: 26.4.1
 jobs:
   native-ui:
     macos:
@@ -14,6 +14,16 @@ jobs:
     shell: /bin/bash -eo pipefail
     steps:
     - checkout
+    - run:
+        name: Select Homebrew Python 3.12 for every native validation step
+        command: "export HOMEBREW_NO_AUTO_UPDATE=1\nif ! brew list --versions python@3.12\
+          \ >/dev/null 2>&1; then\n  brew install python@3.12\nfi\nPYTHON_BIN=\"$(brew\
+          \ --prefix python@3.12)/libexec/bin\"\ntest -x \"$PYTHON_BIN/python3\"\n\
+          export PATH=\"$PYTHON_BIN:$PATH\"\nhash -r\nprintf 'export PATH=%q:$PATH\\\
+          n' \"$PYTHON_BIN\" >> \"$BASH_ENV\"\npython3 -c 'import platform,sys; print(sys.executable);\
+          \ print(sys.version); assert sys.version_info >= (3,12); assert platform.machine()\
+          \ == \"arm64\"'\n"
+        no_output_timeout: 10m
     - run:
         name: Admit native UI runner without downloading resources
         command: python3 tools/native_ui_preflight.py | tee native-ui-preflight.json
@@ -34,7 +44,7 @@ jobs:
           cp -R tests/fixtures/DiagnosticVoices VoiceMatrix/Resources/F5TTS/UITestVoices\n\
           # XCTest waits for UI idleness after taps; a 2.5-second clip can finish\n\
           # before it can inspect Stop. Extend only this UI fixture, not audio gates.\n\
-          python3 - <<'PY'\nimport hashlib,json,pathlib,wave\nroot=pathlib.Path('VoiceMatrix/Resources/F5TTS/UITestVoices/diagnostic-neutral')\n\
+          python3 - \\<<'PY'\nimport hashlib,json,pathlib,wave\nroot=pathlib.Path('VoiceMatrix/Resources/F5TTS/UITestVoices/diagnostic-neutral')\n\
           audio=root/'reference.wav'\nwith wave.open(str(audio),'rb') as f:\n    params=f.getparams()\n\
           \    pcm=f.readframes(f.getnframes())*6\nwith wave.open(str(audio),'wb')\
           \ as f:\n    f.setparams(params)\n    f.writeframes(pcm)\nmanifest=json.loads((root/'manifest.json').read_text())\n\
@@ -42,7 +52,7 @@ jobs:
           \                referenceBytes=audio.stat().st_size,seconds=len(pcm)/48000,\n\
           \                referenceText=' '.join([manifest['referenceText']]*6))\n\
           (root/'manifest.json').write_text(json.dumps(manifest))\nassert 14 < manifest['seconds']\
-          \ < 15\nPY\nbrew install xcodegen\nxcodegen generate\npython3 - <<'PYCODE'\n\
+          \ < 15\nPY\nbrew install xcodegen\nxcodegen generate\npython3 - \\<<'PYCODE'\n\
           import json,subprocess,os\nruntimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','-j']))['runtimes']\n\
           available=[x for x in runtimes if x.get('isAvailable') and 'iOS' in x['name']\
           \ and str(x.get('version','')).startswith('26.')]\nassert available,'No\
@@ -72,7 +82,7 @@ jobs:
         no_output_timeout: 20m
     - run:
         name: Wait for the simulator launch services to finish booting
-        command: 'python3 - <<''PYCODE''
+        command: 'python3 - \<<''PYCODE''
 
           import os,subprocess
 
@@ -107,7 +117,7 @@ jobs:
 
           # Busy / failed preflight checks. Reboot without erasing test app data.
 
-          python3 - <<''PYCODE''
+          python3 - \<<''PYCODE''
 
           import os,subprocess
 
@@ -170,6 +180,7 @@ jobs:
         when: always
     - store_artifacts:
         path: native-ui-preflight.json
+    resource_class: m4pro.medium
 workflows:
   native-validation:
     when: << pipeline.parameters.run-native >>

@@ -1,0 +1,33 @@
+{
+  "tests": 744,
+  "failures": [],
+  "errors": [],
+  "skipped": [
+    [
+      "test_windows_descendant_cannot_outlive_successful_leader (test_rvc_training_safety.StageTests.test_windows_descendant_cannot_outlive_successful_leader)",
+      "Windows Job Object needs native Windows"
+    ],
+    [
+      "test_windows_descendant_dies_when_runner_owner_is_killed (test_rvc_training_safety.StageTests.test_windows_descendant_dies_when_runner_owner_is_killed)",
+      "Windows Job Object needs native Windows"
+    ],
+    [
+      "test_native_selective_download_contract (test_selective_voice_downloads.SelectiveCatalogTests.test_native_selective_download_contract)",
+      "Apple Swift/CryptoKit unavailable; native checks require Apple CI"
+    ],
+    [
+      "test_junction_root_is_rejected_without_writes (test_source_retention.ReparseRetentionGuardTests.test_junction_root_is_rejected_without_writes)",
+      "Windows junction integration"
+    ]
+  ],
+  "seconds": 240.01,
+  "platform": "Linux",
+  "python": "3.12.14",
+  "swift": "6.1.3",
+  "baselineCommit": "ff656089e7879a1e6a02be02bf24ccf5d00f7d05",
+  "passed": 740,
+  "iosBuildVerified": false,
+  "physicalDeviceVerified": false,
+  "audioIdentityVerified": false,
+  "newIPAProduced": false
+}

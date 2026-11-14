@@ -24,6 +24,18 @@ import Glibc
   precondition(!quoted.contains("Doe") && !quoted.contains("private.wav") && !quoted.contains("secret.wav"))
   let assignments=LocalStudioJournal.clean("token=abc API_KEY=xyz password:123 Bearer hidden")
   precondition(!assignments.contains("abc") && !assignments.contains("xyz") && !assignments.contains("123") && !assignments.contains("hidden"))
+  // Synthetic markers only: quoted values must not leak their trailing words.
+  let phrases = [#"password="alpha beta gamma""#, #"{"api_key": "alpha beta gamma"}"#,
+                 #"secret='alpha beta gamma'"#, "to\u{0}ken=alpha", #"password="alpha beta gamma"#]
+  for phrase in phrases {
+   let cleaned=LocalStudioJournal.clean(phrase)
+   precondition(!cleaned.contains("alpha") && !cleaned.contains("beta") && !cleaned.contains("gamma"), "Credential redaction incomplete")
+   let event=LocalStudioJournal.Event(id:UUID(),time:Date(),stage:phrase,message:phrase)
+   try LocalStudioJournal.append(event,folder:root)
+  }
+  let redactedPage=try LocalStudioJournal.read(folder:root,offset:181)
+  precondition(redactedPage.events.count==phrases.count)
+  precondition(!redactedPage.text.contains("alpha") && !redactedPage.text.contains("beta") && !redactedPage.text.contains("gamma"))
   let file=root.appendingPathComponent(LocalStudioJournal.filename)
   let h=try FileHandle(forWritingTo:file);try h.seekToEnd();try h.write(contentsOf:Data("broken".utf8));try h.close()
   let before=try Data(contentsOf:file)

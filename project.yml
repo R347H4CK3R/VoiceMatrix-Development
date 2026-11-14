@@ -152,6 +152,7 @@ targets:
     - path: VoiceMatrix/SpeakerSimilarityPolicy.swift
     - path: VoiceMatrix/SpeakerSimilarityService.swift
     - path: VoiceMatrix/LocalStudioJournal.swift
+    - path: VoiceMatrix/RetainedMediaReader.swift
     - path: VoiceMatrix/LocalMediaAcquisition.swift
     - path: VoiceMatrix/LocalMediaURLPolicy.swift
     - path: VoiceMatrix/LocalVideoAudio.swift

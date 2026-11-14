@@ -1,0 +1,128 @@
+{
+  "nativeExportProvenance": {
+    "inputName": "4b70.wav",
+    "inputSHA256": "d3d3d29e90eadae84ab3641a46aff7323617a4990d3a7abfe398e8b0fc802119",
+    "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/4b70.wav",
+    "license": "CC0-1.0",
+    "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+    "selection": "Next two original (non-enhanced) filenames after 4b13, selected before this evaluation",
+    "files": {
+      "sinc32.json": "aebe69f63cc11fb9e956133005cfde9533c5c1392c8fcea194fd7b4dc516be1b",
+      "prepared.f32": "34838dbc9ba910e594e545516d3cbd1d0816748715d377a73dd0a324e924db80",
+      "native-result.json": "204e507cd81318d881b62c18e4176378bb30652f957286d6a89fbc9116727c0b",
+      "pitch.json": "40b2fbe9de560b3a3ca6b1f0eb212639fe6c5035a18303600f467b551cbe2d50"
+    },
+    "windowSHA256": [
+      "e0ec0f8808e3850252983164dd393519bb96cba4862c70988e7e1bc127962811",
+      "e5953531d81b62a4c6d4ba38821765e4a6e4e8a2512bf2dccb377e38f4185ecb"
+    ],
+    "sourceHashes": {
+      "native": "204aa359bb690dc3098aeecf27727a68da629e8bd77e39f5f788e6bde715af9d",
+      "sinc32": "99cef77190085dd27b49bad790ed8b04bb90133a8e1f72860105b3140622f392"
+    }
+  },
+  "retrievalAblation": {
+    "retrievalRate": 0.0,
+    "pitch": "Preselected native, sinc32 and reference Parselmouth comparison",
+    "perceptualQualityClaim": false
+  },
+  "sparseRetrievalPolicy": "Retrieval disabled; candidate index was not downloaded or used",
+  "status": "passed",
+  "cases": [
+    {
+      "pitchMode": "native",
+      "repetitions": 1,
+      "fixtureAssembly": "Preselected held-out CC0 voice-donations/4b70.wav; native prepared audio and baseline/candidate pitch",
+      "input16kSamples": 160000,
+      "chunks": 2,
+      "outputSamples": 400000,
+      "outputSeconds": 10.0,
+      "tailCovered": true,
+      "perChunkParity": [
+        {
+          "maxAbs": 1.9185245037078857e-05,
+          "rms": 2.5676497347740785e-07
+        },
+        {
+          "maxAbs": 1.6611069440841675e-05,
+          "rms": 2.410392788310295e-07
+        }
+      ],
+      "reconstructionMaxAbs": 1.9185245037078857e-05,
+      "outputRMS": 0.11105320986373239,
+      "largestAdjacentSampleJump": 0.22559601068496704,
+      "overlapStartJumps": [
+        0.003074746811762452
+      ],
+      "outputSHA256": "87243438824fb1767e3887be40d2436aeed1dfc07de0b83dee63365dfe119cfc"
+    },
+    {
+      "pitchMode": "sinc32",
+      "repetitions": 1,
+      "fixtureAssembly": "Preselected held-out CC0 voice-donations/4b70.wav; native prepared audio and baseline/candidate pitch",
+      "input16kSamples": 160000,
+      "chunks": 2,
+      "outputSamples": 400000,
+      "outputSeconds": 10.0,
+      "tailCovered": true,
+      "perChunkParity": [
+        {
+          "maxAbs": 8.979812264442444e-06,
+          "rms": 2.1761943512492664e-07
+        },
+        {
+          "maxAbs": 1.5079975128173828e-05,
+          "rms": 1.9368849748255423e-07
+        }
+      ],
+      "reconstructionMaxAbs": 8.979812264442444e-06,
+      "outputRMS": 0.11114896467470617,
+      "largestAdjacentSampleJump": 0.22552122175693512,
+      "overlapStartJumps": [
+        0.006844506599009037
+      ],
+      "outputSHA256": "47966b328e15ff0fcb96cbca0446393a397dfa7374be91a32fb38140216604f7"
+    },
+    {
+      "pitchMode": "reference-pm",
+      "repetitions": 1,
+      "fixtureAssembly": "Preselected held-out CC0 voice-donations/4b70.wav; native prepared audio and baseline/candidate pitch",
+      "input16kSamples": 160000,
+      "chunks": 2,
+      "outputSamples": 400000,
+      "outputSeconds": 10.0,
+      "tailCovered": true,
+      "perChunkParity": [
+        {
+          "maxAbs": 1.5504658222198486e-05,
+          "rms": 2.4754743416246184e-07
+        },
+        {
+          "maxAbs": 5.83939254283905e-06,
+          "rms": 1.4632532133584974e-07
+        }
+      ],
+      "reconstructionMaxAbs": 1.5504658222198486e-05,
+      "outputRMS": 0.11182193823663537,
+      "largestAdjacentSampleJump": 0.2225487232208252,
+      "overlapStartJumps": [
+        0.002876999555155635
+      ],
+      "outputSHA256": "96167c0d96af720f65563de88cd4141f13633386e7499b6644356b4879e9d635"
+    }
+  ],
+  "modelSHA256": "3c4c2e8ea977d7c08793126aace4baa47028b4c1bf7cd46ae5a9c359b0216693",
+  "indexSHA256": null,
+  "inputSHA256": "d3d3d29e90eadae84ab3641a46aff7323617a4990d3a7abfe398e8b0fc802119",
+  "pitchMethod": "Explicit pitch ablation; fixed model, input, no retrieval and random inputs",
+  "humanSpeechQualityVerified": false,
+  "profileFrames": 922,
+  "coreSeconds": 6,
+  "overlapSeconds": 0.2,
+  "maximumAdmittedHours": 2,
+  "physicalIPhoneVerified": false,
+  "qualityReviewed": false,
+  "identityVerified": false,
+  "published": false,
+  "seconds": 149.17199999999139
+}

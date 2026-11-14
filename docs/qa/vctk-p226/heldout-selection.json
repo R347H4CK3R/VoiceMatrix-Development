@@ -1,0 +1,32 @@
+{
+  "selectedBeforeEvaluation": [
+    "voice-donations/4b70.wav",
+    "voice-donations/5b55.wav"
+  ],
+  "entries": [
+    {
+      "type": "file",
+      "oid": "1f8fda928a9037a0cb8f4b030e445f71b4d37ab7",
+      "size": 480044,
+      "lfs": {
+        "oid": "d3d3d29e90eadae84ab3641a46aff7323617a4990d3a7abfe398e8b0fc802119",
+        "size": 480044,
+        "pointerSize": 131
+      },
+      "xetHash": "348d510d826ad9bc73418caaaba5d141aa60c7cc64f95219333f4cecbf8fba0c",
+      "path": "voice-donations/4b70.wav"
+    },
+    {
+      "type": "file",
+      "oid": "3c2ea03865c5a306b459eed270c268a487d01d75",
+      "size": 480044,
+      "lfs": {
+        "oid": "54ea36e1fa64d917a69ebe3f80a3ffea8709ca37d7634f21fc70d421bbde7e05",
+        "size": 480044,
+        "pointerSize": 131
+      },
+      "xetHash": "121276e64de97a0ae6f81df7b7a8cfb54c49f52624e303e3fd94a1514cad7873",
+      "path": "voice-donations/5b55.wav"
+    }
+  ]
+}

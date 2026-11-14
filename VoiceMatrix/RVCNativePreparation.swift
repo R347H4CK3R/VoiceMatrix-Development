@@ -54,31 +54,31 @@ actor RVCNativeWindowConverter {
         } catch {await hubert.close();throw error}
     }
     func convertExperimentalAutocorrelation(_ audio:[Float], noise:RVCNativePreparation.Noise,
-                                semitones:Double = 0, indexRate:Float = 0.75) async throws -> [Float] {
+                                semitones:Double = 0, indexRate:Float = 0.75, refinePitch:Bool = false) async throws -> [Float] {
         try Task.checkCancellation()
-        let pitch=try RVCNativePitch.experimentalAutocorrelation(audio)
+        let pitch=try RVCNativePitch.experimentalAutocorrelation(audio,refinePeaks:refinePitch)
         let features=try await hubert.extract(audio)
         let inputs=try RVCNativePreparation.prepare(features:features,rawPitch:pitch,index:index,noise:noise,semitones:semitones,indexRate:indexRate)
         return try await synthesizer.run(inputs)
     }
     func convertFileExperimentalAutocorrelation(input:URL,output:URL,scratch:URL,seed:UInt64,
-                                    semitones:Double = 0,indexRate:Float = 0.75,
+                                    semitones:Double = 0,indexRate:Float = 0.75,refinePitch:Bool = false,
                                     progress:(Double)->Void = {_ in}) async throws -> RVCFileWorkflow.Result {
         guard !fileJobActive else {throw RVCSynthesisFailure.unavailable}
         fileJobActive=true
         defer {fileJobActive=false}
         return try await RVCFileWorkflow.convert(input:input,output:output,scratch:scratch,seed:seed,progress:progress) {window,noise in
-            try await self.convertExperimentalAutocorrelation(window,noise:.init(latent:noise.latent,phase:noise.phase,excitation:noise.excitation),semitones:semitones,indexRate:indexRate)
+            try await self.convertExperimentalAutocorrelation(window,noise:.init(latent:noise.latent,phase:noise.phase,excitation:noise.excitation),semitones:semitones,indexRate:indexRate,refinePitch:refinePitch)
         }
     }
     func convertMediaExperimentalAutocorrelation(input:URL,output:URL,scratch:URL,seed:UInt64,
-                                    semitones:Double = 0,indexRate:Float = 0.75,
+                                    semitones:Double = 0,indexRate:Float = 0.75,refinePitch:Bool = false,
                                      progress:(Double)->Void = {_ in}) async throws -> RVCFileWorkflow.Result {
         guard !fileJobActive else {throw RVCSynthesisFailure.unavailable}
         guard !FileManager.default.fileExists(atPath:output.path) else {throw RVCFileError.destination}
         // Supported WAV files retain the tested rational resampler.
         if (try? RVCPCMReader(input)) != nil {
-            return try await convertFileExperimentalAutocorrelation(input:input,output:output,scratch:scratch,seed:seed,semitones:semitones,indexRate:indexRate,progress:progress)
+            return try await convertFileExperimentalAutocorrelation(input:input,output:output,scratch:scratch,seed:seed,semitones:semitones,indexRate:indexRate,refinePitch:refinePitch,progress:progress)
         }
         fileJobActive=true
         defer {fileJobActive=false}
@@ -88,7 +88,7 @@ actor RVCNativeWindowConverter {
         let decoded=folder.appendingPathComponent("decoded.wav")
         try RVCAVAudioImport.decode(input:input,output:decoded)
         return try await RVCFileWorkflow.convert(input:decoded,output:output,scratch:scratch,seed:seed,progress:progress) {window,noise in
-            try await self.convertExperimentalAutocorrelation(window,noise:.init(latent:noise.latent,phase:noise.phase,excitation:noise.excitation),semitones:semitones,indexRate:indexRate)
+            try await self.convertExperimentalAutocorrelation(window,noise:.init(latent:noise.latent,phase:noise.phase,excitation:noise.excitation),semitones:semitones,indexRate:indexRate,refinePitch:refinePitch)
         }
     }
     func close() async {await hubert.close();await synthesizer.close()}

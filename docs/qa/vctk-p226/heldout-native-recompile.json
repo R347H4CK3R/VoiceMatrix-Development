@@ -1,0 +1,16 @@
+{
+  "baselineRecompiled": true,
+  "exactPreparedAndPitchMatch": true,
+  "cases": [
+    "4b70",
+    "5b55"
+  ],
+  "binarySHA256": "a609544bc29b28a870a34abbc8fdd4cd055fea8744b10bc172f12f74ddb655f1",
+  "sourceHashes": {
+    "VoiceMatrix/RVCChunking.swift": "490bb56f8df8a2c1c28b4f0d9d990f57c729eaff621f780c31a22616106b9fff",
+    "VoiceMatrix/RVCFilePreprocessor.swift": "56763df85c8f360fc4c02a5db539fe584de35d9db9d3fcd5c9bf204fa9192d80",
+    "VoiceMatrix/RVCFileWorkflow.swift": "81973f840a3e1a300cdc086999141b383fefc6f33d73538a8c36a58a912c9606",
+    "VoiceMatrix/RVCNativePitch.swift": "204aa359bb690dc3098aeecf27727a68da629e8bd77e39f5f788e6bde715af9d",
+    "probes/rvc-long/ExportNativeAudio.swift": "bd3a677d1000a40d0d403cfffbaf1f5f1b31863b2dd79852e5c16aec10c697d7"
+  }
+}

@@ -6,6 +6,7 @@ import Combine
     @Published private(set) var voiceName="No voice model installed"
     @Published private(set) var retrievalSupported=true
     @Published var indexRate:Float=0.75
+    @Published var refinePitch=false
     @Published var semitones:Double=0
     @Published private(set) var state=RVCPreviewState()
     @Published private(set) var installed:[RVCPreviewPack:URL]=[:]
@@ -92,12 +93,13 @@ import Combine
               let lease=audio.claimProcessing() else {return}
         guard let ticket=try? state.begin(.conversion) else {audio.releaseProcessing(lease);return}
         // Capture settings once; every chunk of this job uses the same values.
-        let rate=indexRate,shift=semitones
+        let rate=indexRate,shift=semitones,refine=refinePitch
         let retrieval=rate == 0 ? nil : installed[.retrieval]
         let name=inputName
         let destination=RVCPreviewStore.results.appendingPathComponent("RVC-preview-"+UUID().uuidString+".wav")
         audio.stop();message="Loading verified diagnostic models…";state.append(message)
         state.append("Voice model: "+voiceName)
+        state.append("Pitch refinement: "+(refine ? "on" : "off"))
         state.append(String(format:"Retrieval %.1f%% · pitch %+.0f semitones",Double(rate)*100,shift))
         work=Task {
             defer {audio.releaseProcessing(lease);work=nil}
@@ -106,7 +108,7 @@ import Combine
                 let worker=Task.detached(priority:.userInitiated) {
                     let converter=try await RVCNativeWindowConverter.open(hubertRoot:hubert,synthesizerRoot:synth,retrievalRoot:retrieval,cache:RVCPreviewStore.cache)
                     do {
-                        let result=try await converter.convertMediaExperimentalAutocorrelation(input:source,output:destination,scratch:RVCPreviewStore.cache,seed:347,semitones:shift,indexRate:rate,progress:{fraction in
+                        let result=try await converter.convertMediaExperimentalAutocorrelation(input:source,output:destination,scratch:RVCPreviewStore.cache,seed:347,semitones:shift,indexRate:rate,refinePitch:refine,progress:{fraction in
                             Task {@MainActor in
                                 guard self.state.ticket==ticket,self.state.phase == .working else {return}
                                 let before=self.state.percent

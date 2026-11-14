@@ -26,3 +26,5 @@ A private, CRC-checked evaluation pack was prepared on the existing development 
 
 ## Remaining gaps
 Human listening, fresh independent speech coverage, physical-iPhone speed/memory and sustained conversion tests remain unrun. A licensed corpus candidate does not supply the user's intended character voices. Production-quality qualification and compatible voice-specific retrieval need additional work; these results do not justify 1.0.0.
+
+Follow-up: see rvc-vctk-heldout-pitch.md for two newly selected speech fixtures, controlled pitch comparisons and the opt-in precision-refinement integration. The default remains unchanged and the model remains evaluation-only.

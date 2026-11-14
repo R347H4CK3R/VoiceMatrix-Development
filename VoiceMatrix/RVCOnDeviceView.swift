@@ -49,7 +49,11 @@ struct RVCOnDeviceView:View {
                 Text(String(format:"Pitch · %+.0f semitones",preview.semitones))
                 Slider(value:$preview.semitones,in:-24...24,step:1)
                     .disabled(unavailable).accessibilityLabel("Pitch in semitones")
-                Button("Reset conversion settings") {preview.indexRate=preview.retrievalSupported ? 0.75 : 0;preview.semitones=0}
+                Toggle("Refine pitch peaks · evaluation",isOn:$preview.refinePitch)
+                    .disabled(unavailable)
+                Text("Closer to the pitch reference in CPU tests, with mixed voice-quality results. Uses additional processing; phone performance is unverified.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Reset conversion settings") {preview.indexRate=preview.retrievalSupported ? 0.75 : 0;preview.semitones=0;preview.refinePitch=false}
                     .disabled(unavailable)
             }
             Section("3 · Create a diagnostic preview") {

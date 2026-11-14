@@ -1,0 +1,132 @@
+{
+  "cases": {
+    "4b13": [
+      {
+        "chunk": 0,
+        "referenceVoiced": 537,
+        "methods": {
+          "native": {
+            "jointVoiced": 537,
+            "voicingAgreement": 0.9989165763813651,
+            "medianAbsCents": 0.2626267120863519,
+            "p95AbsCents": 1.6629600777019737,
+            "over50CentsFraction": 0.0
+          },
+          "sinc32": {
+            "jointVoiced": 537,
+            "voicingAgreement": 0.9989165763813651,
+            "medianAbsCents": 0.007482229043038309,
+            "p95AbsCents": 0.0536490396813427,
+            "over50CentsFraction": 0.0
+          }
+        }
+      },
+      {
+        "chunk": 1,
+        "referenceVoiced": 314,
+        "methods": {
+          "native": {
+            "jointVoiced": 314,
+            "voicingAgreement": 1.0,
+            "medianAbsCents": 0.31915872827177927,
+            "p95AbsCents": 2.9203259308250598,
+            "over50CentsFraction": 0.0
+          },
+          "sinc32": {
+            "jointVoiced": 314,
+            "voicingAgreement": 1.0,
+            "medianAbsCents": 0.0075807682452389644,
+            "p95AbsCents": 0.06805578695884164,
+            "over50CentsFraction": 0.0
+          }
+        }
+      }
+    ],
+    "4b70": [
+      {
+        "chunk": 0,
+        "referenceVoiced": 441,
+        "methods": {
+          "native": {
+            "jointVoiced": 441,
+            "voicingAgreement": 0.9945828819068255,
+            "medianAbsCents": 0.04635708268468978,
+            "p95AbsCents": 0.4230180382623015,
+            "over50CentsFraction": 0.0
+          },
+          "sinc32": {
+            "jointVoiced": 441,
+            "voicingAgreement": 0.9945828819068255,
+            "medianAbsCents": 0.007043777713620007,
+            "p95AbsCents": 0.04449961021153258,
+            "over50CentsFraction": 0.0
+          }
+        }
+      },
+      {
+        "chunk": 1,
+        "referenceVoiced": 350,
+        "methods": {
+          "native": {
+            "jointVoiced": 350,
+            "voicingAgreement": 0.9978331527627302,
+            "medianAbsCents": 0.0364133667626146,
+            "p95AbsCents": 0.573718786682198,
+            "over50CentsFraction": 0.0
+          },
+          "sinc32": {
+            "jointVoiced": 350,
+            "voicingAgreement": 0.9978331527627302,
+            "medianAbsCents": 0.00997069013641206,
+            "p95AbsCents": 0.07140660790513434,
+            "over50CentsFraction": 0.0
+          }
+        }
+      }
+    ],
+    "5b55": [
+      {
+        "chunk": 0,
+        "referenceVoiced": 552,
+        "methods": {
+          "native": {
+            "jointVoiced": 552,
+            "voicingAgreement": 1.0,
+            "medianAbsCents": 0.07009317973134138,
+            "p95AbsCents": 0.9489655887128283,
+            "over50CentsFraction": 0.0
+          },
+          "sinc32": {
+            "jointVoiced": 552,
+            "voicingAgreement": 1.0,
+            "medianAbsCents": 0.011327293272166616,
+            "p95AbsCents": 0.061334740455145476,
+            "over50CentsFraction": 0.0
+          }
+        }
+      },
+      {
+        "chunk": 1,
+        "referenceVoiced": 405,
+        "methods": {
+          "native": {
+            "jointVoiced": 405,
+            "voicingAgreement": 1.0,
+            "medianAbsCents": 0.04959160935915027,
+            "p95AbsCents": 0.7169183173798359,
+            "over50CentsFraction": 0.0
+          },
+          "sinc32": {
+            "jointVoiced": 405,
+            "voicingAgreement": 1.0,
+            "medianAbsCents": 0.012301122153014815,
+            "p95AbsCents": 0.07199326482220228,
+            "over50CentsFraction": 0.0
+          }
+        }
+      }
+    ]
+  },
+  "reference": "Pinned Parselmouth autocorrelation, not ground-truth pitch",
+  "productionDefaultsChanged": false
+}

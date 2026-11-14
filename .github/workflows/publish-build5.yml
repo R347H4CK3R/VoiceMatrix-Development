@@ -1,0 +1,74 @@
+name: Publish inspected VoiceMatrix build 5 preview
+'on':
+  push:
+    branches: [codex/publish-build5]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 528e1355714182a5619c04fe6bf975043aa0c9a1
+      - name: Require successful exact-source packaging
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/$GITHUB_REPOSITORY/actions/runs/43649541927 > run.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('run.json'))
+          assert d['head_sha']=='528e1355714182a5619c04fe6bf975043aa0c9a1'
+          assert d['conclusion']=='success'
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 43649541927
+          name: Character-test-IPA
+          path: artifact
+      - name: Inspect the actual package and bind its digest
+        run: |
+          python3 tools/character_package.py inspect artifact/VoiceMatrix-0.4.9-build5.ipa --expected-version 0.4.9 --expected-build 5 --dependency-proof artifact/dependency-notices.json > release-inspection.json
+          python3 tools/bundle_diarization.py --inspect-ipa artifact/VoiceMatrix-0.4.9-build5.ipa
+          python3 tools/bundle_asr.py --inspect-ipa artifact/VoiceMatrix-0.4.9-build5.ipa
+          python3 - <<'PY'
+          import pathlib,json,hashlib,re
+          p=pathlib.Path('artifact/VoiceMatrix-0.4.9-build5.ipa')
+          proof=json.loads(pathlib.Path('artifact/source-proof.json').read_text())
+          boundary=json.loads(pathlib.Path('artifact/packaging-status.json').read_text())
+          assert proof['sourceCommit']==boundary['sourceCommit']=='528e1355714182a5619c04fe6bf975043aa0c9a1'
+          assert boundary['nativeTestsRun'] is False and boundary['physicalDeviceVerified'] is False
+          digest=hashlib.file_digest(p.open('rb'),'sha256').hexdigest()
+          expected=pathlib.Path('artifact/character-ipa.sha256').read_text().strip()
+          assert re.fullmatch(digest+r'  VoiceMatrix-0[.]4[.]9-build5[.]ipa',expected)
+          result=dict(version='0.4.9',buildVersion='5',size=p.stat().st_size,sha256=digest,sourceCommit=proof['sourceCommit'],packagingRun=43649541927,physicalDeviceVerified=False,nativeTestsRun=False,productionVoiceQualityVerified=False)
+          pathlib.Path('release-metadata.json').write_text(json.dumps(result,indent=2)+'\n')
+          PY
+      - name: Publish development preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > release-notes.md <<'NOTES'
+          Unsigned iPhone development preview, version 0.4.9 build 5, requiring iOS 26.
+          
+          Adds the native diagnostic RVC workflow: verified pack import, audio import, bounded conversion, live percentage/log, cancellation, playback and export. Existing voice workflows and user storage are retained. RVC requires separately imported diagnostic encoder, voice-model and retrieval folders; it is not a finished production character-voice system.
+          
+          Compiled and package-inspected only. Mac verification tests were skipped by request. Physical-iPhone behavior, memory/performance, listening quality and intended voice identity are unverified. Not a completed 1.0.0 release. The IPA needs signing through the user's sideloading setup.
+          NOTES
+          if gh release view voicematrix-v0.4.9-build5 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Existing release will not be overwritten.'
+            exit 1
+          fi
+          gh release create voicematrix-v0.4.9-build5 artifact/VoiceMatrix-0.4.9-build5.ipa release-metadata.json release-inspection.json artifact/source-proof.json artifact/packaging-status.json --repo "$GITHUB_REPOSITORY" --target 528e1355714182a5619c04fe6bf975043aa0c9a1 --title "VoiceMatrix 0.4.9 build 5 — development preview" --notes-file release-notes.md --prerelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VoiceMatrix-build5-release-evidence
+          path: |
+            release-metadata.json
+            release-inspection.json
+          if-no-files-found: error

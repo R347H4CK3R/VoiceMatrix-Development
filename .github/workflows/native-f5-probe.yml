@@ -1,7 +1,7 @@
 name: Native F5 reference engine probe
 on:
   push:
-    branches-ignore: [codex/iphone-build4, codex/iphone-build5]
+    branches-ignore: [codex/iphone-build4, codex/iphone-build5, codex/publish-build5]
     paths: ['.github/workflows/native-f5-probe.yml', 'probes/native-f5/**']
   workflow_dispatch:
 permissions:

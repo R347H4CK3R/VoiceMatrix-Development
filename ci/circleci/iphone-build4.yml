@@ -1,0 +1,120 @@
+# INACTIVE packaging candidate. Does not replace .circleci/config.yml or launch a job.
+version: 2.1
+parameters:
+  package-iphone:
+    type: boolean
+    default: false
+jobs:
+  package-iphone:
+    macos:
+      xcode: 26.4.1
+    resource_class: m4pro.medium
+    shell: /bin/bash -eo pipefail
+    steps:
+    - checkout
+    - run:
+        name: Use Python 3.12 and bind source provenance
+        command: 'export HOMEBREW_NO_AUTO_UPDATE=1
+
+          if ! brew list --versions python@3.12 >/dev/null 2>&1; then brew install
+          python@3.12; fi
+
+          PYTHON_BIN="$(brew --prefix python@3.12)/libexec/bin"
+
+          printf ''export PATH=%q:$PATH\n'' "$PYTHON_BIN" >> "$BASH_ENV"
+
+          printf ''export GITHUB_SHA=%q\n'' "$CIRCLE_SHA1" >> "$BASH_ENV"
+
+          '
+        no_output_timeout: 10m
+    - run:
+        name: Stage pinned shared engines with zero bundled profiles
+        command: "python3 tools/bundle_diarization.py\npython3 tools/bundle_asr.py\n\
+          python3 tools/character_package.py prepare --cache character-cache --resources\
+          \ character-resources  > assets.json\npython3 - \\<<'PYCODE'\nfrom pathlib\
+          \ import Path\nimport shutil\nfor name in ('Phonon','OpenVoice','F5TTS'):\n\
+          \    target=Path('VoiceMatrix/Resources')/name\n    if target.is_symlink():raise\
+          \ SystemExit('Unexpected resource symlink')\n    if target.exists():shutil.rmtree(target)\n\
+          \    shutil.copytree(Path('character-resources')/name,target)\nPYCODE"
+        no_output_timeout: 20m
+    - run:
+        name: Resolve frozen graph
+        command: 'brew install xcodegen
+
+          mkdir -p VoiceMatrix/Resources/{Phonon,OpenVoice,F5TTS}
+
+          python3 tools/create_diagnostic_collection.py
+
+          xcodegen generate
+
+          mkdir -p VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+
+          xcodebuild -resolvePackageDependencies -project VoiceMatrix.xcodeproj -scheme
+          VoiceMatrix -derivedDataPath native-build > resolve.log 2>&1 || { tail -100
+          resolve.log; exit 1; }
+
+          python3 -m tools.character_evidence source VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          source-proof.json'
+        no_output_timeout: 20m
+    - run:
+        name: Collect dependency licenses and compile unsigned ARM64 app
+        command: 'python3 tools/character_package.py notices --checkouts native-build/SourcePackages/checkouts
+          --resolved VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          --resources VoiceMatrix/Resources > dependency-notices.json
+
+          xcodebuild -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile
+          -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix
+          -configuration Release -sdk iphoneos -destination ''generic/platform=iOS''
+          -derivedDataPath native-build CODE_SIGNING_ALLOWED=NO build > character-build.log
+          2>&1 || { tail -160 character-build.log; exit 1; }
+
+          mkdir Payload
+
+          cp -R native-build/Build/Products/Release-iphoneos/VoiceMatrix.app Payload/
+
+          cp source-proof.json Payload/VoiceMatrix.app/VoiceMatrix-Source-Proof.json
+
+          python3 tools/package_ipa.py Payload VoiceMatrix-0.4.9-build4.ipa
+
+          python3 tools/character_package.py inspect VoiceMatrix-0.4.9-build4.ipa
+          --expected-version 0.4.9 --expected-build 4 --dependency-proof dependency-notices.json
+          > character-inspection.json
+
+          python3 tools/bundle_diarization.py --inspect-ipa VoiceMatrix-0.4.9-build4.ipa
+
+          python3 tools/bundle_asr.py --inspect-ipa VoiceMatrix-0.4.9-build4.ipa
+
+          shasum -a 256 VoiceMatrix-0.4.9-build4.ipa > character-ipa.sha256'
+        no_output_timeout: 20m
+    - run:
+        name: Record packaging-only verification boundary
+        command: 'python3 - \<<''PYCODE''
+
+          import json,os,pathlib
+
+          pathlib.Path(''packaging-status.json'').write_text(json.dumps(dict(sourceCommit=os.environ[''GITHUB_SHA''],version=''0.4.9'',build=''4'',nativeTestsRun=False,physicalDeviceVerified=False,likenessVerified=False,offlineRVC=False,musicSeparation=False,purpose=''Unsigned
+          iPhone preview; packaging and asset inspection only''),indent=2)+''\n'')
+
+          PYCODE'
+        no_output_timeout: 20m
+    - store_artifacts:
+        path: VoiceMatrix-0.4.9-build4.ipa
+    - store_artifacts:
+        path: character-inspection.json
+    - store_artifacts:
+        path: character-ipa.sha256
+    - store_artifacts:
+        path: source-proof.json
+    - store_artifacts:
+        path: dependency-notices.json
+    - store_artifacts:
+        path: assets.json
+    - store_artifacts:
+        path: packaging-status.json
+    - store_artifacts:
+        path: character-build.log
+workflows:
+  package-iphone:
+    when: << pipeline.parameters.package-iphone >>
+    jobs:
+    - package-iphone

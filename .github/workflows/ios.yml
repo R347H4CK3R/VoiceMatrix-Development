@@ -1,0 +1,112 @@
+name: Source tests and legacy catalog validation
+on:
+  push:
+    branches: ['feature/voicematrix-*']
+    paths-ignore: [source.json, strata-source.json]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install media test dependency
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: python3 -m unittest discover -s tests -v
+      - run: python3 tools/validate_source_catalog.py
+  audio:
+    needs: arm64
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore the exact compiled inference bundle used by ARM64 build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name VoiceMatrix-0.3.0-offline-assets --dir compiled-assets
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('compiled-assets/VoiceMatrix-offline-assets.zip') as z:z.extractall('VoiceMatrix')
+          PY
+          python3 tools/assets.py --verify
+          brew install xcodegen
+      - name: Configure deterministic QA shard
+        run: |
+          python3 - <<'PY'
+          import json,pathlib
+          pathlib.Path('VoiceMatrixTests/qa-shard.json').write_text(json.dumps({'index':${{ matrix.shard }},'count':4}))
+          PY
+      - name: Run native speech, conversion, navigation and audio tests
+        env:
+          NSUnbufferedIO: YES
+        run: |
+          xcodegen generate
+          python3 tools/run_native_tests.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: VoiceMatrix-0.3.0-QA-${{ matrix.shard }}
+          path: qa-audio
+          if-no-files-found: warn
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: VoiceMatrix-0.3.0-log-${{ matrix.shard }}
+          path: |
+            native-tests.log
+            test-build/Logs/Test/*.xcresult
+          if-no-files-found: warn
+          retention-days: 14
+  arm64:
+    # The 0.3.0 stock catalog is historical. Current releases use character-test-ipa.yml.
+    if: github.event_name == 'workflow_dispatch'
+    needs: source
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            VoiceMatrix/Resources/Phonon
+            build/openvoice-source
+          key: voicematrix-offline-assets-${{ hashFiles('models/phonon-lock.json', 'models/openvoice-lock.json') }}
+      - name: Bundle complete offline resources
+        run: |
+          python3 tools/assets.py
+          python3 tools/bundle_openvoice.py
+          cp NOTICE VoiceMatrix/Resources/Phonon/VoiceMatrix-NOTICE.txt
+          cp LICENSES/FluidAudio-LICENSE VoiceMatrix/Resources/Phonon/FluidAudio-LICENSE.txt
+          brew install xcodegen
+          python3 tools/package_ipa.py VoiceMatrix/Resources VoiceMatrix-offline-assets.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VoiceMatrix-0.3.0-offline-assets
+          path: VoiceMatrix-offline-assets.zip
+          if-no-files-found: error
+      - name: Build unsigned native ARM64
+        run: |
+          xcodegen generate
+          xcodebuild -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build > build.log 2>&1 || { tail -120 build.log; exit 1; }
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/VoiceMatrix.app Payload/
+          python3 tools/package_ipa.py Payload VoiceMatrix-0.3.0-candidate.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VoiceMatrix-0.3.0-arm64-candidate
+          path: VoiceMatrix-0.3.0-candidate.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: VoiceMatrix-0.3.0-arm64-build-log
+          path: build.log
+          if-no-files-found: warn

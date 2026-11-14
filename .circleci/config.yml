@@ -1,0 +1,178 @@
+# Private development only. Explicit run-native=true is required; no release or billing actions.
+version: 2.1
+parameters:
+  run-native:
+    type: boolean
+    default: false
+  xcode-version:
+    type: string
+    default: 26.4.1
+jobs:
+  native-ui:
+    macos:
+      xcode: << pipeline.parameters.xcode-version >>
+    shell: /bin/bash -eo pipefail
+    steps:
+    - checkout
+    - run:
+        name: Admit native UI runner without downloading resources
+        command: python3 tools/native_ui_preflight.py | tee native-ui-preflight.json
+    - run:
+        name: Execute native Foundation policies without skipped checks
+        command: python3 tools/native_policy_gate.py
+        no_output_timeout: 5m
+    - run:
+        name: Prepare UI and bundled speaker-model resources, not a complete speech
+          build
+        command: "python3 tools/bundle_diarization.py\npython3 tools/check_conversion_inputs.py\n\
+          python3 tools/create_diagnostic_collection.py\nmkdir -p VoiceMatrix/Resources/Phonon\
+          \ VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS\n# These are\
+          \ UI availability fixtures, not valid engines or speech assets.\n# No config,\
+          \ weights, stock profiles or private references enter the app.\nprintf '{\"\
+          testOnlyUIAvailability\":true}\\n' > VoiceMatrix/Resources/F5TTS/voicematrix-engine.json\n\
+          printf '{\"testOnlyUIAvailability\":true}\\n' > VoiceMatrix/Resources/OpenVoice/model-manifest.json\n\
+          cp -R tests/fixtures/DiagnosticVoices VoiceMatrix/Resources/F5TTS/UITestVoices\n\
+          # XCTest waits for UI idleness after taps; a 2.5-second clip can finish\n\
+          # before it can inspect Stop. Extend only this UI fixture, not audio gates.\n\
+          python3 - <<'PY'\nimport hashlib,json,pathlib,wave\nroot=pathlib.Path('VoiceMatrix/Resources/F5TTS/UITestVoices/diagnostic-neutral')\n\
+          audio=root/'reference.wav'\nwith wave.open(str(audio),'rb') as f:\n    params=f.getparams()\n\
+          \    pcm=f.readframes(f.getnframes())*6\nwith wave.open(str(audio),'wb')\
+          \ as f:\n    f.setparams(params)\n    f.writeframes(pcm)\nmanifest=json.loads((root/'manifest.json').read_text())\n\
+          manifest.update(referenceSHA256=hashlib.sha256(audio.read_bytes()).hexdigest(),\n\
+          \                referenceBytes=audio.stat().st_size,seconds=len(pcm)/48000,\n\
+          \                referenceText=' '.join([manifest['referenceText']]*6))\n\
+          (root/'manifest.json').write_text(json.dumps(manifest))\nassert 14 < manifest['seconds']\
+          \ < 15\nPY\nbrew install xcodegen\nxcodegen generate\npython3 - <<'PYCODE'\n\
+          import json,subprocess,os\nruntimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','-j']))['runtimes']\n\
+          available=[x for x in runtimes if x.get('isAvailable') and 'iOS' in x['name']\
+          \ and str(x.get('version','')).startswith('26.')]\nassert available,'No\
+          \ iOS 26 simulator runtime available'\nruntime=sorted(available,key=lambda\
+          \ x:tuple(int(p) for p in x['version'].split('.')))[-1]['identifier']\n\
+          device=subprocess.check_output(['xcrun','simctl','create','VoiceMatrix-Sync-UI','com.apple.CoreSimulator.SimDeviceType.iPhone-16-Plus',runtime],text=True).strip()\n\
+          with open(os.environ['BASH_ENV'],'a') as f:f.write('export SIMULATOR_ID='+device+'\\\
+          n')\nsubprocess.run(['xcrun','simctl','boot',device],check=True,timeout=60)\n\
+          PYCODE\n"
+        no_output_timeout: 20m
+    - run:
+        name: Build UI tests while the owned simulator starts
+        command: 'xcodebuild build-for-testing -only-testing:VoiceMatrixUITests/CharacterWorkflowUITests
+          -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix
+          -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -derivedDataPath
+          ui-build CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:VoiceMatrixUITests/CharacterEmptyStateUITests
+          -only-testing:VoiceMatrixTests/PlaybackTests -only-testing:VoiceMatrixTests/LocalVideoAudioTests
+          -only-testing:VoiceMatrixTests/BundledASRTests -only-testing:VoiceMatrixTests/LocalStudioEvidenceTests
+          -only-testing:VoiceMatrixTests/LocalSpeakerPolicyTests -only-testing:VoiceMatrixTests/LocalSpeakerModelTests
+          -only-testing:VoiceMatrixTests/LocalSoundQualityTests -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests
+          -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests
+          -only-testing:VoiceMatrixTests/AppUpdateTests -only-testing:VoiceMatrixTests/SpeechControlsTests
+          -only-testing:VoiceMatrixUITests/SpeechFeatureUITests > character-ui-build.log
+          2>&1 || { tail -160 character-ui-build.log; exit 1; }
+
+          '
+        no_output_timeout: 20m
+    - run:
+        name: Wait for the simulator launch services to finish booting
+        command: 'python3 - <<''PYCODE''
+
+          import os,subprocess
+
+          subprocess.run([''xcrun'',''simctl'',''bootstatus'',os.environ[''SIMULATOR_ID''],''-b''],check=True,timeout=360)
+
+          PYCODE
+
+          '
+        no_output_timeout: 20m
+    - run:
+        name: Exercise native playback and current SwiftUI empty-library flows
+        command: 'xcodebuild test-without-building -test-timeouts-enabled YES -default-test-execution-time-allowance
+          120 -maximum-test-execution-time-allowance 300 -skipPackagePluginValidation
+          -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS
+          Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build -resultBundlePath
+          character-ui.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled
+          NO -only-testing:VoiceMatrixUITests/CharacterEmptyStateUITests -only-testing:VoiceMatrixTests/PlaybackTests
+          -only-testing:VoiceMatrixTests/LocalVideoAudioTests -only-testing:VoiceMatrixTests/BundledASRTests
+          -only-testing:VoiceMatrixTests/LocalStudioEvidenceTests -only-testing:VoiceMatrixTests/LocalSpeakerPolicyTests
+          -only-testing:VoiceMatrixTests/LocalSpeakerModelTests -only-testing:VoiceMatrixTests/LocalSoundQualityTests
+          -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests
+          -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests -only-testing:VoiceMatrixTests/AppUpdateTests
+          -only-testing:VoiceMatrixTests/SpeechControlsTests -only-testing:VoiceMatrixUITests/SpeechFeatureUITests
+          > character-ui.log 2>&1 || { tail -160 character-ui.log; exit 1; }
+
+          '
+        no_output_timeout: 20m
+    - run:
+        name: Restart only the owned simulator before the second XCTest runner
+        command: '# The prior batch may leave SpringBoard rejecting the next runner
+          as
+
+          # Busy / failed preflight checks. Reboot without erasing test app data.
+
+          python3 - <<''PYCODE''
+
+          import os,subprocess
+
+          device=os.environ[''SIMULATOR_ID'']
+
+          subprocess.run([''xcrun'',''simctl'',''shutdown'',device],check=True,timeout=120)
+
+          subprocess.run([''xcrun'',''simctl'',''boot'',device],check=True,timeout=60)
+
+          subprocess.run([''xcrun'',''simctl'',''bootstatus'',device,''-b''],check=True,timeout=360)
+
+          PYCODE
+
+          '
+        no_output_timeout: 20m
+    - run:
+        name: Import a synthetic voice, select, play reference and relaunch
+        command: 'xcodebuild test-without-building -test-timeouts-enabled YES -default-test-execution-time-allowance
+          120 -maximum-test-execution-time-allowance 300 -skipPackagePluginValidation
+          -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS
+          Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build -resultBundlePath
+          character-workflow.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled
+          NO -only-testing:VoiceMatrixUITests/CharacterWorkflowUITests > character-workflow.log
+          2>&1 || { tail -160 character-workflow.log; exit 1; }
+
+          '
+        no_output_timeout: 20m
+    - run:
+        name: Export screenshots
+        command: 'if [ -d character-ui.xcresult ]; then xcrun xcresulttool export
+          attachments --path character-ui.xcresult --output-path ui-screenshots; fi
+
+          if [ -d character-workflow.xcresult ]; then xcrun xcresulttool export attachments
+          --path character-workflow.xcresult --output-path workflow-screenshots; fi
+
+          '
+        no_output_timeout: 20m
+        when: always
+    - store_artifacts:
+        path: character-workflow.log
+    - store_artifacts:
+        path: character-workflow.xcresult
+    - store_artifacts:
+        path: workflow-screenshots
+    - store_artifacts:
+        path: character-ui.log
+    - store_artifacts:
+        path: character-ui-build.log
+    - store_artifacts:
+        path: ui-simulator.json
+    - store_artifacts:
+        path: character-ui.xcresult
+    - store_artifacts:
+        path: ui-screenshots
+    - run:
+        name: Remove only this job simulator
+        command: if [ -n "${SIMULATOR_ID:-}" ]; then xcrun simctl shutdown "$SIMULATOR_ID"
+          || true; xcrun simctl delete "$SIMULATOR_ID"; fi
+        no_output_timeout: 20m
+        when: always
+    - store_artifacts:
+        path: native-ui-preflight.json
+    resource_class: m4pro.medium
+workflows:
+  native-validation:
+    when: << pipeline.parameters.run-native >>
+    jobs:
+    - native-ui

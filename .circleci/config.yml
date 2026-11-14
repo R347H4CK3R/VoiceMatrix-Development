@@ -34,7 +34,7 @@ jobs:
           cp -R tests/fixtures/DiagnosticVoices VoiceMatrix/Resources/F5TTS/UITestVoices\n\
           # XCTest waits for UI idleness after taps; a 2.5-second clip can finish\n\
           # before it can inspect Stop. Extend only this UI fixture, not audio gates.\n\
-          python3 - <<'PY'\nimport hashlib,json,pathlib,wave\nroot=pathlib.Path('VoiceMatrix/Resources/F5TTS/UITestVoices/diagnostic-neutral')\n\
+          python3 - \\<<'PY'\nimport hashlib,json,pathlib,wave\nroot=pathlib.Path('VoiceMatrix/Resources/F5TTS/UITestVoices/diagnostic-neutral')\n\
           audio=root/'reference.wav'\nwith wave.open(str(audio),'rb') as f:\n    params=f.getparams()\n\
           \    pcm=f.readframes(f.getnframes())*6\nwith wave.open(str(audio),'wb')\
           \ as f:\n    f.setparams(params)\n    f.writeframes(pcm)\nmanifest=json.loads((root/'manifest.json').read_text())\n\
@@ -42,7 +42,7 @@ jobs:
           \                referenceBytes=audio.stat().st_size,seconds=len(pcm)/48000,\n\
           \                referenceText=' '.join([manifest['referenceText']]*6))\n\
           (root/'manifest.json').write_text(json.dumps(manifest))\nassert 14 < manifest['seconds']\
-          \ < 15\nPY\nbrew install xcodegen\nxcodegen generate\npython3 - <<'PYCODE'\n\
+          \ < 15\nPY\nbrew install xcodegen\nxcodegen generate\npython3 - \\<<'PYCODE'\n\
           import json,subprocess,os\nruntimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','-j']))['runtimes']\n\
           available=[x for x in runtimes if x.get('isAvailable') and 'iOS' in x['name']\
           \ and str(x.get('version','')).startswith('26.')]\nassert available,'No\
@@ -72,7 +72,7 @@ jobs:
         no_output_timeout: 20m
     - run:
         name: Wait for the simulator launch services to finish booting
-        command: 'python3 - <<''PYCODE''
+        command: 'python3 - \<<''PYCODE''
 
           import os,subprocess
 
@@ -107,7 +107,7 @@ jobs:
 
           # Busy / failed preflight checks. Reboot without erasing test app data.
 
-          python3 - <<''PYCODE''
+          python3 - \<<''PYCODE''
 
           import os,subprocess
 

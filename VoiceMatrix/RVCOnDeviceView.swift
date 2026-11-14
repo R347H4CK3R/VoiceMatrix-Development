@@ -12,7 +12,7 @@ struct RVCOnDeviceView:View {
         Form {
             Section {
                 Label("Diagnostic preview",systemImage:"testtube.2").font(.headline)
-                Text("This uses a diagnostic model, not one of your character voices. Pitch can be inaccurate on human speech. Phone performance and voice quality still need validation.")
+                Text("This uses the selected evaluation model, not one of your character voices. Pitch can be inaccurate on human speech. Phone performance and voice quality still need validation.")
                     .font(.callout).foregroundStyle(.secondary)
                 Text("Your existing voices stay in the Voices tab.").font(.caption).foregroundStyle(.secondary)
             }
@@ -40,15 +40,16 @@ struct RVCOnDeviceView:View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Conversion settings") {
+                Text(preview.voiceName).font(.headline)
                 Text(String(format:"Retrieval strength · %.1f%%",Double(preview.indexRate)*100))
                 Slider(value:$preview.indexRate,in:0...1,step:0.125)
-                    .disabled(unavailable).accessibilityLabel("Retrieval strength")
-                Text("Zero skips retrieval and needs no retrieval pack. Lower values can preserve words better but may sound less like the target voice. The default is 75%.")
+                    .disabled(unavailable || !preview.retrievalSupported).accessibilityLabel("Retrieval strength")
+                Text("Zero skips retrieval and needs no retrieval pack. Lower values can preserve words better but may sound less like the target voice. The diagnostic voice defaults to 75%. Models without a matching index use zero.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text(String(format:"Pitch · %+.0f semitones",preview.semitones))
                 Slider(value:$preview.semitones,in:-24...24,step:1)
                     .disabled(unavailable).accessibilityLabel("Pitch in semitones")
-                Button("Reset conversion settings") {preview.indexRate=0.75;preview.semitones=0}
+                Button("Reset conversion settings") {preview.indexRate=preview.retrievalSupported ? 0.75 : 0;preview.semitones=0}
                     .disabled(unavailable)
             }
             Section("3 · Create a diagnostic preview") {

@@ -1,0 +1,211 @@
+{
+  "modelProvenance": {
+    "repository": "Nekochu/RVC-VCTK_Voice-sample",
+    "revision": "005c2f948ee9dafd7e3aa7f261b4c3a24beebeef",
+    "declaredModelLicense": "Apache-2.0",
+    "declaredTrainingDataset": "CSTR-Edinburgh/vctk",
+    "datasetLicense": "CC-BY-4.0",
+    "datasetURL": "https://huggingface.co/datasets/CSTR-Edinburgh/vctk",
+    "modelCardSHA256": "654a545cf34753ce1f00527e33f3275daf7b759a1000e5c1421ac88b008b0e15",
+    "files": [
+      {
+        "path": "M/p226/Mp226.pth",
+        "size": 55193241,
+        "sha256": "3c4c2e8ea977d7c08793126aace4baa47028b4c1bf7cd46ae5a9c359b0216693",
+        "url": "https://huggingface.co/Nekochu/RVC-VCTK_Voice-sample/resolve/005c2f948ee9dafd7e3aa7f261b4c3a24beebeef/M/p226/Mp226.pth"
+      },
+      {
+        "path": "M/p226/p226.flac",
+        "size": 54497658,
+        "sha256": "8a2b79d681c4a143cb923b2e01ca57111991a243e901b1478e7b93d0ff781b97",
+        "url": "https://huggingface.co/Nekochu/RVC-VCTK_Voice-sample/resolve/005c2f948ee9dafd7e3aa7f261b4c3a24beebeef/M/p226/p226.flac"
+      }
+    ],
+    "productionQualified": false
+  },
+  "evaluatorModels": {
+    "whisper": {
+      "repo": "openai/whisper-tiny.en",
+      "revision": "87c7102498dcde7456f24cfd30239ca606ed9063",
+      "files": {
+        "README.md": "13627ce3d7dce389223eab7b6ed06738f0f1c786e5245e650b029e4e314c8ff1",
+        "config.json": "b5366317df280f79e6cc366f259f379674f81a8721d458acf2e00680ccb10b1d",
+        "generation_config.json": "38744c19d5cede6ff4dab5079c6d6ddc02ca726960bbef208fb602ad5a030eab",
+        "preprocessor_config.json": "9b5cd03a36fbb8a627c64d98a5b5b126ead95a77720723944487311f0110b666",
+        "model.safetensors": "db59695928ded6043adaef491a53ef4e12da9611184d77c53baa691a60b958ad",
+        "tokenizer.json": "5eb60cec1e77aeeb6869a2bb5a8e01a84c3fe5d072d75369343021fe6f5310d0",
+        "tokenizer_config.json": "14f84bdf4b9ecdbd4738ddc81c17a1baedfc02bb93c6e049c951e15a1b40b70d",
+        "special_tokens_map.json": "014f8f802366ed818919550be0ad9e35907327cb9e142e8aaa102420f460bda8",
+        "vocab.json": "3ba3c3109ff33976c4bd966589c11ee14fcaa1f4c9e5e154c2ed7f99d80709e7",
+        "merges.txt": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+        "normalizer.json": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd",
+        "added_tokens.json": "560be47bea388757f8d4cc185c5d82067426cbb6361e38016dd90ddc01ab203a"
+      }
+    },
+    "speaker": {
+      "repo": "microsoft/wavlm-base-plus-sv",
+      "revision": "feb593a6c23c1cc3d9510425c29b0a14d2b07b1e",
+      "files": {
+        "README.md": "97f5513cde351b3adb4e182b60ec23154dadba7ca83e667ceace237177855b8e",
+        "config.json": "c6ac8c0ce55b18d4612677931036fe5ce78093e87361c552a173f00a0bb07514",
+        "preprocessor_config.json": "99272fe8ccfab114b68b478681ea47ee3a1ce62bb788cb92dd6e4f69fb1f1da2",
+        "pytorch_model.bin": "e906bce2fa42fb497a1d1a9ecf81548adb7e03b12a5644e32d2f42f0d6500fad"
+      }
+    }
+  },
+  "records": {
+    "468c": {
+      "input": {
+        "transcript": "can not be protected at the cost of right to dignity. The yellow and pick up blue uniforms were very much as they are today.",
+        "sha256": "a5d0f89871bd418be3706af4b1ec5f18315098b849b1dfb1aa95ad442045fc31",
+        "samples16k": 160000
+      },
+      "oldNoIndex": {
+        "transcript": "can not be protected at the post of right to dignity. The yellow and pink coke glow uniform was very much as they are today.",
+        "sha256": "628f8c6f07b65dc4ebcf581f6d88224b8cd1dd7a385e72440cee396f622190d0",
+        "samples16k": 160000
+      },
+      "candidateNoIndex": {
+        "transcript": "can not be protected and the post of right to dignity. The yellow and big coke blue uniforms were very much as they are.",
+        "sha256": "fabcf58e20219ec0eb4b2c18cf1bce619645c96b3e5946331bf1e0456ef30230",
+        "samples16k": 160000
+      }
+    },
+    "4b13": {
+      "input": {
+        "transcript": "for voice cloning during this period elections were considered to be neither free or not fair, like its relatives it lacked teeth.",
+        "sha256": "8ac5646b3be7ac4624107850e60d224a37307603b2e50fcc55c38237de68db17",
+        "samples16k": 160000
+      },
+      "oldNoIndex": {
+        "transcript": "or voice cloning during this period elections will consider to be neither free or nor fair, like its relatives it will occur with teeth.",
+        "sha256": "05b2129a52df9323acd78e8dfdebd465dfcfa4f51655407fd276582dcd1f9edb",
+        "samples16k": 160000
+      },
+      "candidateNoIndex": {
+        "transcript": "or voice cloning during this period elections were considered to be neither free or nor fair, like its reliobings in black and blue feet.",
+        "sha256": "0992b702df4f8b53bf256185f62dd4e99a3256e987de5c5238b228af0af09160",
+        "samples16k": 160000
+      }
+    }
+  },
+  "metrics": {
+    "468c": {
+      "input": {
+        "asrDisagreementVsInput": {
+          "referenceTokens": 25,
+          "hypothesisTokens": 25,
+          "wordEdits": 0,
+          "normalizedDisagreement": 0.0
+        },
+        "targetCentroidCosine": 0.64898681640625,
+        "targetAnchorCosines": {
+          "0": 0.6514549255371094,
+          "20": 0.6438530087471008,
+          "40": 0.6378895044326782
+        }
+      },
+      "oldNoIndex": {
+        "asrDisagreementVsInput": {
+          "referenceTokens": 25,
+          "hypothesisTokens": 25,
+          "wordEdits": 6,
+          "normalizedDisagreement": 0.24
+        },
+        "targetCentroidCosine": 0.754973292350769,
+        "targetAnchorCosines": {
+          "0": 0.754851222038269,
+          "20": 0.7426053285598755,
+          "40": 0.7514526844024658
+        }
+      },
+      "candidateNoIndex": {
+        "asrDisagreementVsInput": {
+          "referenceTokens": 25,
+          "hypothesisTokens": 24,
+          "wordEdits": 5,
+          "normalizedDisagreement": 0.2
+        },
+        "targetCentroidCosine": 0.8524534702301025,
+        "targetAnchorCosines": {
+          "0": 0.8483753204345703,
+          "20": 0.8356202244758606,
+          "40": 0.8552870154380798
+        }
+      }
+    },
+    "4b13": {
+      "input": {
+        "asrDisagreementVsInput": {
+          "referenceTokens": 22,
+          "hypothesisTokens": 22,
+          "wordEdits": 0,
+          "normalizedDisagreement": 0.0
+        },
+        "targetCentroidCosine": 0.7169120907783508,
+        "targetAnchorCosines": {
+          "0": 0.7233166694641113,
+          "20": 0.712386429309845,
+          "40": 0.6998296976089478
+        }
+      },
+      "oldNoIndex": {
+        "asrDisagreementVsInput": {
+          "referenceTokens": 22,
+          "hypothesisTokens": 24,
+          "wordEdits": 7,
+          "normalizedDisagreement": 0.3181818181818182
+        },
+        "targetCentroidCosine": 0.7470371723175049,
+        "targetAnchorCosines": {
+          "0": 0.744006872177124,
+          "20": 0.7429359555244446,
+          "40": 0.7383265495300293
+        }
+      },
+      "candidateNoIndex": {
+        "asrDisagreementVsInput": {
+          "referenceTokens": 22,
+          "hypothesisTokens": 24,
+          "wordEdits": 8,
+          "normalizedDisagreement": 0.36363636363636365
+        },
+        "targetCentroidCosine": 0.7934240102767944,
+        "targetAnchorCosines": {
+          "0": 0.7938136458396912,
+          "20": 0.7706226110458374,
+          "40": 0.7990096807479858
+        }
+      }
+    }
+  },
+  "targetReference": {
+    "path": "p226.flac",
+    "offsetSeconds": [
+      0,
+      20,
+      40
+    ],
+    "durationSecondsEach": 10,
+    "heldOutFromTraining": false
+  },
+  "targetAnchorConsistency": {
+    "0__20": 0.9853818416595459,
+    "0__40": 0.9851575493812561,
+    "20__40": 0.9660649299621582
+  },
+  "retrievalRate": 0,
+  "pitch": "Unchanged current native autocorrelation",
+  "inputTranscriptIsGroundTruth": false,
+  "wordErrorRateClaim": false,
+  "humanListeningVerified": false,
+  "physicalIPhoneVerified": false,
+  "productionQualified": false,
+  "published": false,
+  "limitations": [
+    "Automated ASR disagreement is not ground-truth WER.",
+    "Speaker cosine is uncalibrated; anchors may be training data.",
+    "These speech fixtures have been used in prior diagnostics and are not fresh holdouts.",
+    "Model and dataset licensing are recorded publisher declarations."
+  ]
+}

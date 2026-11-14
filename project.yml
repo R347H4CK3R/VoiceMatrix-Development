@@ -37,6 +37,9 @@ targets:
       buildPhase: resources
     - path: LICENSES/FAISS-MIT.txt
       buildPhase: resources
+    - path: VoiceMatrix/Resources/RVCNotices
+      type: folder
+      buildPhase: resources
     - path: VoiceMatrix/Resources/Phonon
       type: folder
       buildPhase: resources

@@ -1,0 +1,18 @@
+{
+  "sourceModelSHA256": "3c4c2e8ea977d7c08793126aace4baa47028b4c1bf7cd46ae5a9c359b0216693",
+  "sourceRevision": "81eed5e8f68b6bed1789f682fe78cdd324495afc",
+  "sourceFiles": {
+    "models.py": "769615b8dbed4775c8083881663a79c0e5ec0b662dd5f0c0a1bc3ccdd9827e99",
+    "modules.py": "b1aa77b0921468a61492fa89ed1f1212cd22fee3caa551befe44d8ab359fd2f1",
+    "attentions.py": "8820e6047353d99344fc73fbb6c69d85e4f61066fc498982cc895e9577d4519f",
+    "commons.py": "132a907eff444907861e63684c04c88ae631d03707470858f7c53f857b0cc5c8",
+    "transforms.py": "fb0d3320adf32ca0eaa44dd56e8922927f77ec3dd45c775e10c3da1704072c6a"
+  },
+  "change": {
+    "sourceSHA256": "69ac6b2cc74f9c25b718c5bc03c2af0f699cacd9d82132db7dde668b0a9b1406",
+    "outputSHA256": "f7519d6f3c248f6eb2acabd11352e0abf91515a7e95662fdb23a5b1f1e009dcc",
+    "change": "phase cumulative sum uses float64 then returns to float32",
+    "weightsChanged": false,
+    "acceptanceThresholdsChanged": false
+  }
+}

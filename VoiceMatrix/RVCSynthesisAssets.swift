@@ -1,9 +1,10 @@
 import Foundation
 
-/// Admission is deliberately limited to the previously verified diagnostic graphs.
+/// Admission is deliberately limited to the previously CPU-tested evaluation graphs.
 /// A manifest cannot authorize arbitrary models by supplying its own hash.
 enum RVCSynthesisAssets {
     static let verifiedSHA256 = "fadf28f77251f486c48f9b039f62306f07e02e7ffe9be5bde2f7fc33f23360cb"
+    static let vctkP226SHA256 = "f7519d6f3c248f6eb2acabd11352e0abf91515a7e95662fdb23a5b1f1e009dcc"
     static let maximumBytes = 128 * 1024 * 1024
     struct Manifest: Codable {
         let schemaVersion: Int
@@ -13,14 +14,24 @@ enum RVCSynthesisAssets {
         let bytes: Int
     }
     static func validateManifest(_ m: Manifest) throws {
-        let accepted: (String, String, Int)
+        let accepted: (String, Set<String>, Int)
         switch m.profile {
-        case "rvc-v2-922-cpu": accepted = ("synthesizer.onnx", verifiedSHA256, maximumBytes)
-        case "hubert-147680-cpu": accepted = ("hubert.onnx", "980f264a909ff3d85d513e924304b1c179ff5d17280dda0b011ec01cb366aa68", 384 * 1024 * 1024)
+        case "rvc-v2-922-cpu": accepted = ("synthesizer.onnx", [verifiedSHA256,vctkP226SHA256], maximumBytes)
+        case "hubert-147680-cpu": accepted = ("hubert.onnx", ["980f264a909ff3d85d513e924304b1c179ff5d17280dda0b011ec01cb366aa68"], 384 * 1024 * 1024)
         default: throw RVCSynthesisFailure.invalidAsset
         }
-        guard m.schemaVersion == 1, m.file == accepted.0, m.sha256 == accepted.1,
+        guard m.schemaVersion == 1, m.file == accepted.0, accepted.1.contains(m.sha256),
               (1...accepted.2).contains(m.bytes) else { throw RVCSynthesisFailure.invalidAsset }
+    }
+    static func voiceName(_ m:Manifest) throws -> String {
+        try validateManifest(m)
+        guard m.profile == "rvc-v2-922-cpu" else {throw RVCSynthesisFailure.invalidAsset}
+        return m.sha256 == vctkP226SHA256 ? "VCTK p226 · evaluation" : "Synthetic diagnostic voice"
+    }
+    static func validateRetrievalPair(_ m:Manifest,usesRetrieval:Bool) throws {
+        _=try voiceName(m)
+        // Only the synthetic diagnostic voice has an admitted matching index.
+        guard !usesRetrieval || m.sha256 == verifiedSHA256 else {throw RVCSynthesisFailure.incompatibleModel}
     }
     static func regularFile(_ url: URL) throws -> Int {
         guard url.isFileURL, url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).standardizedFileURL == url.resolvingSymlinksInPath().standardizedFileURL else {

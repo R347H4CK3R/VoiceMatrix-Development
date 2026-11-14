@@ -7,7 +7,7 @@ enum RVCPreviewPack:String,CaseIterable,Identifiable {
     case hubert,synthesizer,retrieval
     var id:String {rawValue}
     var title:String {
-        switch self {case .hubert:return "Speech encoder";case .synthesizer:return "Diagnostic voice model";case .retrieval:return "Retrieval data"}
+        switch self {case .hubert:return "Speech encoder";case .synthesizer:return "Evaluation voice model";case .retrieval:return "Retrieval data"}
     }
 }
 enum RVCPreviewStore {

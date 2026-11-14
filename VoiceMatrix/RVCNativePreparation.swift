@@ -45,6 +45,7 @@ actor RVCNativeWindowConverter {
         self.hubert=hubert;self.synthesizer=synthesizer;self.index=index
     }
     static func open(hubertRoot:URL,synthesizerRoot:URL,retrievalRoot:URL?,cache:URL) async throws -> RVCNativeWindowConverter {
+        try RVCSynthesisAssets.validateRetrievalPair(RVCSynthesisAssets.manifest(at:synthesizerRoot),usesRetrieval:retrievalRoot != nil)
         let index=try retrievalRoot.map {try RVCNativeRetrieval.loadVerifiedDiagnosticPack(at:$0)}
         let hubert=try RVCONNXHuBERT(assetRoot:hubertRoot,cacheDirectory:cache)
         do {

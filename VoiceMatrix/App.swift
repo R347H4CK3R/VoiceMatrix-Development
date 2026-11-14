@@ -282,7 +282,7 @@ struct SettingsView: View {
                 if let report { ShareLink(item: report) { Label("Share Error Report", systemImage: "square.and.arrow.up") } }
                 Text("Nothing is uploaded automatically. Reports contain engine events and profile IDs, without entered text or audio.").font(.caption)
             }
-            Section("Licenses") { Text("Full engine licenses and notices are included in the app. F5 weights carry noncommercial terms. Imported references retain their own permission records. No official character or performer endorsement is claimed.") }
+            Section("Licenses") { Text("Full engine licenses and notices are included in the app. Optional VCTK p226 evaluation model: Nekochu (Apache 2.0); VCTK corpus by Yamagishi, Veaux and MacDonald, University of Edinburgh CSTR (CC BY 4.0). F5 weights carry noncommercial terms. Imported references retain their own permission records. No official character or performer endorsement is claimed.") }
         }.navigationTitle("Settings")
     }
 }

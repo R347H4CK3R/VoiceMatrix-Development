@@ -3,8 +3,8 @@ import Foundation
 import CryptoKit
 import OnnxRuntimeBindings
 
-/// CPU-only diagnostic synthesizer. No UI route is enabled until the upstream
-/// feature/pitch/retrieval pipeline and physical-device validation are available.
+/// CPU-only synthesizer for hash-pinned evaluation models.
+/// CPU parity does not establish physical-device performance or voice quality.
 actor RVCONNXSynthesizer {
     private var environment: ORTEnv?
     private var session: ORTSession?

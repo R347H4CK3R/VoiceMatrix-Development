@@ -1,0 +1,74 @@
+{
+  "nativeExportProvenance": {
+    "inputName": "468c.wav",
+    "inputSHA256": "6ab9d9378b23abefadfaab6a2d935455f86bffb7c062e4ac44c5698612961eef",
+    "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/468c.wav",
+    "license": "CC0-1.0",
+    "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+    "selection": "Next two non-enhanced filenames after 4189, selected before evaluation",
+    "files": {
+      "sinc32.json": "6aa9ccc33fc9c0a7367cd32a35caa64a81c9fb6ed4047344b038cf43aa4a908f",
+      "prepared.f32": "b672f74470cb82187d70e18ab4768bd068dfef985b5528c2748fc057925e72c3",
+      "native-result.json": "8871c3dfcaef4689016454cf6658b6f7f5f373891e018fef08086a9ef1330aaa",
+      "pitch.json": "0990ad7fe597884770d7ec6ef80c303013768ce268775bd040bc3084f204af7a"
+    },
+    "windowSHA256": [
+      "86ccbb760dce125101c755e3a1f572195a70f8b93cc441961af630a0a326443b",
+      "f7b33a76ed6d70adc2bdce2fbb94772cac16256b905825469cbd50fac51eba64"
+    ],
+    "sourceHashes": {
+      "native": "204aa359bb690dc3098aeecf27727a68da629e8bd77e39f5f788e6bde715af9d",
+      "sinc32": "99cef77190085dd27b49bad790ed8b04bb90133a8e1f72860105b3140622f392"
+    }
+  },
+  "retrievalAblation": {
+    "retrievalRate": 0.0,
+    "pitch": "Current native baseline unchanged",
+    "perceptualQualityClaim": false
+  },
+  "sparseRetrievalPolicy": "Retrieval disabled; candidate index was not downloaded or used",
+  "status": "passed",
+  "cases": [
+    {
+      "pitchMode": "native",
+      "repetitions": 1,
+      "fixtureAssembly": "Fresh CC0 voice-donations/468c.wav; native prepared audio and baseline/candidate pitch",
+      "input16kSamples": 160000,
+      "chunks": 2,
+      "outputSamples": 400000,
+      "outputSeconds": 10.0,
+      "tailCovered": true,
+      "perChunkParity": [
+        {
+          "maxAbs": 2.714991569519043e-05,
+          "rms": 3.891724150528112e-07
+        },
+        {
+          "maxAbs": 0.00013747811317443848,
+          "rms": 9.225294117535457e-07
+        }
+      ],
+      "reconstructionMaxAbs": 1.3709068298339844e-05,
+      "outputRMS": 0.08988118791418663,
+      "largestAdjacentSampleJump": 0.15880504250526428,
+      "overlapStartJumps": [
+        0.0002323836088180542
+      ],
+      "outputSHA256": "fabcf58e20219ec0eb4b2c18cf1bce619645c96b3e5946331bf1e0456ef30230"
+    }
+  ],
+  "modelSHA256": "3c4c2e8ea977d7c08793126aace4baa47028b4c1bf7cd46ae5a9c359b0216693",
+  "indexSHA256": null,
+  "inputSHA256": "6ab9d9378b23abefadfaab6a2d935455f86bffb7c062e4ac44c5698612961eef",
+  "pitchMethod": "Current native baseline only; controlled retrieval rate; same input and noise",
+  "humanSpeechQualityVerified": false,
+  "profileFrames": 922,
+  "coreSeconds": 6,
+  "overlapSeconds": 0.2,
+  "maximumAdmittedHours": 2,
+  "physicalIPhoneVerified": false,
+  "qualityReviewed": false,
+  "identityVerified": false,
+  "published": false,
+  "seconds": 94.31299999999464
+}

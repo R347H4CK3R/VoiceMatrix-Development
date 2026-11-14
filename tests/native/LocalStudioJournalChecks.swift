@@ -36,6 +36,22 @@ import Glibc
   let redactedPage=try LocalStudioJournal.read(folder:root,offset:181)
   precondition(redactedPage.events.count==phrases.count)
   precondition(!redactedPage.text.contains("alpha") && !redactedPage.text.contains("beta") && !redactedPage.text.contains("gamma"))
+  // User-visible diagnostics must fit the journal even for multibyte text and
+  // a single grapheme made of many combining marks. Failure stops the studio.
+  let unicodeMessages = [String(repeating: "😀", count: 2_000),
+                         "e" + String(repeating: "\u{301}", count: 20_000),
+                         String(repeating: "\"\\\n", count: 2_000)]
+  for message in unicodeMessages {
+   let event=LocalStudioJournal.Event(id:UUID(),time:Date(),stage:message,message:message)
+   let cleaned=LocalStudioJournal.sanitized(event)
+   let encoded=try JSONEncoder().encode(cleaned)
+   precondition(encoded.count <= LocalStudioJournal.maximumEntryBytes,
+                "Unicode diagnostics exceed the journal entry budget")
+   try LocalStudioJournal.append(event,folder:root)
+  }
+  let unicodePage=try LocalStudioJournal.read(folder:root,offset:181+phrases.count)
+  precondition(unicodePage.events.count==unicodeMessages.count)
+  precondition(!unicodePage.text.contains("�"), "Truncation broke UTF-8")
   let file=root.appendingPathComponent(LocalStudioJournal.filename)
   let h=try FileHandle(forWritingTo:file);try h.seekToEnd();try h.write(contentsOf:Data("broken".utf8));try h.close()
   let before=try Data(contentsOf:file)

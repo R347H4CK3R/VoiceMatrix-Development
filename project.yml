@@ -26,6 +26,8 @@ targets:
       excludes:
       - Resources
     - path: Assets.xcassets
+    - path: LICENSES/RVC-MIT.txt
+      buildPhase: resources
     - path: VoiceMatrix/Resources/Phonon
       type: folder
       buildPhase: resources
@@ -152,6 +154,8 @@ targets:
     - path: VoiceMatrix/SpeakerSimilarityPolicy.swift
     - path: VoiceMatrix/SpeakerSimilarityService.swift
     - path: VoiceMatrix/LocalStudioJournal.swift
+    - path: VoiceMatrix/LocalStudioSnapshot.swift
+    - path: VoiceMatrix/RetainedMediaReader.swift
     - path: VoiceMatrix/LocalMediaAcquisition.swift
     - path: VoiceMatrix/LocalMediaURLPolicy.swift
     - path: VoiceMatrix/LocalVideoAudio.swift

@@ -18,6 +18,7 @@ final class StatusHarness {
  var current: Job? = Job(); var notice = "Retained"; let folder: URL
  init(_ folder: URL) { self.folder = folder }
  UPDATE
+ func record(_ message: String) throws { try update("Working", message) }
  func finish(saved: Int, unresolved: Int) throws { FINISH }
 }
 @main struct Check {
@@ -53,6 +54,24 @@ final class StatusHarness {
     check(persisted.completed, "retry persisted")
    }
   }
+  let verbose=root.appendingPathComponent("verbose")
+  try fm.createDirectory(at:verbose,withIntermediateDirectories:false)
+  let longJob=StatusHarness(verbose)
+  let message=String(repeating:"x",count:1900)
+  for _ in 0..<160 { try longJob.record(message) }
+  let snapshot=try Data(contentsOf:verbose.appendingPathComponent("job.json"))
+  check(snapshot.count<=262_144,"snapshot exceeds history reload bound")
+  let restored=try JSONDecoder().decode(StatusHarness.Job.self,from:snapshot)
+  check(!restored.events.isEmpty && restored.events.last?.message==message,"latest event lost")
+  check(restored.events.count==longJob.current?.events.count,"snapshot and live events differ")
+  let journal=try LocalStudioJournal.read(folder:verbose)
+  check(journal.total==160,"complete journal was truncated")
+  // Oversized non-event metadata must preserve the previous retryable snapshot.
+  let previous=snapshot
+  do { try longJob.record(String(repeating:"y",count:300_000));check(false,"oversized metadata accepted") }
+  catch { }
+  let preserved=try Data(contentsOf:verbose.appendingPathComponent("job.json"))
+  check(preserved==previous,"failed snapshot replaced previous saved state")
   if failures > 0 { exit(1) }
   print("Status completion transaction: snapshot/journal failures, retry, full and partial results passed")
  }
@@ -60,5 +79,5 @@ final class StatusHarness {
 '''.replace('UPDATE', update).replace('FINISH', finish)
   with tempfile.TemporaryDirectory() as tmp:
    path = pathlib.Path(tmp); (path/'Checks.swift').write_text(harness)
-   subprocess.run(['swiftc', str(ROOT/'VoiceMatrix/LocalStudioJournal.swift'), str(path/'Checks.swift'), '-o', str(path/'checks')], check=True, timeout=60)
+   subprocess.run(['swiftc', str(ROOT/'VoiceMatrix/LocalStudioJournal.swift'), str(ROOT/'VoiceMatrix/LocalStudioSnapshot.swift'), str(ROOT/'VoiceMatrix/RetainedMediaReader.swift'), str(path/'Checks.swift'), '-o', str(path/'checks')], check=True, timeout=60)
    subprocess.run([str(path/'checks')], check=True, timeout=30)

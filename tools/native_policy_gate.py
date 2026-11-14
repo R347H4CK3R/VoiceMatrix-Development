@@ -10,6 +10,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 # Direct execution must import this repository's tests, not a site-package named tests.
 sys.path.insert(0, str(ROOT))
 CHECKS = (
+    'tests.test_rvc_native_features',
+    'tests.test_local_snapshot_recovery.SnapshotRecoveryTests.test_history_reopens_legacy_snapshots_and_reports_invalid_files',
+    'tests.test_retained_media_reader.RetainedMediaReaderTests.test_bounded_reads_preserve_sources',
     'tests.test_local_studio_journal.LocalJournalTests.test_real_foundation_journal',
     'tests.test_native_acquisition.NativeAcquisitionTests.test_real_swift_url_parser_budget_policy',
     'tests.test_local_sound_quality.LocalSoundQualityTests.test_swift_independent_scores_and_coverage_policy',

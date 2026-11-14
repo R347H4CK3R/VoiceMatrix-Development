@@ -29,13 +29,39 @@ enum LocalStudioJournal {
     static let maximumBytes = 16 * 1_024 * 1_024
     static let maximumEntryBytes = 8_192
     static let filename = "events-v1.jsonl"
+    // Two fields of at most 2,000 UTF-8 bytes also fit after JSON escaping
+    // (at most 4,000 bytes per field for the retained scalars), plus metadata.
+    // Iterate scalars: a single grapheme can contain arbitrarily many marks.
+    private static func boundedText(_ text: String) -> String {
+        var output = String.UnicodeScalarView()
+        var bytes = 0
+        for scalar in text.unicodeScalars {
+            let size = scalar.utf8.count
+            guard bytes + size <= 2_000 else { break }
+            output.append(scalar)
+            bytes += size
+        }
+        return String(output)
+    }
     static func clean(_ text: String) -> String {
         // Defense in depth: callers supply status text only, never raw source/transcript data.
-        var value=String(text.prefix(2_000))
-        for pattern in ["(?i)[\"'](?:file://|/|[A-Z]:[\\\\/])[^\"'\\r\\n]*[\"']", "(?i)\\b(?:https?|file)://[^\\s]+", "(?i)\\b(?:bearer\\s+|(?:token|password|secret|api[_-]?key)\\s*(?:[:=]\\s*|\\s+))[^\\s]+", "(?<![^\\s\"'])(?:[A-Za-z]:[\\\\/]|/)[^\\s]+"] {
+        // Strip hidden controls before matching markers, so a split credential key
+        // cannot become readable only after redaction has already run.
+        var value=boundedText(text).unicodeScalars.filter {
+            !CharacterSet.controlCharacters.contains($0) || $0 == "\n" || $0 == "\t"
+        }.map(String.init).joined()
+        let patterns = [
+            #"(?i)["'](?:file://|/|[A-Z]:[\\/])[^"'\r\n]*["']"#,
+            #"(?i)\b(?:https?|file)://[^\s]+"#,
+            // JSON keys and quoted multiword values are common in diagnostic errors.
+            // An unterminated quoted value is redacted through the end of its line.
+            #"(?im)\b(?:bearer\s+|(?:token|password|secret|api[_-]?key)["']?\s*(?:[:=]\s*|\s+))(?:"(?:\\.|[^"\\\r\n])*(?:"|$)|'(?:\\.|[^'\\\r\n])*(?:'|$)|[^\s]+)"#,
+            #"(?<![^\s"'])(?:[A-Za-z]:[\\/]|/)[^\s]+"#
+        ]
+        for pattern in patterns {
             value=value.replacingOccurrences(of:pattern,with:"[redacted]",options:.regularExpression)
         }
-        return value.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) || $0 == "\n" || $0 == "\t" }.map(String.init).joined()
+        return boundedText(value)
     }
     static func sanitized(_ event: Event) -> Event {
         Event(id:event.id,time:event.time,stage:clean(event.stage),message:clean(event.message))

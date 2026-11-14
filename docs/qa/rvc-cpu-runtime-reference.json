@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "status": "fixed-synthesizer-reference-check",
+  "modelSHA256": "1d7dd41135f8cf4e88c0f186298b6e2d2b599e553acdec3fcd82737eb00dd0bf",
+  "manifestSHA256": "87fde59ded2d9c6c56728a4812686a7d67e329537c9729a0b1efabe601033c87",
+  "cases": [
+    {
+      "case": "voiced",
+      "modelSHA256": "1d7dd41135f8cf4e88c0f186298b6e2d2b599e553acdec3fcd82737eb00dd0bf",
+      "manifestSHA256": "87fde59ded2d9c6c56728a4812686a7d67e329537c9729a0b1efabe601033c87",
+      "samples": 40000,
+      "maxAbs": 0.00003730878233909607,
+      "rms": 0.000005631775208005116,
+      "referenceComparisonPassed": true,
+      "endToEndConversion": false,
+      "nativeIPhoneVerified": false
+    },
+    {
+      "case": "unvoiced",
+      "modelSHA256": "1d7dd41135f8cf4e88c0f186298b6e2d2b599e553acdec3fcd82737eb00dd0bf",
+      "manifestSHA256": "87fde59ded2d9c6c56728a4812686a7d67e329537c9729a0b1efabe601033c87",
+      "samples": 40000,
+      "maxAbs": 2.3399479687213898e-7,
+      "rms": 1.886688800465013e-8,
+      "referenceComparisonPassed": true,
+      "endToEndConversion": false,
+      "nativeIPhoneVerified": false
+    },
+    {
+      "case": "mixed_pitch_edges",
+      "modelSHA256": "1d7dd41135f8cf4e88c0f186298b6e2d2b599e553acdec3fcd82737eb00dd0bf",
+      "manifestSHA256": "87fde59ded2d9c6c56728a4812686a7d67e329537c9729a0b1efabe601033c87",
+      "samples": 40000,
+      "maxAbs": 0.000002130866050720215,
+      "rms": 2.601979263295834e-7,
+      "referenceComparisonPassed": true,
+      "endToEndConversion": false,
+      "nativeIPhoneVerified": false
+    },
+    {
+      "case": "length_one",
+      "modelSHA256": "1d7dd41135f8cf4e88c0f186298b6e2d2b599e553acdec3fcd82737eb00dd0bf",
+      "manifestSHA256": "87fde59ded2d9c6c56728a4812686a7d67e329537c9729a0b1efabe601033c87",
+      "samples": 40000,
+      "maxAbs": 0.00004839897155761719,
+      "rms": 0.000007658118418156749,
+      "referenceComparisonPassed": true,
+      "endToEndConversion": false,
+      "nativeIPhoneVerified": false
+    },
+    {
+      "case": "length_last",
+      "modelSHA256": "1d7dd41135f8cf4e88c0f186298b6e2d2b599e553acdec3fcd82737eb00dd0bf",
+      "manifestSHA256": "87fde59ded2d9c6c56728a4812686a7d67e329537c9729a0b1efabe601033c87",
+      "samples": 40000,
+      "maxAbs": 0.00002397596836090088,
+      "rms": 0.000006711291194641948,
+      "referenceComparisonPassed": true,
+      "endToEndConversion": false,
+      "nativeIPhoneVerified": false
+    }
+  ],
+  "passed": true,
+  "seconds": 7.780999999988126,
+  "versions": {
+    "numpy": "1.26.4",
+    "onnx": "1.17.0",
+    "onnxruntime": "1.24.2",
+    "protobuf": "7.36.2",
+    "flatbuffers": "25.12.19",
+    "packaging": "26.3",
+    "sympy": "1.14.0",
+    "mpmath": "1.3.0"
+  },
+  "runtimeSourceSHA256": "6e5c6629e2ef5deabe01dead3da44f487a5cfaa333b9afa7b7fa77fa907cba4b",
+  "endToEndConversion": false,
+  "nativeIPhoneVerified": false,
+  "identityVerified": false,
+  "likenessVerified": false
+}

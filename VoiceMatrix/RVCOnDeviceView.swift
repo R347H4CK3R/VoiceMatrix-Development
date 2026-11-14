@@ -39,6 +39,18 @@ struct RVCOnDeviceView:View {
                 Text("Short clips are best for evaluating the preview. Longer files need additional storage and processing time.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Conversion settings") {
+                Text(String(format:"Retrieval strength · %.1f%%",Double(preview.indexRate)*100))
+                Slider(value:$preview.indexRate,in:0...1,step:0.125)
+                    .disabled(unavailable).accessibilityLabel("Retrieval strength")
+                Text("Zero skips retrieval and needs no retrieval pack. Lower values can preserve words better but may sound less like the target voice. The default is 75%.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text(String(format:"Pitch · %+.0f semitones",preview.semitones))
+                Slider(value:$preview.semitones,in:-24...24,step:1)
+                    .disabled(unavailable).accessibilityLabel("Pitch in semitones")
+                Button("Reset conversion settings") {preview.indexRate=0.75;preview.semitones=0}
+                    .disabled(unavailable)
+            }
             Section("3 · Create a diagnostic preview") {
                 Button {preview.convert(audio:audio)} label: {
                     Label("Run diagnostic preview",systemImage:"play.fill").frame(maxWidth:.infinity)
@@ -54,7 +66,7 @@ struct RVCOnDeviceView:View {
                 }
                 Text(preview.message).font(.callout).accessibilityAddTraits(.updatesFrequently)
                     .accessibilityIdentifier("rvc-preview-status")
-                if preview.installed.count<3 {Text("Install all three packs to enable conversion.").font(.caption).foregroundStyle(.secondary)}
+                if !preview.assetsReady {Text("Install the encoder and voice packs. Add retrieval data, or set retrieval strength to zero.").font(.caption).foregroundStyle(.secondary)}
                 else if preview.input == nil {Text("Import audio to enable conversion.").font(.caption).foregroundStyle(.secondary)}
             }
             Section("4 · Listen, save or share") {

@@ -31,7 +31,7 @@ jobs:
         retention-days: 7
 'on':
   push:
-    branches-ignore: [codex/iphone-build4, codex/iphone-build5]
+    branches-ignore: [codex/iphone-build4, codex/iphone-build5, codex/rvc-conversion-controls]
     paths:
     - '.github/workflows/voicematrix-049-candidate.yml'
     - VoiceMatrix/**

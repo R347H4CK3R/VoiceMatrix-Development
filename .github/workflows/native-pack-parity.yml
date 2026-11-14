@@ -1,7 +1,7 @@
 name: Native reference pack validation parity
 on:
   push:
-    branches-ignore: [codex/iphone-build4, codex/iphone-build5]
+    branches-ignore: [codex/iphone-build4, codex/iphone-build5, codex/rvc-conversion-controls]
     paths: ['tools/voice_pack.py', 'VoiceMatrix/CharacterFolderStore.swift', 'tests/test_native_pack_parity.py', 'tests/prepare_pack_parity.py', 'tests/native/PackParityChecks.swift', '.github/workflows/native-pack-parity.yml']
   workflow_dispatch:
 permissions:

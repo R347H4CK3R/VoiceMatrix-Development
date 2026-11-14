@@ -20,7 +20,7 @@ jobs:
         if-no-files-found: error
 'on':
   push:
-    branches-ignore: [codex/iphone-build4, codex/iphone-build5]
+    branches-ignore: [codex/iphone-build4, codex/iphone-build5, codex/rvc-conversion-controls]
     paths:
     - .github/workflows/conversion-input-probe.yml
   workflow_dispatch: null

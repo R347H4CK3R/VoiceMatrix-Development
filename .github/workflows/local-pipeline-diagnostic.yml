@@ -11,6 +11,7 @@ on:
     branches-ignore:
       - codex/iphone-build4
       - codex/iphone-build5
+      - codex/rvc-conversion-controls
       - 'candidate/voicematrix-0.4.9'
     paths:
       - 'probes/native-local-studio/**'

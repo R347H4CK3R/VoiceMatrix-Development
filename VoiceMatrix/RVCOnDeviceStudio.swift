@@ -3,13 +3,15 @@ import Foundation
 import Combine
 
 @MainActor final class RVCOnDeviceStudio:ObservableObject {
+    @Published var indexRate:Float=0.75
+    @Published var semitones:Double=0
     @Published private(set) var state=RVCPreviewState()
     @Published private(set) var installed:[RVCPreviewPack:URL]=[:]
     @Published private(set) var input:URL?
     @Published private(set) var inputName=""
     @Published private(set) var output:URL?
     @Published private(set) var outputName=""
-    @Published private(set) var message="Install the three supported diagnostic packs, then import audio."
+    @Published private(set) var message="Install the encoder and diagnostic voice model, then import audio. Retrieval data is optional when its strength is zero."
     private var work:Task<Void,Never>?
     private var active=true
     init() {refresh()}
@@ -17,8 +19,13 @@ import Combine
         do {try RVCPreviewStore.prepare();installed=try RVCPreviewStore.locations()}
         catch {installed=[:];message="Diagnostic storage could not be opened."}
     }
+    var assetsReady:Bool {
+        installed[.hubert] != nil && installed[.synthesizer] != nil &&
+        (indexRate == 0 || installed[.retrieval] != nil)
+    }
+    var controlsValid:Bool {indexRate.isFinite && (0...1).contains(indexRate) && semitones.isFinite && (-24...24).contains(semitones)}
     func canConvert(audio:AudioStore)->Bool {
-        state.mayStart(assets:installed.count==3,input:input != nil,foreground:active,
+        state.mayStart(assets:assetsReady && controlsValid,input:input != nil,foreground:active,
                        audioAvailable:!audio.processingInUse && !audio.microphoneInUse)
     }
     func setActive(_ value:Bool) {active=value;if !value {cancel(reason:"Stopping because the app entered the background.")}}
@@ -66,12 +73,16 @@ import Combine
     }
     func convert(audio:AudioStore) {
         guard canConvert(audio:audio),let source=input,
-              let hubert=installed[.hubert],let synth=installed[.synthesizer],let retrieval=installed[.retrieval],
+              let hubert=installed[.hubert],let synth=installed[.synthesizer],
               let lease=audio.claimProcessing() else {return}
         guard let ticket=try? state.begin(.conversion) else {audio.releaseProcessing(lease);return}
+        // Capture settings once; every chunk of this job uses the same values.
+        let rate=indexRate,shift=semitones
+        let retrieval=rate == 0 ? nil : installed[.retrieval]
         let name=inputName
         let destination=RVCPreviewStore.results.appendingPathComponent("RVC-preview-"+UUID().uuidString+".wav")
         audio.stop();message="Loading verified diagnostic models…";state.append(message)
+        state.append(String(format:"Retrieval %.1f%% · pitch %+.0f semitones",Double(rate)*100,shift))
         work=Task {
             defer {audio.releaseProcessing(lease);work=nil}
             var committed=false
@@ -79,7 +90,7 @@ import Combine
                 let worker=Task.detached(priority:.userInitiated) {
                     let converter=try await RVCNativeWindowConverter.open(hubertRoot:hubert,synthesizerRoot:synth,retrievalRoot:retrieval,cache:RVCPreviewStore.cache)
                     do {
-                        let result=try await converter.convertMediaExperimentalAutocorrelation(input:source,output:destination,scratch:RVCPreviewStore.cache,seed:347,progress:{fraction in
+                        let result=try await converter.convertMediaExperimentalAutocorrelation(input:source,output:destination,scratch:RVCPreviewStore.cache,seed:347,semitones:shift,indexRate:rate,progress:{fraction in
                             Task {@MainActor in
                                 guard self.state.ticket==ticket,self.state.phase == .working else {return}
                                 let before=self.state.percent

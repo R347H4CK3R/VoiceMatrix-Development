@@ -72,6 +72,7 @@ import CryptoKit
     }
     @Published private(set) var current: Job?
     @Published private(set) var history: [Job] = []
+    @Published private(set) var historyReadFailures = 0
     @Published private(set) var busy = false
     @Published private(set) var notice = "Import an authorized local video or recording. Processing runs on this iPhone. URL acquisition contacts only the source website."
     private let root: URL
@@ -102,17 +103,19 @@ import CryptoKit
     private var folder: URL { root.appendingPathComponent(current!.id.uuidString.lowercased(), isDirectory: true) }
     private static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
     private func reloadHistory() {
+        var rejected = 0
+        func unreadable() -> Job? { rejected += 1; return nil }
         history = ((try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []).compactMap { url in
-            guard UUID(uuidString: url.lastPathComponent) != nil,
-                  let values = try? url.appendingPathComponent("job.json").resourceValues(forKeys: [.fileSizeKey, .isSymbolicLinkKey]),
-                  values.isSymbolicLink != true, (values.fileSize ?? Int.max) <= 262_144,
-                  let data = try? Data(contentsOf: url.appendingPathComponent("job.json")),
-                  let job = try? JSONDecoder().decode(Job.self, from: data), job.id.uuidString.lowercased() == url.lastPathComponent else { return nil }
+            guard UUID(uuidString: url.lastPathComponent) != nil else { return nil }
+            guard let data = try? LocalStudioSnapshot.read(folder: url),
+                  let job = try? JSONDecoder().decode(Job.self, from: data), job.id.uuidString.lowercased() == url.lastPathComponent,
+                  job.created.timeIntervalSince1970.isFinite, job.updated.timeIntervalSince1970.isFinite else { return unreadable() }
             func safe(_ value: String?) -> Bool { value == nil || (value!.range(of: "^[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]+)*$", options: .regularExpression) != nil) }
-            guard safe(job.sourceFile), safe(job.analysisFile), safe(job.referenceFile), safe(job.previewFile) else { return nil }
-            if let input = job.acquisitionURL, (try? LocalMediaURLPolicy.input(input.absoluteString)) == nil { return nil }
+            guard safe(job.sourceFile), safe(job.analysisFile), safe(job.referenceFile), safe(job.previewFile) else { return unreadable() }
+            if let input = job.acquisitionURL, (try? LocalMediaURLPolicy.input(input.absoluteString)) == nil { return unreadable() }
             return job
         }.sorted { $0.created > $1.created }
+        historyReadFailures = rejected
     }
     private func update(_ stage: String, _ text: String, log: Bool = true, completed: Bool? = nil) throws {
         guard var value = current else { return }
@@ -123,8 +126,9 @@ import CryptoKit
         let event=LocalStudioJournal.sanitized(Event(id:UUID(),time:value.updated,stage:stage,message:text))
         try LocalStudioJournal.append(event,folder:folder,legacy:value.events)
         if log { value.events.append(event); value.events = Array(value.events.suffix(160)) }
-        try JSONEncoder().encode(value).write(to: folder.appendingPathComponent("job.json"), options: .atomic)
-        current = value; notice = text
+        let snapshot = try LocalStudioSnapshot.encode(value, events: value.events) { $0.events = $1 }
+        try snapshot.data.write(to: folder.appendingPathComponent("job.json"), options: .atomic)
+        current = snapshot.value; notice = text
     }
     func journalPage(offset: Int = 0) throws -> LocalStudioJournal.Page {
         guard offset>=0,let current else { throw LocalStudioJournal.Failure.unsafe }

@@ -1,5 +1,5 @@
 {
-  "tests": 744,
+  "tests": 746,
   "failures": [],
   "errors": [],
   "skipped": [
@@ -20,14 +20,26 @@
       "Windows junction integration"
     ]
   ],
-  "seconds": 240.01,
+  "seconds": 241.74,
   "platform": "Linux",
   "python": "3.12.14",
   "swift": "6.1.3",
   "baselineCommit": "ff656089e7879a1e6a02be02bf24ccf5d00f7d05",
-  "passed": 740,
+  "previousDevelopmentCommit": "370f2fdf7a5b5760dbc5dd95d8c006b68dfc3988",
+  "passed": 742,
   "iosBuildVerified": false,
   "physicalDeviceVerified": false,
   "audioIdentityVerified": false,
-  "newIPAProduced": false
+  "newIPAProduced": false,
+  "verifiedFilesSHA256": {
+    "VoiceMatrix/LocalVideoStudio.swift": "a8d14215fa0959c298031ee4586c7829e6e8b251a6797fac1274fbe9a868758b",
+    "VoiceMatrix/LocalVideoStudioView.swift": "9f5f80cf7ae1f3371524c704cbcbee343c797a58ed171bc0f424d2b3ca45f012",
+    "VoiceMatrix/RetainedMediaReader.swift": "1cadf26213b1ba0465efdf7286d95308a757874651ae465a342fce9cac9b7fca",
+    "VoiceMatrix/LocalStudioSnapshot.swift": "0d3f064cab12469fa604a2e7a712654c1d263c9d666dcb94c7455f500a073e96",
+    "tests/test_local_completion_transaction.py": "45648c1943b8bb4dd7c815e7e0699b7353272320f79fda7af4601fed7d5f9a20",
+    "tests/test_local_snapshot_recovery.py": "d7921f8727bf55e225102e5e31fb4e1712f2885d64ff46e8abaebaf3de77edea",
+    "project.yml": "5ad6d0e6697fe1f40d1adfe0260f9ca102c8e4427e2bcadef1f9658a3e0b86b0",
+    "tools/portable_studio_gate.py": "6b543cc306b9c6fd8fbf3e1db0c0beeb237a2783112006f315c3896046e0cc99",
+    "tools/native_policy_gate.py": "36df36ce79e7b11f0b64f07bb7922a1d32139517cf4e40c2cfd385ae8b3ad446"
+  }
 }

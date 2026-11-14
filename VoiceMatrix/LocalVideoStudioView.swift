@@ -152,6 +152,11 @@ struct LocalVideoStudioView: View {
                     }.accessibilityIdentifier("local-video-durable-log")
                 }
                 Text("Keep VoiceMatrix open while processing. Leaving the app pauses at a safe boundary. Files remain available for Resume; iOS does not guarantee unlimited background processing.").font(.footnote).foregroundStyle(.secondary)
+                if local.historyReadFailures > 0 {
+                    Text("\(local.historyReadFailures) retained job snapshots could not be reopened. Their source files, outputs and event journals were kept; no jobs were deleted.")
+                        .font(.caption).foregroundStyle(.orange)
+                        .accessibilityIdentifier("local-video-history-warning")
+                }
                 if !local.history.isEmpty {
                     Divider(); Text("Retained job history").font(.headline)
                     ForEach(local.history) { job in

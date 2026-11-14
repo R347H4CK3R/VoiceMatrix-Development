@@ -15,6 +15,7 @@ CHECKS = (
     "tests.test_retained_media_reader",
     "tests.test_local_studio_journal",
     "tests.test_local_completion_transaction",
+    "tests.test_local_snapshot_recovery",
     "tests.test_local_resume_receipts",
     "tests.test_local_studio_engine_preflight",
     "tests.test_local_video_studio",

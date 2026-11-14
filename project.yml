@@ -26,6 +26,8 @@ targets:
       excludes:
       - Resources
     - path: Assets.xcassets
+    - path: LICENSES/RVC-MIT.txt
+      buildPhase: resources
     - path: VoiceMatrix/Resources/Phonon
       type: folder
       buildPhase: resources

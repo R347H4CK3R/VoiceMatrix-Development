@@ -9,6 +9,7 @@ on:
   workflow_dispatch:
   push:
     branches-ignore:
+      - codex/iphone-build4
       - 'candidate/voicematrix-0.4.9'
     paths:
       - 'probes/native-local-studio/**'

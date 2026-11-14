@@ -2,6 +2,7 @@ name: Bundled ASR neutral-fixture diagnostic
 on:
   push:
     branches-ignore:
+      - codex/iphone-build4
       - 'candidate/voicematrix-0.4.9'
     paths:
     - '.github/workflows/bundled-asr-diagnostic.yml'

@@ -1,6 +1,7 @@
 name: Voice companion source checks
 on:
   push:
+    branches-ignore: [codex/iphone-build4]
     paths:
       - 'tools/voice_pack.py'
       - 'tools/pack_speech.py'

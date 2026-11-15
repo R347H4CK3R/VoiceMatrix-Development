@@ -1,0 +1,42 @@
+{
+  "runID": 43681000037,
+  "sourceCommit": "04fa2b993d7068bf3c304443009ea5f486b9a348",
+  "artifactSHA256": "b3c603a6b69b4794df609c7c0c1d0d09f37110f3c93421ff6617126b029b1f35",
+  "nativeCompilationPassed": true,
+  "offlineExecution": true,
+  "physicalIPhoneVerified": false,
+  "perceptualQualityVerified": false,
+  "generatedHumanProfiles": 0,
+  "cases": [
+    {
+      "id": "2961-960-0003",
+      "sourceWordErrorRate": 0,
+      "candidates": 3,
+      "admitted": 0,
+      "peakMusicRange": [
+        0.3229863941669464,
+        0.3982383906841278
+      ],
+      "peakSingingRange": [
+        0.08212240785360336,
+        0.3915137052536011
+      ],
+      "blocker": "All reference candidates rejected by unchanged SoundAnalysis policy v1 before F5 generation"
+    },
+    {
+      "id": "4507-16021-0031",
+      "sourceWordErrorRate": 0,
+      "candidates": 3,
+      "admitted": 0,
+      "peakMusicRange": [
+        0.21304289996623993,
+        0.39707493782043457
+      ],
+      "peakSingingRange": [
+        0.08264454454183578,
+        0.5571923851966858
+      ],
+      "blocker": "All reference candidates rejected by unchanged SoundAnalysis policy v1 before F5 generation"
+    }
+  ]
+}

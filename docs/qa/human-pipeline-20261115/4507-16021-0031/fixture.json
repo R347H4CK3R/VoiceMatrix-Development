@@ -1,0 +1,15 @@
+{
+  "source": {
+    "id": "4507-16021-0031",
+    "audioAssetPath": "https://datasets-server.huggingface.co/cached-assets/openslr/librispeech_asr/--/71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/--/clean/test/1500/audio/audio.flac",
+    "sourceSHA256": "c76e682d374b296c709d2c1a9484e4c7176886cb6aab2cd99795d4d9925b7dfa",
+    "license": "CC-BY-4.0",
+    "sourcePage": "https://www.openslr.org/12",
+    "datasetRevision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+    "rowAPI": "https://datasets-server.huggingface.co/rows?dataset=openslr/librispeech_asr&config=clean&split=test&offset=1500&length=1",
+    "referenceText": "AND THEN WE INSIST UPON IT THE STUDY OF SOCIAL DEFORMITIES AND INFIRMITIES AND THE TASK OF POINTING THEM OUT WITH A VIEW TO REMEDY IS NOT A BUSINESS IN WHICH CHOICE IS PERMITTED",
+    "priorUse": "Previously used for CPU RVC and CoreML grouping; new to full native F5 pipeline, not a fresh blind holdout"
+  },
+  "audioSHA256": "dfee7acd9517d9c4ceb9c2b08ad827bbfb78698617820228a978e00dec9c9b9a",
+  "scope": "Human corpus speech; previously used in component checks, not a blind holdout"
+}

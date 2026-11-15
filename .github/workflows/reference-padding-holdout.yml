@@ -1,0 +1,113 @@
+name: Reference padding paired text holdout
+permissions:
+  contents: read
+  actions: read
+jobs:
+  actual-local-pipeline:
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/cache@v4
+      with:
+        path: character-cache
+        key: character-assets-685e8816-716d2f41
+    - name: Validate source and prepare pinned shared assets
+      run: 'python3 -m unittest tests.test_real_reference_pool_diagnostic tests.test_local_pipeline_diagnostic
+        tests.test_local_video_studio -v
+
+        python3 tools/bundle_asr.py
+
+        python3 tools/bundle_diarization.py
+
+        python3 tools/character_package.py prepare --cache character-cache --resources
+        character-resources > assets.json
+
+        python3 - <<''PY''
+
+        from pathlib import Path
+
+        import shutil
+
+        target=Path(''VoiceMatrix/Resources/F5TTS'')
+
+        if target.is_symlink(): raise SystemExit(''Unexpected link'')
+
+        if target.exists(): shutil.rmtree(target)
+
+        shutil.copytree(''character-resources/F5TTS'',target)
+
+        PY
+
+        '
+    - name: Recover exact reference and transcript without changing original outputs
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: "mkdir -p local-evidence\ngh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14162305892/zip\
+        \ > local-evidence/prior.zip\npython3 - <<'PYCODE'\nimport pathlib,zipfile,hashlib,json\n\
+        p=pathlib.Path('local-evidence')\nassert hashlib.sha256((p/'prior.zip').read_bytes()).hexdigest()=='b3623b6847223e0c0704aa60a896b746d733b141152478534200fcfeb19e6779'\n\
+        with zipfile.ZipFile(p/'prior.zip') as z:\n    prefix='isolated-work/Jobs/e6960046-b618-4906-b778-7d477d072698/'\n\
+        \    ref=z.read(prefix+'reference-bb0b2dcf-577e-4953-b1f6-389d3fee1d9c.wav')\n\
+        \    text=z.read(prefix+'transcript-bb0b2dcf-577e-4953-b1f6-389d3fee1d9c.txt')\n\
+        assert hashlib.sha256(ref).hexdigest()=='da2cdba0b9b706dd053fe9e643a941bb99816439ac064a8443f732c6c33270a5'\n\
+        (p/'reference.wav').write_bytes(ref)\n(p/'reference.txt').write_bytes(text)\n\
+        original=pathlib.Path('probes/native-local-studio/Diagnostic.swift')\nreplacement=pathlib.Path('probes/reference-padding-holdout/Diagnostic.swift')\n\
+        (p/'diagnostic-source-proof.json').write_text(json.dumps(dict(originalSHA256=hashlib.sha256(original.read_bytes()).hexdigest(),comparisonSHA256=hashlib.sha256(replacement.read_bytes()).hexdigest())))\n\
+        original.write_bytes(replacement.read_bytes())\nPYCODE\npython3 probes/reference-tail-padding/prepare.py\
+        \ local-evidence\npython3 tools/create_diagnostic_collection.py\n"
+    - name: Build controlled comparison using unchanged production engines
+      env:
+        USE_FROZEN: 'false'
+      run: "test \"$(uname -m)\" = arm64\nbrew install xcodegen\nmkdir -p VoiceMatrix/Resources/{Phonon,OpenVoice,F5TTS}\n\
+        xcodegen generate\ngraph=VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved\n\
+        if [ \"$USE_FROZEN\" = true ]; then\n  mkdir -p \"$(dirname \"$graph\")\"\n\
+        \  cp frozen/Package.resolved \"$graph\"\n  xcodebuild -resolvePackageDependencies\
+        \ -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile\
+        \ -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme LocalStudioDiagnostic\
+        \ -derivedDataPath local-build > local-evidence/resolve.log 2>&1 || { tail\
+        \ -120 local-evidence/resolve.log; exit 1; }\n  cmp frozen/Package.resolved\
+        \ \"$graph\"\nelse\n  xcodebuild -resolvePackageDependencies -skipPackagePluginValidation\
+        \ -project VoiceMatrix.xcodeproj -scheme LocalStudioDiagnostic -derivedDataPath\
+        \ local-build > local-evidence/resolve.log 2>&1 || { tail -120 local-evidence/resolve.log;\
+        \ exit 1; }\nfi\ncp \"$graph\" local-evidence/Package.resolved\npython3 probes/diarizer-eof/apply.py\
+        \ local-build/SourcePackages/checkouts/FluidAudio local-evidence\ncp probes/diarizer-eof/fluid-eof.patch\
+        \ probes/diarizer-eof/manifest.json probes/diarizer-eof/FluidAudio-LICENSE.txt\
+        \ local-evidence/\nxcodebuild -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile\
+        \ -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme LocalStudioDiagnostic\
+        \ -configuration Release -derivedDataPath local-build CODE_SIGNING_ALLOWED=NO\
+        \ ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build > local-evidence/build.log 2>&1 ||\
+        \ { tail -120 local-evidence/build.log; exit 1; }\ncmp local-evidence/Package.resolved\
+        \ \"$graph\"\npython3 - <<'PYCODE'\nimport hashlib,json,os\nfrom pathlib import\
+        \ Path\nraw=Path('local-evidence/Package.resolved').read_bytes()\npatch=json.loads(Path('probes/diarizer-eof/manifest.json').read_text())\n\
+        for name,h in patch['files'].items():\n    assert hashlib.sha256((Path('local-build/SourcePackages/checkouts/FluidAudio')/name).read_bytes()).hexdigest()==h['after'],\
+        \ name\nfrozen=os.environ['USE_FROZEN']=='true'\nif frozen and raw!=Path('frozen/Package.resolved').read_bytes():\
+        \ raise SystemExit('Frozen dependency graph changed')\nPath('local-evidence/dependency-evidence.json').write_text(json.dumps(dict(sourceCommit=os.environ['GITHUB_SHA'],dependencyGraphSHA256=hashlib.sha256(raw).hexdigest(),dependencyMode='diagnostic-hash-patched-shared-frozen-graph'\
+        \ if frozen else 'diagnostic-hash-patched-independently-resolved',frozenGraphVerified=frozen),indent=2))\n\
+        PYCODE\n"
+    - name: Record both tail variants with networking denied
+      run: "sandbox-exec -p '(version 1)(allow default)(deny network*)' local-build/Build/Products/Release/LocalStudioDiagnostic\
+        \ VoiceMatrix/Resources local-evidence \"$GITHUB_SHA\"\npython3 - <<'PYCODE'\n\
+        import pathlib,json,hashlib\np=pathlib.Path('local-evidence')\nattempts=json.loads((p/'holdout-attempts.json').read_text())\n\
+        assert [(a['caseID'],a['tailMilliseconds']) for a in attempts]==[(c,t) for\
+        \ c in range(3) for t in [0,50]]\nproof=json.loads((p/'reference-padding-proof.json').read_text())\n\
+        assert hashlib.sha256((p/'reference.wav').read_bytes()).hexdigest()==proof['sourceSHA256']\n\
+        for a in attempts:\n    v=next(v for v in proof['variants'] if v['milliseconds']==a['tailMilliseconds'])\n\
+        \    assert a['referenceSHA256']==v['sha256']==hashlib.sha256((p/('reference-tail-'+str(a['tailMilliseconds'])+'.wav')).read_bytes()).hexdigest()\n\
+        \    if 'outputSHA256' in a:\n        assert hashlib.sha256((p/('case-'+str(a['caseID'])+'-tail-'+str(a['tailMilliseconds'])+'.wav')).read_bytes()).hexdigest()==a['outputSHA256']\n\
+        \    if 'rawOutputSHA256' in a:\n        assert hashlib.sha256((p/('case-'+str(a['caseID'])+'-tail-'+str(a['tailMilliseconds'])+'-raw.wav')).read_bytes()).hexdigest()==a['rawOutputSHA256']\n\
+        \    if a['accepted']:\n        assert a['wordErrorRate']<=0.1 and a['evidence']['inputSHA256']==a['outputSHA256']\n\
+        print('Comparison evidence complete; success here does not assert all generated\
+        \ speech passed')\nPYCODE\n"
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Reference-padding-holdout-evidence
+        path: 'local-evidence/*
+
+          !local-evidence/prior.zip'
+        if-no-files-found: error
+        retention-days: 14
+'on':
+  push:
+    branches:
+    - diagnostic/reference-padding-holdout

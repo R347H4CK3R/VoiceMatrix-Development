@@ -34,6 +34,17 @@ enum LocalVideoAudio {
         let tracks = try await asset.loadTracks(withMediaType: .audio)
         // Multiple tracks require an explicit selection; do not silently mix speakers.
         guard tracks.count == 1, let track = tracks.first else { throw Failure.unusableAudio }
+        // AVFoundation can synthesize PCM silence for empty media edits, with
+        // apparently continuous sample timestamps. Reject missing media explicitly.
+        let segments = try await track.load(.segments)
+        for segment in segments where segment.isEmpty {
+            let range = segment.timeMapping.target
+            let gapStart = range.start.seconds, gapEnd = CMTimeRangeGetEnd(range).seconds
+            guard gapStart.isFinite, gapEnd.isFinite else { throw Failure.invalidTimeline }
+            if min(start + seconds, gapEnd) - max(start, gapStart) > 0.05 {
+                throw Failure.invalidTimeline
+            }
+        }
         let reader = try AVAssetReader(asset: asset)
         reader.timeRange = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 24_000), duration: CMTime(seconds: seconds, preferredTimescale: 24_000))
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [

@@ -1,0 +1,87 @@
+name: Verify exact build8 archive without publishing
+'on':
+  push:
+    branches:
+    - verify/preview8-artifact
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: 9bab67df2040cb64532e3db1502e3f1bfd587d3c
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Retrieve exact successful packaging artifact
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/runs/43700381325 > run.json
+
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14157246549 > artifact.json
+
+        python3 - <<''PYCODE''
+
+        import json
+
+        r=json.load(open(''run.json''));a=json.load(open(''artifact.json''))
+
+        assert r[''head_sha'']==''9bab67df2040cb64532e3db1502e3f1bfd587d3c''
+
+        assert r[''status'']==''completed'' and r[''conclusion'']==''success''
+
+        assert r[''path'']==''.github/workflows/iphone-build8.yml''
+
+        assert a[''workflow_run''][''id'']==43700381325 and a[''name'']==''Character-test-IPA''
+
+        assert a[''digest'']==''sha256:c02ea9d57886175a642a103feef9ef4614dd24c9b6712a727f75666119f00aad''
+
+        assert not a[''expired'']
+
+        PYCODE
+
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14157246549/zip > artifact.zip
+
+        echo ''c02ea9d57886175a642a103feef9ef4614dd24c9b6712a727f75666119f00aad  artifact.zip'' | sha256sum
+        -c -
+
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14156058388/zip > frozen.zip
+
+        echo "43bb198e52c8fd5ecc79132fd7873c0774e9e5255b15b4a531f744ff8239cc1a  frozen.zip" | sha256sum
+        -c -
+
+        '
+    - name: Reinspect archive, metadata, embedded exact source and all pinned assets
+      run: "python3 - <<'PYCODE'\nfrom pathlib import Path\nimport json,zipfile,hashlib,os\nfrom tools.character_evidence\
+        \ import source_proof\nfrom tools.character_package import inspect_ipa,PREFIX\nroot=Path('evidence');root.mkdir()\n\
+        expected={'VoiceMatrix-0.4.9-build8.ipa','character-inspection.json','character-ipa.sha256','source-proof.json','dependency-notices.json','assets.json','packaging-status.json'}\n\
+        with zipfile.ZipFile('artifact.zip') as z:\n assert set(z.namelist())==expected and len(z.namelist())==len(expected)\n\
+        \ assert z.testzip() is None\n z.extractall(root)\np=root/'VoiceMatrix-0.4.9-build8.ipa'\nwith\
+        \ p.open('rb') as f:h=hashlib.file_digest(f,'sha256').hexdigest()\nassert (root/'character-ipa.sha256').read_text().split()==[h,p.name]\n\
+        proof=json.loads((root/'source-proof.json').read_text())\nassert proof['sourceCommit']=='9bab67df2040cb64532e3db1502e3f1bfd587d3c'\n\
+        with zipfile.ZipFile(p) as z:\n assert json.loads(z.read(PREFIX+'VoiceMatrix-Source-Proof.json'))==proof\n\
+        with zipfile.ZipFile('frozen.zip') as z:\n assert z.namelist()==['Package.resolved']\n (root/'Package.resolved').write_bytes(z.read('Package.resolved'))\n\
+        os.environ['GITHUB_SHA']=proof['sourceCommit']\nassert source_proof(root/'Package.resolved')==proof\n\
+        notices=json.loads((root/'dependency-notices.json').read_text())\ni=inspect_ipa(p,dependency_proof=notices['proof'],expected_version='0.4.9',expected_build='8')\n\
+        assert i==json.loads((root/'character-inspection.json').read_text())\ns=json.loads((root/'packaging-status.json').read_text())\n\
+        assert s['sourceCommit']==proof['sourceCommit'] and s['version']=='0.4.9' and s['build']=='8'\n\
+        assert s['physicalDeviceVerified'] is False and s['likenessVerified'] is False\nreport=dict(sourceCommit=proof['sourceCommit'],packagingRun=43700381325,artifactID=14157246549,artifactSHA256='c02ea9d57886175a642a103feef9ef4614dd24c9b6712a727f75666119f00aad',ipaSHA256=h,ipaBytes=p.stat().st_size,inspection=i)\n\
+        (root/'independent-verification.json').write_text(json.dumps(report,indent=2)+'\\n')\nprint(json.dumps(report,indent=2))\n\
+        PYCODE\npython3 tools/bundle_asr.py --inspect-ipa evidence/VoiceMatrix-0.4.9-build8.ipa\npython3\
+        \ tools/bundle_diarization.py --inspect-ipa evidence/VoiceMatrix-0.4.9-build8.ipa\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Build8-small-verification
+        path: 'evidence/*.json
+
+          evidence/*.sha256
+
+          run.json
+
+          artifact.json'
+        if-no-files-found: error
+        retention-days: 14

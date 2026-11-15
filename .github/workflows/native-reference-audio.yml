@@ -1,0 +1,35 @@
+name: Native reference audio boundaries
+on:
+  push:
+    branches: [codex/rvc-conversion-controls]
+    paths:
+      - '.github/workflows/native-reference-audio.yml'
+      - 'probes/native-reference-audio/**'
+      - 'VoiceMatrix/LocalVideoAudio.swift'
+      - 'VoiceMatrix/LocalStudioEvidence.swift'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reference-audio:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create real media fixtures
+        run: |
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          mkdir reference-audio-fixtures
+          ffmpeg -v error -f lavfi -i 'sine=frequency=440:duration=2' -ac 2 -ar 44100 reference-audio-fixtures/complete.wav
+          ffmpeg -v error -f lavfi -i 'color=c=purple:s=160x90:d=3' -f lavfi -i 'sine=frequency=440:duration=1' -c:v mpeg4 -c:a aac reference-audio-fixtures/short-audio.mp4
+      - name: Compile production extraction and run real AVFoundation checks
+        run: |
+          set -o pipefail
+          swiftc -parse-as-library VoiceMatrix/LocalStudioEvidence.swift VoiceMatrix/LocalVideoAudio.swift probes/native-reference-audio/Checks.swift -o reference-audio-checks
+          ./reference-audio-checks reference-audio-fixtures | tee reference-audio-results.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-reference-audio-evidence
+          path: reference-audio-results.log
+          if-no-files-found: warn

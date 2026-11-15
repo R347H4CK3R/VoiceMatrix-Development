@@ -1,0 +1,113 @@
+name: Actual retained speech history UI
+concurrency:
+  group: catalog-history-ui-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  ui:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Validate storage checker and test shell
+      run: 'python3 -m pip install PyYAML==6.0.2
+
+        python3 -m unittest tests.test_catalog_history_ui tests.test_recording_save_identity -v
+
+        '
+    - name: Prepare UI and bundled speaker-model resources, not a complete speech
+        build
+      run: "python3 tools/bundle_diarization.py\npython3 tools/check_conversion_inputs.py\n\
+        python3 tools/create_diagnostic_collection.py\nmkdir -p VoiceMatrix/Resources/Phonon\
+        \ VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS\n# These are\
+        \ UI availability fixtures, not valid engines or speech assets.\n# No config,\
+        \ weights, stock profiles or private references enter the app.\nprintf '{\"\
+        testOnlyUIAvailability\":true}\\n' > VoiceMatrix/Resources/F5TTS/voicematrix-engine.json\n\
+        printf '{\"testOnlyUIAvailability\":true}\\n' > VoiceMatrix/Resources/OpenVoice/model-manifest.json\n\
+        cp -R tests/fixtures/DiagnosticVoices VoiceMatrix/Resources/F5TTS/UITestVoices\n\
+        # XCTest waits for UI idleness after taps; a 2.5-second clip can finish\n\
+        # before it can inspect Stop. Extend only this UI fixture, not audio gates.\n\
+        python3 - <<'PY'\nimport hashlib,json,pathlib,wave\nroot=pathlib.Path('VoiceMatrix/Resources/F5TTS/UITestVoices/diagnostic-neutral')\n\
+        audio=root/'reference.wav'\nwith wave.open(str(audio),'rb') as f:\n    params=f.getparams()\n\
+        \    pcm=f.readframes(f.getnframes())*6\nwith wave.open(str(audio),'wb') as\
+        \ f:\n    f.setparams(params)\n    f.writeframes(pcm)\nmanifest=json.loads((root/'manifest.json').read_text())\n\
+        manifest.update(referenceSHA256=hashlib.sha256(audio.read_bytes()).hexdigest(),\n\
+        \                referenceBytes=audio.stat().st_size,seconds=len(pcm)/48000,\n\
+        \                referenceText=' '.join([manifest['referenceText']]*6))\n\
+        (root/'manifest.json').write_text(json.dumps(manifest))\nassert 14 < manifest['seconds']\
+        \ < 15\nPY\nbrew install xcodegen\nxcodegen generate\npython3 - <<'PYCODE'\n\
+        import json,subprocess,os\nruntimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','-j']))['runtimes']\n\
+        available=[x for x in runtimes if x.get('isAvailable') and 'iOS' in x['name']\
+        \ and str(x.get('version','')).startswith('26.')]\nassert available,'No iOS\
+        \ 26 simulator runtime available'\nruntime=sorted(available,key=lambda x:tuple(int(p)\
+        \ for p in x['version'].split('.')))[-1]['identifier']\ndevice=subprocess.check_output(['xcrun','simctl','create','VoiceMatrix-Sync-UI','com.apple.CoreSimulator.SimDeviceType.iPhone-16-Plus',runtime],text=True).strip()\n\
+        with open(os.environ['GITHUB_ENV'],'a') as f:f.write('SIMULATOR_ID='+device+'\\\
+        n')\nsubprocess.run(['xcrun','simctl','boot',device],check=True,timeout=60)\n\
+        PYCODE\n"
+    - name: Build UI tests while the owned simulator starts
+      run: 'xcodebuild build-for-testing -only-testing:VoiceMatrixTests/AudioHistorySaveTests -only-testing:VoiceMatrixUITests/CatalogHistoryUITests
+        -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix
+        -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build
+        CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO > character-ui-build.log
+        2>&1 || { tail -160 character-ui-build.log; exit 1; }
+
+        '
+    - name: Wait for the simulator launch services to finish booting
+      run: 'python3 - <<''PYCODE''
+
+        import os,subprocess
+
+        subprocess.run([''xcrun'',''simctl'',''bootstatus'',os.environ[''SIMULATOR_ID''],''-b''],check=True,timeout=360)
+
+        PYCODE
+
+        '
+    - name: Seed only owned simulator history
+      run: 'xcrun simctl install "$SIMULATOR_ID" ui-build/Build/Products/Debug-iphonesimulator/VoiceMatrix.app
+
+        python3 probes/catalog-history-ui/storage.py seed
+
+        '
+    - name: Exercise actual retained history UI
+      run: 'xcodebuild test-without-building -test-timeouts-enabled YES -default-test-execution-time-allowance
+        240 -maximum-test-execution-time-allowance 300 -skipPackagePluginValidation
+        -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS
+        Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build -resultBundlePath history-ui.xcresult
+        CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:VoiceMatrixTests/AudioHistorySaveTests -only-testing:VoiceMatrixUITests/CatalogHistoryUITests
+        > history-ui.log 2>&1 || { tail -160 history-ui.log; exit 1; }
+
+        python3 probes/catalog-history-ui/storage.py verify
+
+        '
+    - name: Retain screenshots
+      if: ${{ !cancelled() }}
+      run: if [ -d history-ui.xcresult ]; then xcrun xcresulttool export attachments
+        --path history-ui.xcresult --output-path history-screenshots; fi
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Catalog-history-UI-evidence
+        path: 'history-ui.log
+
+          history-ui.xcresult
+
+          history-screenshots
+
+          history-fixture-proof.json
+
+          history-storage-results.json
+
+          character-ui-build.log'
+        retention-days: 14
+    - name: Remove only this job simulator
+      if: always()
+      run: if [ -n "${SIMULATOR_ID:-}" ]; then xcrun simctl shutdown "$SIMULATOR_ID"
+        || true; xcrun simctl delete "$SIMULATOR_ID"; fi
+'on':
+  push:
+    branches:
+    - diagnostic/catalog-history-ui

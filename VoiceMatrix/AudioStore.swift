@@ -7,6 +7,20 @@ struct SavedAudio: Identifiable {
     let url: URL
     var name: String { url.deletingPathExtension().lastPathComponent }
 }
+/// Retained checks share a basename, so use their stable attempt UUID for exports.
+/// Other recordings retain their existing identity and rename mappings unchanged.
+enum RecordingSaveIdentity {
+    static func forSource(_ url: URL) -> (key: String, filename: String) {
+        let parent = url.deletingLastPathComponent()
+        if parent.deletingLastPathComponent().lastPathComponent == "CatalogSpeechChecks",
+           let attempt = UUID(uuidString: parent.lastPathComponent),
+           ["speech.wav", "speech.raw.wav"].contains(url.lastPathComponent) {
+            return ("catalog-check:" + attempt.uuidString + ":" + url.lastPathComponent,
+                    url.deletingPathExtension().lastPathComponent + "-" + attempt.uuidString + ".wav")
+        }
+        return (url.lastPathComponent, url.lastPathComponent)
+    }
+}
 @MainActor final class AudioStore: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published var recordings: [SavedAudio] = []
     @Published var playing: URL?
@@ -40,7 +54,8 @@ struct SavedAudio: Identifiable {
     func releaseProcessing(_ token: UUID) { activity.release(token) }
     private var savedSources = UserDefaults.standard.dictionary(forKey: "savedSources") as? [String: String] ?? [:]
     func isSaved(_ url: URL) -> Bool {
-        let name = savedSources[url.lastPathComponent] ?? url.lastPathComponent
+        let identity = RecordingSaveIdentity.forSource(url)
+        let name = savedSources[identity.key] ?? identity.filename
         return recordings.contains { $0.id == name }
     }
     private func persistSources() { UserDefaults.standard.set(savedSources, forKey: "savedSources") }
@@ -88,8 +103,9 @@ struct SavedAudio: Identifiable {
         do {
             guard !isSaved(url) else { return }
             _ = try AVAudioFile(forReading: url)
-            try FileManager.default.copyItem(at: url, to: folder.appendingPathComponent(url.lastPathComponent))
-            savedSources[url.lastPathComponent] = url.lastPathComponent; persistSources()
+            let identity = RecordingSaveIdentity.forSource(url)
+            try FileManager.default.copyItem(at: url, to: folder.appendingPathComponent(identity.filename))
+            savedSources[identity.key] = identity.filename; persistSources()
             refresh()
         } catch { self.error = "Your recording could not be saved. Check available storage." }
     }

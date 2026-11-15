@@ -13,6 +13,13 @@ enum LocalVideoAudio {
     }
     enum Failure: Error { case localFileRequired, bounds, unreadable, unusableAudio }
 
+    static func extractWholeReference(source: URL) async throws -> Reference {
+        try Task.checkCancellation()
+        let duration=try await AVURLAsset(url:source).load(.duration).seconds
+        guard duration.isFinite,(0.5...10.01).contains(duration) else {throw Failure.bounds}
+        return try await extract(source:source,start:0,seconds:duration)
+    }
+
     static func extract(source: URL, start: Double, seconds: Double) async throws -> Reference {
         guard source.isFileURL else { throw Failure.localFileRequired }
         guard start.isFinite, seconds.isFinite, start >= 0, (0.5...15).contains(seconds), start + seconds <= 1800 else { throw Failure.bounds }

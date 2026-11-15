@@ -336,6 +336,56 @@ import CryptoKit
             } catch { message = "Your listening decision could not be saved. " + error.localizedDescription }
         }
     }
+    /// Save a user-transcribed reference directly into the existing immutable library.
+    func createReferenceVoice(from source: URL, name: String, transcript: String,
+                              permissionConfirmed: Bool, audio: AudioStore, studio: SpeechStudio) {
+        guard !busy, localGenerationOwner == nil, permissionConfirmed else {return}
+        guard let lease=audio.claimProcessing() else {message="Finish the current recording or conversion first.";return}
+        let fm=FileManager.default
+        let folder=fm.temporaryDirectory.appendingPathComponent("VoiceReference-"+UUID().uuidString,isDirectory:true)
+        let copy=folder.appendingPathComponent("source.wav")
+        do {
+            let info=try source.resourceValues(forKeys:[.isRegularFileKey,.isSymbolicLinkKey,.fileSizeKey])
+            guard info.isRegularFile==true,info.isSymbolicLink != true,let size=info.fileSize,
+                  size>0,size<=32*1024*1024 else {throw LocalVoiceProfilePackage.Failure.audio}
+            try fm.createDirectory(at:folder,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
+            try fm.copyItem(at:source,to:copy)
+            try fm.setAttributes([.posixPermissions:0o600],ofItemAtPath:copy.path)
+        } catch {
+            try? fm.removeItem(at:folder);audio.releaseProcessing(lease)
+            message="The reference recording could not be prepared. Existing voices were kept.";return
+        }
+        let owner=UUID();localGenerationOwner=owner;busy=true
+        audio.stop();syncJob?.cancel()
+        message="Preparing your voice reference…"
+        job=Task {
+            defer {endLocalGeneration(owner);audio.releaseProcessing(lease);try? fm.removeItem(at:folder)}
+            do {
+                if let pending=syncJob {await pending.value}
+                try Task.checkCancellation()
+                await studio.releaseModelsForCharacter()
+                await engine.unload()
+                let clip=try await LocalVideoAudio.extractWholeReference(source:copy)
+                try Task.checkCancellation()
+                message="Verifying and saving your voice…"
+                let collection=folder.appendingPathComponent("collection",isDirectory:true)
+                _=try LocalVoiceProfilePackage.write(wave:clip.wave,name:name,transcript:transcript,
+                    permissionConfirmed:permissionConfirmed,directory:collection,digest:{
+                        SHA256.hash(data:$0).map{String(format:"%02x",$0)}.joined()
+                    })
+                try Task.checkCancellation()
+                try await importLocalGeneratedCollection(collection,owner:owner)
+                // The library commit has completed. A late cancellation must not
+                // misreport a successfully saved reference as discarded.
+                message="Voice saved and selected. Return to Voices to create speech or change a recording. Listen to judge resemblance."
+            } catch {
+                message=error is CancellationError || Task.isCancelled
+                    ? "Stopped. Previously saved voices were kept."
+                    : "The voice could not be saved. Existing voices were kept. "+error.localizedDescription
+            }
+        }
+    }
+
     func convertRecording(_ source: URL, audio: AudioStore, studio: SpeechStudio) {
         guard !busy, let voice = profiles.first(where: { $0.id == selectedID }) else { return }
         guard conversionAvailable else { message = "This build does not contain the voice-changing engine. Your references are still saved."; return }

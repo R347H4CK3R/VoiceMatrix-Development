@@ -45,6 +45,10 @@ struct CharacterLibraryView: View {
                 }
             }
             Section("Create on this iPhone") {
+                NavigationLink { CreateReferenceVoiceView() } label: {
+                    Label("Create voice from recording", systemImage: "mic.fill")
+                }.disabled(library.busy || recorder.recording || recorder.requestingPermission || audio.processingInUse || audio.microphoneInUse)
+                    .accessibilityIdentifier("create-reference-voice")
                 NavigationLink { LocalVideoStudioView() } label: {
                     Label("Create voices from video or audio", systemImage: "waveform.badge.plus")
                 }.disabled(library.busy || recorder.recording || recorder.requestingPermission || audio.processingInUse || audio.microphoneInUse)

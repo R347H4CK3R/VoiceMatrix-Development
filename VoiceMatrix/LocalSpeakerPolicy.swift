@@ -6,8 +6,8 @@ enum LocalSpeakerPolicy {
     struct Window: Codable, Sendable, Equatable { let start: Double; let end: Double; var seconds: Double { end - start } }
     struct Speaker: Codable, Sendable, Equatable { let speaker: String; let windows: [Window] }
     enum Failure: Error { case invalidEvidence, resourceBound }
-    static func speakerWindows(_ segments: [Segment], duration: Double, includeFallbacks: Bool = true, joinSameSpeakerPauses: Bool = true) throws -> [Speaker] {
-        guard duration.isFinite, (3...1800).contains(duration), segments.count <= 10_000 else { throw Failure.resourceBound }
+    static func speakerWindows(_ segments: [Segment], duration: Double, includeFallbacks: Bool = true, joinSameSpeakerPauses: Bool = true, candidateLimit: Int = 3) throws -> [Speaker] {
+        guard [3,6].contains(candidateLimit), duration.isFinite, (3...1800).contains(duration), segments.count <= 10_000 else { throw Failure.resourceBound }
         guard segments.allSatisfy({ $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.start < duration && $0.end > $0.start && $0.end <= duration + 0.05 && $0.speaker.range(of: "^[A-Za-z0-9_-]{1,40}$", options: .regularExpression) != nil }) else { throw Failure.invalidEvidence }
         let identities = Set(segments.map(\.speaker)).sorted()
         guard identities.count <= 32 else { throw Failure.resourceBound }
@@ -63,10 +63,12 @@ enum LocalSpeakerPolicy {
                 if left.seconds == right.seconds { return left.start < right.start }
                 return left.seconds > right.seconds
             }
-            // Bound expensive F5 attempts. Separate contiguous turns outrank extra
+            // Bound screening candidates separately from the studio's three F5 attempts.
+            // Legacy analyses retain three candidates; policy 4 admits up to six.
+            // Separate contiguous turns outrank extra
             // crops from one turn; do not concatenate speech across other speakers.
             var windows: [Window] = []
-            for span in clean.prefix(3) {
+            for span in clean.prefix(candidateLimit) {
                 windows.append(Window(start: span.start, end: min(span.end, span.start + 8)))
             }
             if includeFallbacks {
@@ -74,7 +76,7 @@ enum LocalSpeakerPolicy {
                 // consider shorter tail crops, sampling beyond the initial 8 seconds
                 // where possible without joining turns or crossing excluded overlap.
                 for seconds in [4.0, 3.0] {
-                    for span in clean where windows.count < 3 && span.seconds >= seconds {
+                    for span in clean where windows.count < candidateLimit && span.seconds >= seconds {
                         let candidate = Window(start: span.end - seconds, end: span.end)
                         guard candidate.start >= span.start, candidate.seconds >= 3,
                               !windows.contains(where: { abs($0.start - candidate.start) < 0.000001 && abs($0.end - candidate.end) < 0.000001 }) else { continue }

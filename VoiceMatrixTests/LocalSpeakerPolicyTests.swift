@@ -63,7 +63,7 @@ final class LocalSpeakerPolicyTests: XCTestCase {
         let decoded=try JSONDecoder().decode(LocalSpeakerDiarization.Analysis.self,from:bytes)
         XCTAssertNil(decoded.selectionPolicyVersion)
         let upgraded=try LocalSpeakerDiarization.validatedForCurrentPolicy(decoded)
-        XCTAssertEqual(upgraded.selectionPolicyVersion,3)
+        XCTAssertEqual(upgraded.selectionPolicyVersion,4)
         XCTAssertEqual(upgraded.speakerWindows[0].windows.count,3)
         XCTAssertEqual(decoded.speakerWindows[0].windows.count,1)
         XCTAssertNoThrow(try LocalSpeakerDiarization.validate(upgraded))
@@ -72,4 +72,15 @@ final class LocalSpeakerPolicyTests: XCTestCase {
         var unknown=legacy;unknown.selectionPolicyVersion=99
         XCTAssertThrowsError(try LocalSpeakerDiarization.validatedForCurrentPolicy(unknown))
     }
+    func testExpandedScreeningPoolIsBoundedAndLegacySelectionPreserved() throws {
+        let segments = (0..<8).map { LocalSpeakerPolicy.Segment(speaker:"S1",start:Double($0*12),end:Double($0*12)+10-Double($0)*0.1) }
+        let old = try LocalSpeakerPolicy.speakerWindows(segments,duration:100)[0].windows
+        let expanded = try LocalSpeakerPolicy.speakerWindows(segments,duration:100,candidateLimit:6)[0].windows
+        XCTAssertEqual(old.count,3)
+        XCTAssertEqual(expanded.count,6)
+        XCTAssertEqual(Array(expanded.prefix(3)),old)
+        XCTAssertEqual(expanded[3].start,36.15,accuracy:0.000001)
+        XCTAssertThrowsError(try LocalSpeakerPolicy.speakerWindows(segments,duration:100,candidateLimit:7))
+    }
+
 }

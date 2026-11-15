@@ -1,7 +1,7 @@
 name: Production CoreML real speech grouping
 on:
   push:
-    branches: [codex/rvc-conversion-controls]
+    branches: [codex/rvc-conversion-controls, fix/bounded-reference-candidate-pool]
     paths:
       - '.github/workflows/coreml-real-speakers.yml'
       - 'probes/coreml-real-speakers/**'

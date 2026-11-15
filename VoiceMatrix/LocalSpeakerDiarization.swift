@@ -33,11 +33,11 @@ enum LocalSpeakerDiarization {
     /// Raw segments/model revision must validate; arbitrary stored crops are never trusted.
     static func validatedForCurrentPolicy(_ analysis: Analysis) throws -> Analysis {
         guard analysis.modelRevision == revision else { throw Failure.invalidBundle }
-        guard analysis.selectionPolicyVersion == nil || analysis.selectionPolicyVersion == 1 || analysis.selectionPolicyVersion == 2 || analysis.selectionPolicyVersion == 3 else { throw Failure.invalidBundle }
-        let expected = try LocalSpeakerPolicy.speakerWindows(analysis.segments,duration:analysis.seconds,includeFallbacks:(analysis.selectionPolicyVersion ?? 1) >= 2,joinSameSpeakerPauses:analysis.selectionPolicyVersion == 3)
+        guard analysis.selectionPolicyVersion == nil || analysis.selectionPolicyVersion == 1 || analysis.selectionPolicyVersion == 2 || analysis.selectionPolicyVersion == 3 || analysis.selectionPolicyVersion == 4 else { throw Failure.invalidBundle }
+        let expected = try LocalSpeakerPolicy.speakerWindows(analysis.segments,duration:analysis.seconds,includeFallbacks:(analysis.selectionPolicyVersion ?? 1) >= 2,joinSameSpeakerPauses:(analysis.selectionPolicyVersion ?? 1) >= 3,candidateLimit:analysis.selectionPolicyVersion == 4 ? 6 : 3)
         guard expected == analysis.speakerWindows else { throw Failure.invalidAudio }
-        let windows = try LocalSpeakerPolicy.speakerWindows(analysis.segments,duration:analysis.seconds)
-        return Analysis(modelRevision:analysis.modelRevision,seconds:analysis.seconds,segments:analysis.segments,speakerWindows:windows,selectionPolicyVersion:3)
+        let windows = try LocalSpeakerPolicy.speakerWindows(analysis.segments,duration:analysis.seconds,candidateLimit:6)
+        return Analysis(modelRevision:analysis.modelRevision,seconds:analysis.seconds,segments:analysis.segments,speakerWindows:windows,selectionPolicyVersion:4)
     }
     static func analyze(source: URL, bundle: URL? = Bundle.main.url(forResource:"Diarization",withExtension:nil), progress: @escaping @Sendable (String) -> Void) async throws -> Analysis {
         guard let bundle else { throw Failure.bundleUnavailable }
@@ -76,8 +76,8 @@ enum LocalSpeakerDiarization {
             try Task.checkCancellation()
             let duration = Double(samples.count)/16_000
             let segments = result.segments.map { LocalSpeakerPolicy.Segment(speaker:$0.speakerId,start:Double($0.startTimeSeconds),end:Double($0.endTimeSeconds)) }
-            let windows = try LocalSpeakerPolicy.speakerWindows(segments,duration:duration)
-            return Analysis(modelRevision:revision,seconds:duration,segments:segments,speakerWindows:windows,selectionPolicyVersion:3)
+            let windows = try LocalSpeakerPolicy.speakerWindows(segments,duration:duration,candidateLimit:6)
+            return Analysis(modelRevision:revision,seconds:duration,segments:segments,speakerWindows:windows,selectionPolicyVersion:4)
         }
         return try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
     }

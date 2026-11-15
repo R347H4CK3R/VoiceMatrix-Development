@@ -3,7 +3,7 @@
 name: Real sound screening calibration
 'on':
   push:
-    branches: [codex/rvc-conversion-controls]
+    branches: [codex/rvc-conversion-controls, fix/bounded-reference-candidate-pool]
     paths: [.github/workflows/sound-screening.yml, 'probes/sound-screening/**']
   workflow_dispatch:
 permissions:

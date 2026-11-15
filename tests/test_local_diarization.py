@@ -71,7 +71,7 @@ class LocalDiarizationTests(unittest.TestCase):
 class AlternateCropContractTests(unittest.TestCase):
  def test_bounded_fallbacks_and_explicit_legacy_upgrade(self):
   policy=(ROOT/'VoiceMatrix/LocalSpeakerPolicy.swift').read_text()
-  for term in ['includeFallbacks: Bool = true','for seconds in [4.0, 3.0]','windows.count < 3','windows.contains','span.end - seconds']:self.assertIn(term,policy)
+  for term in ['includeFallbacks: Bool = true','for seconds in [4.0, 3.0]','windows.count < candidateLimit','candidateLimit: Int = 3','[3,6].contains(candidateLimit)','windows.contains','span.end - seconds']:self.assertIn(term,policy)
   diarization=(ROOT/'VoiceMatrix/LocalSpeakerDiarization.swift').read_text()
   self.assertIn('selectionPolicyVersion',diarization)
   self.assertIn('validatedForCurrentPolicy',diarization)

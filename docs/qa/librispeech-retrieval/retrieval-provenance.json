@@ -1,0 +1,12 @@
+{
+  "url": "https://huggingface.co/Nekochu/RVC-VCTK_Voice-sample/resolve/005c2f948ee9dafd7e3aa7f261b4c3a24beebeef/M/p226/added_IVF1161_Flat_nprobe_1_Mp226_v2.index",
+  "bytes": 143140059,
+  "sha256": "7f556465f2e5a2ba67c05eb0a03b6b3b2a64f91218fd221a44ab8b8b801e7d50",
+  "dimensions": 768,
+  "vectors": 45313,
+  "indexType": "IndexIVFFlat",
+  "nprobe": 1,
+  "declaredLicense": "Apache-2.0",
+  "productionNativeCap": 20000,
+  "productionAdmitted": false
+}

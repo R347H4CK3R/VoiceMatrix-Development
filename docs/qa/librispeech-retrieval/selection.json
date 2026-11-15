@@ -1,0 +1,63 @@
+[
+  {
+    "dataset": "openslr/librispeech_asr",
+    "datasetRevision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+    "config": "clean",
+    "split": "test",
+    "row": 0,
+    "id": "6930-75918-0000",
+    "speakerID": 6930,
+    "chapterID": 75918,
+    "referenceText": "CONCORD RETURNED TO ITS PLACE AMIDST THE TENTS",
+    "license": "CC-BY-4.0",
+    "sourcePage": "https://www.openslr.org/12",
+    "rowAPI": "https://datasets-server.huggingface.co/rows?dataset=openslr/librispeech_asr&config=clean&split=test&offset=0&length=1",
+    "audioAssetPath": "https://datasets-server.huggingface.co/cached-assets/openslr/librispeech_asr/--/71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/--/clean/test/0/audio/audio.flac",
+    "sourceSHA256": "9ce35224156f071ab58eb7feb8a5ceae600f6f9f353da2a6cbf797b6b1ac8a23",
+    "pcmSHA256": "9afaada0c1b445dae8a3baae5bbaffdcedbd2c09eb66b86720b8045c854feefc",
+    "input16kSamples": 56080,
+    "inputSeconds": 3.505,
+    "selection": "Rows 0 and 1000 chosen before any conversion or ASR scoring",
+    "files": {
+      "filter-forward.f64": "50defcc8ae9965f71759814bd8c518315c41823b2cd5fe32198bc58b2441e7df",
+      "prepared.f32": "a258f2961a72e21c5477a29f6af146270cea6bd6e3669ad3c6349dbb80cacafe",
+      "pitch.json": "6a0b11936fc2d6a189ace970e307b3530da2ff8c21115d41c6f7c79acfd5e5bb",
+      "resampled.f32": "51efadc8c74ac6aed3972c75006d034908a6d73d99bd0af64705693bf1b89909"
+    },
+    "windowSHA256": [
+      "cee526b9015077a8a44967a8863a43f7fd14197f487c59cfd2a80f0425c7d8da"
+    ],
+    "nativeBinarySHA256": "748360c66bb9df02655754aef7f7b67947ec80a251e864a4d53aea36d190feda"
+  },
+  {
+    "dataset": "openslr/librispeech_asr",
+    "datasetRevision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+    "config": "clean",
+    "split": "test",
+    "row": 1000,
+    "id": "8455-210777-0028",
+    "speakerID": 8455,
+    "chapterID": 210777,
+    "referenceText": "JACK WOULD BECOME EVA'S HAPPY HUSBAND AND WOULD REMAIN AMIDST THE HURRIED DUTIES OF THE EAGER WORLD",
+    "license": "CC-BY-4.0",
+    "sourcePage": "https://www.openslr.org/12",
+    "rowAPI": "https://datasets-server.huggingface.co/rows?dataset=openslr/librispeech_asr&config=clean&split=test&offset=1000&length=1",
+    "audioAssetPath": "https://datasets-server.huggingface.co/cached-assets/openslr/librispeech_asr/--/71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/--/clean/test/1000/audio/audio.flac",
+    "sourceSHA256": "61e1697bdc0de5142e0cd76c4a14ed38086b66b9a0ab7722bd1c02aa3cebd261",
+    "pcmSHA256": "02984e9efd81309838ad20b949be23156c97ea0035178065016e930d23128bc3",
+    "input16kSamples": 123760,
+    "inputSeconds": 7.735,
+    "selection": "Rows 0 and 1000 chosen before any conversion or ASR scoring",
+    "files": {
+      "filter-forward.f64": "a79fa5ce85af2fa0711a0485bb51b07c8877a817906a1642ef301e5e1eeae574",
+      "prepared.f32": "1073b9537c3a980fc5fc1f279b3bf12302e0fd392dc0d0eeaeef9b6de70528bb",
+      "pitch.json": "88efe46da151c9ef9086255508eb03592dd15130821705f7cd7e35e482e7c7a6",
+      "resampled.f32": "57614ed6593aac79a71af07111da94728147a36cc1a5411048737511fe811c02"
+    },
+    "windowSHA256": [
+      "f5a065142a6c62110de28aaecc6e7be70d7d25593a59097811896447ed87043f",
+      "8de8c0a1f3076893e5af8886422bd2a27d5eedf44ff0d175abbba20b19e3d131"
+    ],
+    "nativeBinarySHA256": "748360c66bb9df02655754aef7f7b67947ec80a251e864a4d53aea36d190feda"
+  }
+]

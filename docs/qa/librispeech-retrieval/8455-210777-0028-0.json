@@ -1,0 +1,83 @@
+{
+  "nativeExportProvenance": {
+    "dataset": "openslr/librispeech_asr",
+    "datasetRevision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+    "config": "clean",
+    "split": "test",
+    "row": 1000,
+    "id": "8455-210777-0028",
+    "speakerID": 8455,
+    "chapterID": 210777,
+    "referenceText": "JACK WOULD BECOME EVA'S HAPPY HUSBAND AND WOULD REMAIN AMIDST THE HURRIED DUTIES OF THE EAGER WORLD",
+    "license": "CC-BY-4.0",
+    "sourcePage": "https://www.openslr.org/12",
+    "rowAPI": "https://datasets-server.huggingface.co/rows?dataset=openslr/librispeech_asr&config=clean&split=test&offset=1000&length=1",
+    "audioAssetPath": "https://datasets-server.huggingface.co/cached-assets/openslr/librispeech_asr/--/71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/--/clean/test/1000/audio/audio.flac",
+    "sourceSHA256": "61e1697bdc0de5142e0cd76c4a14ed38086b66b9a0ab7722bd1c02aa3cebd261",
+    "pcmSHA256": "02984e9efd81309838ad20b949be23156c97ea0035178065016e930d23128bc3",
+    "input16kSamples": 123760,
+    "inputSeconds": 7.735,
+    "selection": "Rows 0 and 1000 chosen before any conversion or ASR scoring",
+    "files": {
+      "prepared.f32": "1073b9537c3a980fc5fc1f279b3bf12302e0fd392dc0d0eeaeef9b6de70528bb",
+      "pitch.json": "88efe46da151c9ef9086255508eb03592dd15130821705f7cd7e35e482e7c7a6"
+    },
+    "windowSHA256": [
+      "f5a065142a6c62110de28aaecc6e7be70d7d25593a59097811896447ed87043f",
+      "8de8c0a1f3076893e5af8886422bd2a27d5eedf44ff0d175abbba20b19e3d131"
+    ],
+    "nativeBinarySHA256": "748360c66bb9df02655754aef7f7b67947ec80a251e864a4d53aea36d190feda",
+    "sourcePreparationManifestSHA256": "9d0dd73622efc30566805934c48fe541c568c94545bf34ba346526181c5e1d2c",
+    "inputSHA256": "61e1697bdc0de5142e0cd76c4a14ed38086b66b9a0ab7722bd1c02aa3cebd261"
+  },
+  "retrievalAblation": {
+    "retrievalRate": 0,
+    "pitch": "Fixed default native pitch; rates 0, .375 and .75 selected before scoring",
+    "perceptualQualityClaim": false
+  },
+  "sparseRetrievalPolicy": "Matching VCTK index nprobe=1; exact bounded fallback only for missing neighbors; isolated CPU evaluation above production cap",
+  "status": "passed",
+  "cases": [
+    {
+      "pitchMode": "native",
+      "repetitions": 1,
+      "fixtureAssembly": "Preselected LibriSpeech test-clean full reference-transcribed utterance 8455-210777-0028; native prepared audio and default pitch",
+      "input16kSamples": 123760,
+      "chunks": 2,
+      "outputSamples": 309400,
+      "outputSeconds": 7.735,
+      "tailCovered": true,
+      "perChunkParity": [
+        {
+          "maxAbs": 0.0000039031729102134705,
+          "rms": 1.0688599754075462e-7
+        },
+        {
+          "maxAbs": 0.00000794045627117157,
+          "rms": 1.6543127127838945e-7
+        }
+      ],
+      "reconstructionMaxAbs": 0.000004706904292106628,
+      "outputRMS": 0.06999115667237132,
+      "largestAdjacentSampleJump": 0.17254623770713806,
+      "overlapStartJumps": [
+        0.010972678661346436
+      ],
+      "outputSHA256": "7dded7d97a740c1073ca1f17427512604730aadc74108fbd7fb8f13e58439d07"
+    }
+  ],
+  "modelSHA256": "3c4c2e8ea977d7c08793126aace4baa47028b4c1bf7cd46ae5a9c359b0216693",
+  "indexSHA256": null,
+  "inputSHA256": "61e1697bdc0de5142e0cd76c4a14ed38086b66b9a0ab7722bd1c02aa3cebd261",
+  "pitchMethod": "Default native pitch; fixed model, input and random inputs",
+  "humanSpeechQualityVerified": false,
+  "profileFrames": 922,
+  "coreSeconds": 6,
+  "overlapSeconds": 0.2,
+  "maximumAdmittedHours": 2,
+  "physicalIPhoneVerified": false,
+  "qualityReviewed": false,
+  "identityVerified": false,
+  "published": false,
+  "seconds": 59.078999999997905
+}

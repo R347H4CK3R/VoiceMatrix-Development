@@ -57,13 +57,13 @@ final class LocalSpeakerPolicyTests: XCTestCase {
     }
     func testLegacyAnalysisUpgradesOnlyAfterExactLegacyValidation() throws {
         let segments:[LocalSpeakerPolicy.Segment] = [.init(speaker:"S1",start:0,end:15)]
-        let legacyWindows=try LocalSpeakerPolicy.speakerWindows(segments,duration:15,includeFallbacks:false)
+        let legacyWindows=try LocalSpeakerPolicy.speakerWindows(segments,duration:15,includeFallbacks:false,joinSameSpeakerPauses:false)
         let legacy=LocalSpeakerDiarization.Analysis(modelRevision:"df2625ac79a7ac6b65ad868fee6d80f320da4232",seconds:15,segments:segments,speakerWindows:legacyWindows)
         let bytes=try JSONEncoder().encode(legacy)
         let decoded=try JSONDecoder().decode(LocalSpeakerDiarization.Analysis.self,from:bytes)
         XCTAssertNil(decoded.selectionPolicyVersion)
         let upgraded=try LocalSpeakerDiarization.validatedForCurrentPolicy(decoded)
-        XCTAssertEqual(upgraded.selectionPolicyVersion,2)
+        XCTAssertEqual(upgraded.selectionPolicyVersion,3)
         XCTAssertEqual(upgraded.speakerWindows[0].windows.count,3)
         XCTAssertEqual(decoded.speakerWindows[0].windows.count,1)
         XCTAssertNoThrow(try LocalSpeakerDiarization.validate(upgraded))

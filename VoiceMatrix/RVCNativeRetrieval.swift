@@ -4,6 +4,20 @@ import Foundation
 struct RVCNativeRetrieval {
     enum Failure: Error { case shape, value, missingNeighbors }
     struct Found { let ids: [Int]; let distances: [Float]; let vectors: [Float] }
+    /// Keep only the eight best candidates, ordered by distance then original ID.
+    /// No candidate-bank-sized distance or fallback-ID array is allocated.
+    struct NearestEight {
+        private(set) var items:[(id:Int,distance:Double)]=[]
+        init() {items.reserveCapacity(8)}
+        mutating func consider(id:Int,distance:Double) {
+            let position=items.firstIndex {
+                distance < $0.distance || (distance == $0.distance && id < $0.id)
+            } ?? items.count
+            guard position < 8 else {return}
+            if items.count == 8 {items.removeLast()}
+            items.insert((id,distance),at:position)
+        }
+    }
     let centroids: [Float]
     let vectors: [Float]
     let lists: [[Int]]
@@ -33,14 +47,17 @@ struct RVCNativeRetrieval {
             }
             // Keep ordinary nprobe=1 behavior. A sparse cluster cannot supply eight
             // genuine neighbors, so search existing vectors without duplicating IDs.
-            let candidates=lists[cluster].count >= 8 ? lists[cluster] : Array(0..<(vectors.count/768))
-            var nearest:[(Int,Double)]=[]
-            for (offset,id) in candidates.enumerated() {
+            var nearest=NearestEight()
+            func visit(_ id:Int,_ offset:Int) throws {
                 if offset % 64 == 0 {try Task.checkCancellation()}
-                nearest.append((id,distance(row,vectors,id)))
+                nearest.consider(id:id,distance:distance(row,vectors,id))
             }
-            nearest.sort { $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 < $1.1 }
-            for (id,d) in nearest.prefix(8) {
+            if lists[cluster].count >= 8 {
+                for (offset,id) in lists[cluster].enumerated() {try visit(id,offset)}
+            } else {
+                for id in 0..<(vectors.count/768) {try visit(id,id)}
+            }
+            for (id,d) in nearest.items {
                 let value=Float(d)
                 guard value.isFinite && value > 0 else {throw Failure.value}
                 ids.append(id);distances.append(value)

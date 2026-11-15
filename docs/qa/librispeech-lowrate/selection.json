@@ -1,0 +1,32 @@
+[
+  {
+    "dataset": "openslr/librispeech_asr",
+    "datasetRevision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+    "config": "clean",
+    "split": "test",
+    "row": 2000,
+    "id": "1580-141083-0051",
+    "speakerID": 1580,
+    "chapterID": 141083,
+    "referenceText": "ONLY FOR A MINUTE OR SO",
+    "license": "CC-BY-4.0",
+    "sourcePage": "https://www.openslr.org/12",
+    "rowAPI": "https://datasets-server.huggingface.co/rows?dataset=openslr/librispeech_asr&config=clean&split=test&offset=2000&length=1",
+    "audioAssetPath": "https://datasets-server.huggingface.co/cached-assets/openslr/librispeech_asr/--/71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/--/clean/test/2000/audio/audio.flac",
+    "sourceSHA256": "3f7d90044d1a1ec56c95e9f0ec7a5bd1f1914259b6441148ea2991a341950b77",
+    "pcmSHA256": "f8f3fe34e1b477bf2fc6fc565727ee8fd13c774bab41e87ac47ad2c73a1128cf",
+    "input16kSamples": 31680,
+    "inputSeconds": 1.98,
+    "selection": "Row 2000 chosen before any conversion or ASR scoring; rates 0 and 0.125 preselected",
+    "files": {
+      "filter-forward.f64": "ffba5132c9403aeeab89341c194cda7b18731a866e55e61ecc847aae56e9e7a1",
+      "prepared.f32": "bb7383cc4c2fc0be4fc91c98e415020ff84ac6ce9efa06cd2a9d99ce8827edbd",
+      "pitch.json": "54ac0c349975d07dd2568fbe29ccde4c7687314afbee4ea453b406a510c54fe4",
+      "resampled.f32": "2e92f218f294ac0adfd2d2bc38ca90199b9e347067e099e6411911be45e582dc"
+    },
+    "windowSHA256": [
+      "98137c605a7c52e6ab7967147325cdf3f7b4cc831c5ba88c76fb71ff15566afc"
+    ],
+    "nativeBinarySHA256": "748360c66bb9df02655754aef7f7b67947ec80a251e864a4d53aea36d190feda"
+  }
+]

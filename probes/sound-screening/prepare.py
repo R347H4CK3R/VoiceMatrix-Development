@@ -39,5 +39,20 @@ for snr in [0,10]:
  p=write('speech-music-'+str(snr),[round(x*scale) for x in mixed]);add(p,'constructed speech plus piano',False,dict(speech='2961-960-0003',music='piano',speechToMusicRMSdB=snr,peakScale=scale))
 for name,pcm in [('silence',[0]*192000),('tone',[round(8192*math.sin(i*2*math.pi*440/24000)) for i in range(192000)])]:
  add(write(name,pcm),'synthetic '+name,False,dict(generator='prepare.py',rate=24000))
+# Brief music bursts challenge temporal dilution by the longer window.
+for burst in [0.5,1.0]:
+ gain=rms(speech)/rms(music)
+ mixed=[float(s)+gain*m if 2*24000 <= i < (2+burst)*24000 else float(s) for i,(s,m) in enumerate(zip(speech,music,strict=True))]
+ scale=min(1,30000/max(abs(x) for x in mixed))
+ p=write('speech-music-burst-'+str(burst),[round(x*scale) for x in mixed]);add(p,'speech plus brief piano burst',False,dict(burstSeconds=burst,burstStart=2,speechToMusicRMSdB=0,peakScale=scale))
+for item in json.loads(pathlib.Path(__file__).with_name('validation-speech.json').read_text()):
+ with urllib.request.urlopen(item['rowAPI'],timeout=45) as r:row=json.load(r)['rows'][0]['row']
+ assert row['id']==item['id']
+ url=row['audio'][0]['src'];assert url.split('?')[0]==item['audioAssetPath']
+ with urllib.request.urlopen(url,timeout=45) as r:raw=r.read(2000001)
+ assert hashlib.sha256(raw).hexdigest()==item['sourceSHA256']
+ flac=out/(item['id']+'.flac');flac.write_bytes(raw)
+ pcm=decode(flac);assert 1*24000 <= len(pcm) <= 8*24000
+ add(write(item['id']+'-validation',pcm),'additional human read speech',True,item)
 (out/'manifest.json').write_text(json.dumps(rows,indent=2)+'\n')
 print(f'Prepared {len(rows)} labeled cases; not a broad or blind validation set')

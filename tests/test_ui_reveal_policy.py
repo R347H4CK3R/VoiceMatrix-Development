@@ -7,6 +7,9 @@ class UIRevealTests(unittest.TestCase):
   if not shutil.which('swiftc'):self.skipTest('Swift toolchain unavailable; no native geometry claim')
   with tempfile.TemporaryDirectory() as d:
    p=pathlib.Path(d);(p/'main.swift').write_text('''import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 let viewport=CGRect(x:0,y:100,width:430,height:589)
 assert(UIRevealPolicy.offset(target:CGRect(x:0,y:200,width:300,height:48),viewport:viewport)==0)
 assert(UIRevealPolicy.offset(target:CGRect(x:0,y:830.666,width:300,height:48),viewport:viewport)==120)
@@ -30,3 +33,15 @@ print("Bounded UI geometry converges; this does not simulate UIKit gestures")
   self.assertIn('for _ in 0..<10',s)
   for text in ['XCTAssertTrue(element.exists && element.isHittable)','XCTAssertGreaterThan(element.frame.minY, app.navigationBars.firstMatch.frame.maxY + 16)','XCTAssertLessThan(element.frame.maxY, app.tabBars.firstMatch.frame.minY - 160)','Imported references must survive an app restart','Reference must play from its private copy with the import source gone']:
    self.assertIn(text,s)
+ def test_targeted_workflow_isolated_without_changing_full_suite_steps(self):
+  import yaml
+  full=yaml.safe_load((ROOT/'.github/workflows/character-ui-smoke.yml').read_text())
+  diag=yaml.safe_load((ROOT/'.github/workflows/ui-reveal-diagnostic.yml').read_text())
+  self.assertIn('fix/ui-bounded-reveal',full[True]['push']['branches-ignore'])
+  self.assertEqual(diag['on']['push']['branches'],['fix/ui-bounded-reveal'])
+  names=[s.get('name') for s in diag['jobs']['ui']['steps']]
+  self.assertIn('Import a synthetic voice, select, play reference and relaunch',names)
+  self.assertNotIn('Exercise native playback and current SwiftUI empty-library flows',names)
+  for step in full['jobs']['ui']['steps']:
+   if step.get('name') in ['Exercise native playback and current SwiftUI empty-library flows','Restart only the owned simulator before the second XCTest runner']:self.assertNotIn('if',step)
+  self.assertEqual(diag['concurrency'],full['concurrency'])

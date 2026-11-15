@@ -1,0 +1,109 @@
+name: Targeted import and playback UI repeat
+concurrency:
+  group: character-ui-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  ui:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Prepare UI and bundled speaker-model resources, not a complete speech build
+      run: "python3 tools/bundle_diarization.py\npython3 tools/check_conversion_inputs.py\npython3 tools/create_diagnostic_collection.py\n\
+        mkdir -p VoiceMatrix/Resources/Phonon VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS\n\
+        # These are UI availability fixtures, not valid engines or speech assets.\n# No config, weights,\
+        \ stock profiles or private references enter the app.\nprintf '{\"testOnlyUIAvailability\":true}\\\
+        n' > VoiceMatrix/Resources/F5TTS/voicematrix-engine.json\nprintf '{\"testOnlyUIAvailability\"\
+        :true}\\n' > VoiceMatrix/Resources/OpenVoice/model-manifest.json\ncp -R tests/fixtures/DiagnosticVoices\
+        \ VoiceMatrix/Resources/F5TTS/UITestVoices\n# XCTest waits for UI idleness after taps; a 2.5-second\
+        \ clip can finish\n# before it can inspect Stop. Extend only this UI fixture, not audio gates.\n\
+        python3 - <<'PY'\nimport hashlib,json,pathlib,wave\nroot=pathlib.Path('VoiceMatrix/Resources/F5TTS/UITestVoices/diagnostic-neutral')\n\
+        audio=root/'reference.wav'\nwith wave.open(str(audio),'rb') as f:\n    params=f.getparams()\n\
+        \    pcm=f.readframes(f.getnframes())*6\nwith wave.open(str(audio),'wb') as f:\n    f.setparams(params)\n\
+        \    f.writeframes(pcm)\nmanifest=json.loads((root/'manifest.json').read_text())\nmanifest.update(referenceSHA256=hashlib.sha256(audio.read_bytes()).hexdigest(),\n\
+        \                referenceBytes=audio.stat().st_size,seconds=len(pcm)/48000,\n               \
+        \ referenceText=' '.join([manifest['referenceText']]*6))\n(root/'manifest.json').write_text(json.dumps(manifest))\n\
+        assert 14 < manifest['seconds'] < 15\nPY\nbrew install xcodegen\nxcodegen generate\npython3 -\
+        \ <<'PYCODE'\nimport json,subprocess,os\nruntimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','-j']))['runtimes']\n\
+        available=[x for x in runtimes if x.get('isAvailable') and 'iOS' in x['name'] and str(x.get('version','')).startswith('26.')]\n\
+        assert available,'No iOS 26 simulator runtime available'\nruntime=sorted(available,key=lambda\
+        \ x:tuple(int(p) for p in x['version'].split('.')))[-1]['identifier']\ndevice=subprocess.check_output(['xcrun','simctl','create','VoiceMatrix-Sync-UI','com.apple.CoreSimulator.SimDeviceType.iPhone-16-Plus',runtime],text=True).strip()\n\
+        with open(os.environ['GITHUB_ENV'],'a') as f:f.write('SIMULATOR_ID='+device+'\\n')\nsubprocess.run(['xcrun','simctl','boot',device],check=True,timeout=60)\n\
+        PYCODE\n"
+    - name: Build UI tests while the owned simulator starts
+      run: 'xcodebuild build-for-testing -only-testing:VoiceMatrixUITests/CharacterWorkflowUITests -skipPackagePluginValidation
+        -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$SIMULATOR_ID"
+        -derivedDataPath ui-build CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:VoiceMatrixUITests/CharacterEmptyStateUITests
+        -only-testing:VoiceMatrixTests/PlaybackTests -only-testing:VoiceMatrixTests/LocalVideoAudioTests
+        -only-testing:VoiceMatrixTests/BundledASRTests -only-testing:VoiceMatrixTests/LocalStudioEvidenceTests
+        -only-testing:VoiceMatrixTests/LocalSpeakerPolicyTests -only-testing:VoiceMatrixTests/LocalSpeakerModelTests
+        -only-testing:VoiceMatrixTests/LocalSoundQualityTests -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests
+        -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests
+        -only-testing:VoiceMatrixTests/AppUpdateTests -only-testing:VoiceMatrixTests/SpeechControlsTests
+        -only-testing:VoiceMatrixUITests/SpeechFeatureUITests > character-ui-build.log 2>&1 || { tail
+        -160 character-ui-build.log; exit 1; }
+
+        '
+    - name: Wait for the simulator launch services to finish booting
+      run: 'python3 - <<''PYCODE''
+
+        import os,subprocess
+
+        subprocess.run([''xcrun'',''simctl'',''bootstatus'',os.environ[''SIMULATOR_ID''],''-b''],check=True,timeout=360)
+
+        PYCODE
+
+        '
+    - name: Import a synthetic voice, select, play reference and relaunch
+      run: 'xcodebuild test-without-building -test-timeouts-enabled YES -default-test-execution-time-allowance
+        120 -maximum-test-execution-time-allowance 300 -skipPackagePluginValidation -project VoiceMatrix.xcodeproj
+        -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build
+        -resultBundlePath character-workflow.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled
+        NO -only-testing:VoiceMatrixUITests/CharacterWorkflowUITests > character-workflow.log 2>&1 ||
+        { tail -160 character-workflow.log; exit 1; }
+
+        '
+    - name: Export screenshots
+      if: ${{ !cancelled() }}
+      run: 'if [ -d character-ui.xcresult ]; then xcrun xcresulttool export attachments --path character-ui.xcresult
+        --output-path ui-screenshots; fi
+
+        if [ -d character-workflow.xcresult ]; then xcrun xcresulttool export attachments --path character-workflow.xcresult
+        --output-path workflow-screenshots; fi
+
+        '
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Current-character-UI-evidence
+        path: 'character-workflow.log
+
+          character-workflow.xcresult
+
+          workflow-screenshots
+
+          character-ui.log
+
+          character-ui-build.log
+
+          ui-simulator.json
+
+          character-ui.xcresult
+
+          ui-screenshots
+
+          '
+        retention-days: 14
+    - name: Remove only this job simulator
+      if: always()
+      run: if [ -n "${SIMULATOR_ID:-}" ]; then xcrun simctl shutdown "$SIMULATOR_ID" || true; xcrun simctl
+        delete "$SIMULATOR_ID"; fi
+'on':
+  push:
+    branches:
+    - fix/ui-bounded-reveal

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 // Test harness only. Short, non-flinging gestures avoid jumping from below the
 // safe viewport to above it and then back, as full-screen swipes can do.

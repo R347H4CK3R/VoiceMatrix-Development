@@ -14,4 +14,10 @@ for sid in ['2961-960-0003','4507-16021-0031']:
    p=root/(sid+'-'+str(margin)+'-'+mode+'.wav')
    with wave.open(str(p),'wb') as w:w.setparams((1,2,24000,0,'NONE','none'));w.writeframes(raw)
    rows.append(dict(file=p.name,sourceSHA256=expected,sha256=hashlib.sha256(p.read_bytes()).hexdigest(),marginSeconds=margin,mode=mode))
+import math,random,struct
+rng=random.Random(1947)
+for name,samples in [('silence',[0]*72000),('tone',[round(8192*math.sin(i*2*math.pi*440/24000)) for i in range(72000)]),('noise',[rng.randint(-3000,3000) for _ in range(72000)])]:
+ p=root/('control-'+name+'.wav')
+ with wave.open(str(p),'wb') as w:w.setparams((1,2,24000,0,'NONE','none'));w.writeframes(struct.pack('<'+'h'*len(samples),*samples))
+ rows.append(dict(file=p.name,sha256=hashlib.sha256(p.read_bytes()).hexdigest(),expectedAccepted=False,synthetic=True))
 (root/'manifest.json').write_text(json.dumps(rows,indent=2)+'\n')

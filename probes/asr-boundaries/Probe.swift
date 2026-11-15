@@ -13,11 +13,20 @@ import CryptoKit
    do {
     let text=try await asr.transcribe(file)
     row["text"]=text;row["wordErrorRate"]=LocalStudioEvidence.wordErrorRate(expected:"Please close the window and bring the notebook.",actual:text)
-    row["accepted"]=true;if let detail=asr.lastEvidence { row["meanTokenConfidence"]=detail.meanTokenConfidence }
+    row["accepted"]=true;if let detail=asr.lastEvidence { row["meanTokenConfidence"]=detail.meanTokenConfidence;if let tail=detail.recoveryTailSeconds { row["recoveryTailSeconds"]=tail } }
    } catch {row["accepted"]=false;row["error"]=String(describing:error)}
    rows.append(row)
    try JSONSerialization.data(withJSONObject:rows,options:[.prettyPrinted,.sortedKeys]).write(to:output,options:.atomic)
    print(String(data:try JSONSerialization.data(withJSONObject:row,options:[.sortedKeys]),encoding:.utf8)!)
+  }
+  for row in rows {
+   let name=row["file"] as! String
+   if name.hasSuffix("-0-none.wav") {
+    guard row["accepted"] as? Bool == true,(row["wordErrorRate"] as? Double ?? 1)<=0.1 else { throw NSError(domain:"Original generated-speech regression",code:1) }
+   }
+   if name.hasPrefix("control-") {
+    guard row["accepted"] as? Bool == false else { throw NSError(domain:"Non-speech admission regression",code:2) }
+   }
   }
  }
 }

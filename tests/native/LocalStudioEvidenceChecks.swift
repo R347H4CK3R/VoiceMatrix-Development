@@ -26,6 +26,13 @@ import Foundation
         for frames in [-1, 0, 11999, 360001] {
             precondition(!LocalStudioEvidence.referenceCoversInterval(frames: frames, requestedSeconds: 0.5))
         }
+        precondition(LocalStudioEvidence.referenceTimestampMatches(timestamp: 2.5, start: 2, decodedFrames: 12000))
+        precondition(LocalStudioEvidence.referenceTimestampMatches(timestamp: 2.52, start: 2, decodedFrames: 12000))
+        for timestamp in [Double.nan, Double.infinity, 0, 2.7] {
+            precondition(!LocalStudioEvidence.referenceTimestampMatches(timestamp: timestamp, start: 2, decodedFrames: 12000))
+        }
+        precondition(!LocalStudioEvidence.referenceTimestampMatches(timestamp: 0, start: -1, decodedFrames: 24000))
+        precondition(!LocalStudioEvidence.referenceTimestampMatches(timestamp: 0, start: 0, decodedFrames: -1))
         print("Native local evidence checks passed; no model inference was performed")
     }
 }

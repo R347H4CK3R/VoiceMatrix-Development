@@ -52,3 +52,9 @@ class LocalStudioSourceTests(unittest.TestCase):
   check=s.index('LocalStudioEvidence.referenceCoversInterval(frames: pcm.count / 2, requestedSeconds: seconds)')
   self.assertLess(check,s.index('var energy ='))
   self.assertLess(check,s.index('return Reference('))
+
+ def test_reference_timeline_is_checked_before_copying_decoded_bytes(self):
+  s=self.read('VoiceMatrix/LocalVideoAudio.swift')
+  self.assertLess(s.index('LocalStudioEvidence.referenceTimestampMatches('),s.index('pcm.append(bytes)'))
+  self.assertIn('CMSampleBufferGetPresentationTimeStamp(sample).seconds',s)
+  self.assertIn('start: start, decodedFrames: pcm.count / 2',s)

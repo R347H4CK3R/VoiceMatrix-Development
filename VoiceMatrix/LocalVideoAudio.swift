@@ -60,6 +60,9 @@ enum LocalVideoAudio {
                   format.mFormatFlags & kAudioFormatFlagIsSignedInteger != 0,
                   format.mFormatFlags & kAudioFormatFlagIsBigEndian == 0,
                   let block = CMSampleBufferGetDataBuffer(sample) else { throw Failure.unusableAudio }
+            guard LocalStudioEvidence.referenceTimestampMatches(
+                timestamp: CMSampleBufferGetPresentationTimeStamp(sample).seconds,
+                start: start, decodedFrames: pcm.count / 2) else { throw Failure.unusableAudio }
             let count = CMBlockBufferGetDataLength(block)
             guard count > 0, count % 2 == 0, count <= 720_000 - pcm.count else { throw Failure.bounds }
             var bytes = Data(count: count)

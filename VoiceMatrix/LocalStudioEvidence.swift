@@ -9,6 +9,12 @@ enum LocalStudioEvidence {
               (0.5...15).contains(requestedSeconds) else { return false }
         return abs(Double(frames) - requestedSeconds * 24_000) <= 1_200
     }
+    /// Keep decoded samples aligned with the selected source timestamps.
+    static func referenceTimestampMatches(timestamp: Double, start: Double, decodedFrames: Int) -> Bool {
+        guard timestamp.isFinite, start.isFinite, (0...1800).contains(start),
+              (0...360_000).contains(decodedFrames) else { return false }
+        return abs(timestamp - (start + Double(decodedFrames) / 24_000)) <= 0.05
+    }
     static func words(_ text: String) -> [String] {
         text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
     }

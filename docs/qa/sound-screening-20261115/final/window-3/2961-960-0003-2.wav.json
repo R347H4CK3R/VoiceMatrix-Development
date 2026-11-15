@@ -1,0 +1,37 @@
+{
+  "classifier" : "Apple SoundAnalysis.version1",
+  "decision" : {
+    "admitted" : true,
+    "analyzedCoverage" : 0.8752279239385257,
+    "peakMusic" : 0.17613902688026428,
+    "peakSinging" : 0.02055227942764759,
+    "reason" : "Candidate passed conservative local sound screening; this is not proof of clean speech or separation.",
+    "speechCoverage" : 0.8752279239385257
+  },
+  "frames" : [
+    {
+      "end" : 3,
+      "music" : 0.17613902688026428,
+      "singing" : 0.02055227942764759,
+      "speech" : 0.8571610450744629,
+      "start" : 0
+    },
+    {
+      "end" : 3.5,
+      "music" : 0.15181700885295868,
+      "singing" : 0.013297892175614834,
+      "speech" : 0.8517290949821472,
+      "start" : 0.5
+    }
+  ],
+  "osVersion" : "Version 26.7.2 (Build 25G332)",
+  "policyVersion" : 2,
+  "requiredLabels" : [
+    "speech",
+    "music",
+    "singing"
+  ],
+  "schemaVersion" : 1,
+  "seconds" : 3.9989583333333334,
+  "sourceSHA256" : "c27367f67bc5be24c9c2c1f9a647cf0793adb382df78de6d7718632cef7f1cee"
+}

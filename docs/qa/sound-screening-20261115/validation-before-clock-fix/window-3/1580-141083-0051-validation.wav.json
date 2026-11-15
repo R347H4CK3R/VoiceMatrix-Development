@@ -1,0 +1,30 @@
+{
+  "classifier" : "Apple SoundAnalysis.version1",
+  "decision" : {
+    "admitted" : false,
+    "analyzedCoverage" : 0,
+    "peakMusic" : 0,
+    "peakSinging" : 0,
+    "reason" : "Invalid local sound evidence; this candidate needs review.",
+    "speechCoverage" : 0
+  },
+  "frames" : [
+    {
+      "end" : 1.97975,
+      "music" : 0.06453053653240204,
+      "singing" : 0.0034785051830112934,
+      "speech" : 0.9765845537185669,
+      "start" : -0.00025
+    }
+  ],
+  "osVersion" : "Version 26.7.2 (Build 25G332)",
+  "policyVersion" : 2,
+  "requiredLabels" : [
+    "speech",
+    "music",
+    "singing"
+  ],
+  "schemaVersion" : 1,
+  "seconds" : 1.98,
+  "sourceSHA256" : "13819bdedd365304a101c4eb9c34baf5bd9a8f13ef3d53ffc21d0d3e0ef34df6"
+}

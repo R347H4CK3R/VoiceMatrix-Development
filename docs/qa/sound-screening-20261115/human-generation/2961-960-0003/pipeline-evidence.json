@@ -1,0 +1,175 @@
+{
+  "cancellationRetainedSource" : true,
+  "characterIdentificationVerified" : false,
+  "events" : [
+    {
+      "id" : "2B7C5A8D-42F8-4AA7-961A-3434470C0F18",
+      "message" : "App received the selected local media. Nothing is uploaded.",
+      "stage" : "Received",
+      "time" : 816415661.821319
+    },
+    {
+      "id" : "C8BB3355-559B-4892-BF01-5341E2893DF9",
+      "message" : "Keeping a private source copy for recovery.",
+      "stage" : "Copying source",
+      "time" : 816415661.824218
+    },
+    {
+      "id" : "CAD48844-E7F9-4EB7-9389-04DEAF12FEBD",
+      "message" : "Private source copy committed. It will not be deleted automatically.",
+      "stage" : "Source retained",
+      "time" : 816415661.828046
+    },
+    {
+      "id" : "14E70D88-D8E6-449F-A750-9703D3B13A1A",
+      "message" : "Checking the bundled Parakeet speech recognizer. No OS speech assets or server recognition are used.",
+      "stage" : "Checking local transcription",
+      "time" : 816415661.830186
+    },
+    {
+      "id" : "8D5DF4F7-33ED-41C8-AFA9-E7D60C66CC39",
+      "message" : "Loading bundled speaker analysis. Speaker groups are not character identities.",
+      "stage" : "Analyzing speakers",
+      "time" : 816415661.833275
+    },
+    {
+      "id" : "CEAE3AF8-E7EB-42D2-A35E-4BD5BCD8D4A4",
+      "message" : "Stopping at a safe boundary. Source and completed outputs are retained.",
+      "stage" : "Stopping",
+      "time" : 816415661.861187
+    },
+    {
+      "id" : "EBCB2FFA-AE19-48DF-8046-9B8C40B3EE85",
+      "message" : "Paused. Retained source and completed outputs are safe. Resume while this app is open.",
+      "stage" : "Paused",
+      "time" : 816415661.868832
+    },
+    {
+      "id" : "2B2D4B0B-6F20-4039-B3A3-98E1DE631ED3",
+      "message" : "Checking the bundled Parakeet speech recognizer. No OS speech assets or server recognition are used.",
+      "stage" : "Checking local transcription",
+      "time" : 816415661.986773
+    },
+    {
+      "id" : "A22D6634-F798-4013-BDD9-0673B6E13041",
+      "message" : "Loading bundled speaker analysis. Speaker groups are not character identities.",
+      "stage" : "Analyzing speakers",
+      "time" : 816415661.992648
+    },
+    {
+      "id" : "0575DBE5-9A59-4D48-8916-253F671B74D1",
+      "message" : "Saved the source-bound speaker analysis before creating references.",
+      "stage" : "Speaker analysis retained",
+      "time" : 816415664.064445
+    },
+    {
+      "id" : "71B56EFE-3097-4691-A121-64158976A8B6",
+      "message" : "Found 1 tentative speaker groups. Detected overlaps are excluded; music separation and character names are not verified.",
+      "stage" : "Speaker groups found",
+      "time" : 816415664.066722
+    },
+    {
+      "id" : "B4E6ABF1-889B-4270-B735-4389507395C6",
+      "message" : "Sampling up to 12 speaker-timed frames locally. Visible characters may not be the speakers; OCR text is not a verified name.",
+      "stage" : "Inspecting video frames",
+      "time" : 816415664.069147
+    },
+    {
+      "id" : "B3F0A0C3-7987-44E2-A879-789AB9F74AE9",
+      "message" : "Audio-only source: no visible character evidence. Speaker labels stay unidentified.",
+      "stage" : "Visual evidence retained",
+      "time" : 816415664.075123
+    },
+    {
+      "id" : "113073BF-ABB2-44E9-9504-44F7EB5B20AA",
+      "message" : "Speaker S1: checking candidate 1 of 3. Detected overlap was excluded; this is not music separation.",
+      "stage" : "Selecting reference",
+      "time" : 816415664.077392
+    },
+    {
+      "id" : "8A76D9B1-2363-4631-8DDC-3554BFB09062",
+      "message" : "Checking speaker S1 for music, singing and speech evidence on this iPhone.",
+      "stage" : "Screening candidate",
+      "time" : 816415664.101214
+    },
+    {
+      "id" : "30380E73-8E91-41D1-922E-43CEDBB7A5A4",
+      "message" : "Recognizing this candidate locally. Model-detected overlaps were excluded. Music and character identity are not verified.",
+      "stage" : "Transcribing reference",
+      "time" : 816415664.481949
+    },
+    {
+      "id" : "E166D2B5-E723-44CB-8785-C7EB81A8DCCB",
+      "message" : "Loading the bundled F5 engine and generating preview 1 of at most 3 for speaker S1. No laptop or server is used.",
+      "stage" : "Generating preview",
+      "time" : 816415667.087559
+    },
+    {
+      "id" : "4F7F37CB-7CBD-477A-934E-60E5BF926DA1",
+      "message" : "Checking the generated words locally. This does not verify likeness.",
+      "stage" : "Verifying preview",
+      "time" : 816415733.297337
+    },
+    {
+      "id" : "A8FBB988-1B56-4DF1-82DC-55C759AF0D39",
+      "message" : "Comparing the retained reference and word-checked preview locally; not identity or likeness verification.",
+      "stage" : "Measuring speaker similarity",
+      "time" : 816415756.816357
+    },
+    {
+      "id" : "F93676F8-EEFE-40A6-AFD5-CB5A83EF614D",
+      "message" : "Saved a hash-bound numeric diagnostic. No identity or likeness acceptance threshold was applied.",
+      "stage" : "Speaker similarity recorded",
+      "time" : 816415757.622052
+    },
+    {
+      "id" : "7076058B-93B9-469B-988F-653C163D65C5",
+      "message" : "Atomically validating and registering the preview-only reference on this iPhone.",
+      "stage" : "Importing",
+      "time" : 816415757.635364
+    },
+    {
+      "id" : "6AE97B8C-36B7-4F5F-90E1-7A4DA29D123E",
+      "message" : "Added Unidentified speaker S1 7F076F (ID local-7f076f0c-83ff-4229-9b3b-7df6d00561f4-s1). Library now contains 2 voices; previous voices were kept. Screening and word checks passed, but character identity, separation and RVC training are not verified.",
+      "stage" : "Reference ready",
+      "time" : 816415757.677302
+    },
+    {
+      "id" : "E5847687-BB0B-4978-81F2-D7557554F921",
+      "message" : "Saved or reused 1 speaker references; 0 groups need review. Likeness, character identity, music separation and RVC training are not verified.",
+      "stage" : "Speaker references ready",
+      "time" : 816415757.681374
+    }
+  ],
+  "evidenceFiles" : [
+    "candidate-2525122c-2c79-4e34-9e4f-e1b7348c45a6.json",
+    "collection-2525122c-2c79-4e34-9e4f-e1b7348c45a6",
+    "diarization-78d9f35f-e61c-4476-aa12-00b40ab3984b.json",
+    "events-v1.jsonl",
+    "job.json",
+    "preview-2525122c-2c79-4e34-9e4f-e1b7348c45a6.wav",
+    "preview-asr-evidence-2525122c-2c79-4e34-9e4f-e1b7348c45a6.json",
+    "quality-2525122c-2c79-4e34-9e4f-e1b7348c45a6.json",
+    "reference-2525122c-2c79-4e34-9e4f-e1b7348c45a6.wav",
+    "similarity-2525122c-2c79-4e34-9e4f-e1b7348c45a6.json",
+    "source.wav",
+    "transcript-2525122c-2c79-4e34-9e4f-e1b7348c45a6.txt",
+    "transcription-evidence-2525122c-2c79-4e34-9e4f-e1b7348c45a6.json"
+  ],
+  "fixtureKind" : "audio",
+  "fixtureSHA256" : "42d940f230a5ff5da679a6d62aa7dcfe2fc1ca40359722814dd5edc08349bcb6",
+  "freshStoreReloadPreservedIDs" : true,
+  "importedIDs" : [
+    "local-7f076f0c-83ff-4229-9b3b-7df6d00561f4-s1"
+  ],
+  "likenessVerified" : false,
+  "newSpeechSHA256" : "4dd654ffbd4e92f7251cdade25f67597729a4b2b16d69e6bbdfedb10874a3c81",
+  "newSpeechWordErrorRate" : 0,
+  "physicalIPhoneVerified" : false,
+  "pipelineKind" : "Actual production local coordinator on macOS; fixture provenance recorded separately",
+  "priorProfilePreserved" : true,
+  "resumeCompleted" : true,
+  "sourceCommit" : "deddd3f2f1efdefd1ec50861a68a6db224ea44fe",
+  "sourceRetainedSHA256" : "42d940f230a5ff5da679a6d62aa7dcfe2fc1ca40359722814dd5edc08349bcb6",
+  "visualFrameCount" : 0
+}

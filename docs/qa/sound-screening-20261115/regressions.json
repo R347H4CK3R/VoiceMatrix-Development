@@ -1,0 +1,15 @@
+{
+  "sourceCommit": "f8b21b350874f9944d7bfecc94cb9e11f9281407",
+  "command": "python3 -m unittest discover -s tests -v",
+  "tests": 778,
+  "failures": 0,
+  "skipped": 5,
+  "seconds": 271.08,
+  "logSHA256": "f763f06afed8f3e8837c8e814b29143b81ca2c836b3573d005359ad3ae70ae8d",
+  "separateSkippedTestPassed": "test_real_selector_split_only_fixture_never_chooses_high_resolution",
+  "remainingUnrun": [
+    "Windows descendant process integration (two tests)",
+    "Windows junction retention",
+    "Apple selective download contract"
+  ]
+}

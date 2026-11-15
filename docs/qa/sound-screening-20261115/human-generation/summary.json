@@ -1,0 +1,17 @@
+{
+  "runID": 43683038370,
+  "sourceCommit": "deddd3f2f1efdefd1ec50861a68a6db224ea44fe",
+  "archiveSHA256": "449d8a1dc8d89bc7dee5ee76c0160635a6e95c3a7f00b595d6265bc32cc333c9",
+  "screeningPassed": 2,
+  "profilesCreated": 2,
+  "previewWordChecksPassed": 2,
+  "fullPipelinePassed": 1,
+  "fullPipelineTotal": 2,
+  "successfulNewSpeechWER": 0,
+  "successfulNewSpeechSeconds": 2.933333333333333,
+  "remainingFailure": "4507-16021-0031: final generated-sentence recognition threw OnDeviceTranscription.Failure.noSpeech",
+  "missingEvidence": "Failed final generated sentence was outside artifact tree; its waveform cannot be assessed from this run. Preview retained. Diagnostic now copies before recognition; that diagnostic change is syntax/source-checked only.",
+  "physicalIPhoneVerified": false,
+  "perceptualLikenessVerified": false,
+  "successfulNewSpeechFrames": 70400
+}

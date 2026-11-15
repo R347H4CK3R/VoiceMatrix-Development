@@ -1,0 +1,1 @@
+{"meanTokenConfidence":0.95384306,"tokenCount":17,"inputSHA256":"4dd654ffbd4e92f7251cdade25f67597729a4b2b16d69e6bbdfedb10874a3c81","transcriptSHA256":"7d9f9f3d9dac918385baf5bbe3824f1183d6bcf256af8f30ff534b6bd2fd7175","schemaVersion":1,"modelRevision":"7dd20fe6b1797d35f5e3307e8b1732d9a178edfe","confidenceMeaning":"Uncalibrated mean token softmax, not transcript accuracy"}

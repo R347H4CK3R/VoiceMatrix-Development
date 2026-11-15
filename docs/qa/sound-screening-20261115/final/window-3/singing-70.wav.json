@@ -1,0 +1,100 @@
+{
+  "classifier" : "Apple SoundAnalysis.version1",
+  "decision" : {
+    "admitted" : false,
+    "analyzedCoverage" : 1,
+    "peakMusic" : 0.5760678648948669,
+    "peakSinging" : 0.8660959601402283,
+    "reason" : "Local classifier found music or singing risk. Candidate retained, not admitted for generation.",
+    "speechCoverage" : 0
+  },
+  "frames" : [
+    {
+      "end" : 3,
+      "music" : 0.37449735403060913,
+      "singing" : 0.860745906829834,
+      "speech" : 0.07875961065292358,
+      "start" : 0
+    },
+    {
+      "end" : 3.5,
+      "music" : 0.47470250725746155,
+      "singing" : 0.8660959601402283,
+      "speech" : 0.07366947084665298,
+      "start" : 0.5
+    },
+    {
+      "end" : 4,
+      "music" : 0.561720609664917,
+      "singing" : 0.8113240003585815,
+      "speech" : 0.06805049628019333,
+      "start" : 1
+    },
+    {
+      "end" : 4.5,
+      "music" : 0.46532192826271057,
+      "singing" : 0.7723329663276672,
+      "speech" : 0.08846095949411392,
+      "start" : 1.5
+    },
+    {
+      "end" : 5,
+      "music" : 0.5483070611953735,
+      "singing" : 0.7164305448532104,
+      "speech" : 0.09425128996372223,
+      "start" : 2
+    },
+    {
+      "end" : 5.5,
+      "music" : 0.4904137849807739,
+      "singing" : 0.7652232050895691,
+      "speech" : 0.07778963446617126,
+      "start" : 2.5
+    },
+    {
+      "end" : 6,
+      "music" : 0.49364474415779114,
+      "singing" : 0.7621822953224182,
+      "speech" : 0.09420347213745117,
+      "start" : 3
+    },
+    {
+      "end" : 6.5,
+      "music" : 0.48582208156585693,
+      "singing" : 0.8302713632583618,
+      "speech" : 0.08878907561302185,
+      "start" : 3.5
+    },
+    {
+      "end" : 7,
+      "music" : 0.3324955403804779,
+      "singing" : 0.7976150512695312,
+      "speech" : 0.11739346385002136,
+      "start" : 4
+    },
+    {
+      "end" : 7.5,
+      "music" : 0.43638116121292114,
+      "singing" : 0.8062350153923035,
+      "speech" : 0.0828888937830925,
+      "start" : 4.5
+    },
+    {
+      "end" : 8,
+      "music" : 0.5760678648948669,
+      "singing" : 0.8012071847915649,
+      "speech" : 0.07597175985574722,
+      "start" : 5
+    }
+  ],
+  "osVersion" : "Version 26.7.2 (Build 25G332)",
+  "policyVersion" : 2,
+  "requiredLabels" : [
+    "speech",
+    "music",
+    "singing"
+  ],
+  "schemaVersion" : 1,
+  "seconds" : 8,
+  "sourceSHA256" : "7e52fe56b41f3f76b7c3a1c15daa1512d54bb0ff75058c4012b6c468cadd6216"
+}

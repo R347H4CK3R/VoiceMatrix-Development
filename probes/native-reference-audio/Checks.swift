@@ -28,8 +28,10 @@ import AVFoundation
         }
         let offsetTracks = try await AVURLAsset(url: offset).loadTracks(withMediaType: .audio)
         guard offsetTracks.count == 1 else { fatalError("Invalid offset fixture track count") }
-        let timeRange = try await offsetTracks[0].load(.timeRange)
-        guard abs(timeRange.start.seconds - 0.2) < 0.01 else { fatalError("Offset fixture lost its 200 ms delay") }
+        let segments = try await offsetTracks[0].load(.segments)
+        let mediaStarts = segments.filter { !$0.isEmpty }.map { $0.timeMapping.target.start.seconds }
+        log("Offset media segment starts: \(mediaStarts)")
+        guard let firstMedia = mediaStarts.min(), abs(firstMedia - 0.2) < 0.01 else { fatalError("Offset fixture lost its 200 ms delay") }
         do {
             _ = try await LocalVideoAudio.extract(source: offset, start: 0, seconds: 1, diagnostic: log)
             fatalError("Offset speech admitted at the wrong source timestamp")

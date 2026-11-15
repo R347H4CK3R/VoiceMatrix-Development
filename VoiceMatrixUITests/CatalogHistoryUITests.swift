@@ -45,6 +45,23 @@ import CoreGraphics
             let tree=XCTAttachment(string:surface.debugDescription);tree.name="Share diagnostic "+name+" hierarchy";tree.lifetime = .keepAlways;add(tree)
         }
         let display=XCTAttachment(screenshot:XCUIScreen.main.screenshot());display.name="Share diagnostic full display";display.lifetime = .keepAlways;add(display)
+        if !sharePresented {
+            // Compare the exact saved copy through the existing Saved screen.
+            // Relaunch clears the pending ShareLink interaction, without deleting data.
+            app.terminate();app.launchArguments=["-tutorialSeen","YES"];app.launch()
+            XCTAssertTrue(app.tabBars.buttons["Saved"].waitForExistence(timeout:30));app.tabBars.buttons["Saved"].tap()
+            let recording=app.buttons["speech-A8D5A8AA-2864-4BB3-BF19-AEE5CF424A16"]
+            XCTAssertTrue(recording.waitForExistence(timeout:15));reveal(recording,in:app);recording.tap()
+            let savedShare=app.buttons["Share"];XCTAssertTrue(savedShare.waitForExistence(timeout:10));reveal(savedShare,in:app);savedShare.tap()
+            let savedPresented=app.buttons["Save to Files"].waitForExistence(timeout:10) || app.buttons["Copy"].waitForExistence(timeout:5)
+            let comparison=XCTAttachment(string:"historySharePresented=\(sharePresented); savedCopySharePresented=\(savedPresented)")
+            comparison.name="Same-byte sharing comparison";comparison.lifetime = .keepAlways;add(comparison)
+            for (name,surface) in [("Saved app",app),("Saved SpringBoard",XCUIApplication(bundleIdentifier:"com.apple.springboard"))] {
+                let tree=XCTAttachment(string:surface.debugDescription);tree.name=name;tree.lifetime = .keepAlways;add(tree)
+            }
+            let screen=XCTAttachment(screenshot:XCUIScreen.main.screenshot());screen.name="Saved copy share display";screen.lifetime = .keepAlways;add(screen)
+            XCTAssertTrue(savedPresented,"Control saved recording must expose a genuine export action")
+        }
         XCTAssertTrue(sharePresented,"System share sheet must expose a real export action; no external destination selected")
         let shot=XCTAttachment(screenshot:app.screenshot());shot.name="Retained unverified audio system sharing";shot.lifetime = .keepAlways;add(shot)
         app.terminate();app.launchArguments=["-tutorialSeen","YES"];app.launch();openHistory()

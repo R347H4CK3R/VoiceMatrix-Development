@@ -53,3 +53,13 @@ class HistoryUITests(unittest.TestCase):
   self.assertIn('sha256(p.read_bytes())',step['run'])
   self.assertIn("'com.voicematrix.app','data'",step['run'])
   self.assertIn('PRODUCT_BUNDLE_IDENTIFIER: com.voicematrix.app',(ROOT/'project.yml').read_text())
+
+ def test_same_saved_byte_control_preserves_history_requirement(self):
+  s=(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift').read_text()
+  self.assertIn('if !sharePresented {',s)
+  self.assertIn('speech-A8D5A8AA-2864-4BB3-BF19-AEE5CF424A16',s)
+  self.assertIn('XCTAssertTrue(savedPresented,',s)
+  self.assertIn('XCTAssertTrue(sharePresented,',s)
+  self.assertIn('Same-byte sharing comparison',s)
+  w=(ROOT/'.github/workflows/catalog-history-ui.yml').read_text()
+  self.assertIn("root/'Documents/Recordings'",w)

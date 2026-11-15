@@ -36,7 +36,7 @@ import AVFoundation
         let aligned = try await LocalVideoAudio.extract(source: offset, start: 0.2, seconds: 1)
         guard abs(aligned.seconds - 1) <= 0.05 else { fatalError("Correctly aligned offset audio rejected") }
         guard try Data(contentsOf: complete) == originals[0],
-              Data(contentsOf: short) == originals[1], Data(contentsOf: offset) == originals[2] else { fatalError("Source mutated") }
+              try Data(contentsOf: short) == originals[1], try Data(contentsOf: offset) == originals[2] else { fatalError("Source mutated") }
         print("PASS: real AVFoundation extraction at start/end/minimum boundaries; short audio and misaligned timestamps rejected; aligned offset accepted; sources unchanged. macOS host only, not iPhone verification.")
     }
 }

@@ -1,7 +1,7 @@
 name: Retained media filesystem regression
 'on':
   push:
-    branches: [fix/standalone-recovery-review]
+    branches: [fix/standalone-recovery-review, integration/standalone-reviewed-fixes]
     paths:
       - .github/workflows/retained-media-regression.yml
       - VoiceMatrix/RetainedMediaReader.swift

@@ -1,7 +1,7 @@
 name: Local MP3 and AIFF import regression
 'on':
   push:
-    branches: [fix/local-audio-format-import]
+    branches: [fix/local-audio-format-import, integration/standalone-reviewed-fixes]
     paths:
       - .github/workflows/local-media-import-regression.yml
       - VoiceMatrix/LocalMediaImportPolicy.swift

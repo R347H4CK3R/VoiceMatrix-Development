@@ -16,3 +16,7 @@ class NativeCIPortabilityTests(unittest.TestCase):
   requirements=(ROOT/'tests/requirements-native.txt').read_text()
   self.assertIn('numpy==',requirements)
   self.assertIn('PyYAML==',requirements)
+
+ def test_cross_platform_full_suite_installs_declared_dependencies(self):
+  workflow=(ROOT/'.github/workflows/queue-processor.yml').read_text()
+  self.assertIn('python -m pip install -r tests/requirements-native.txt',workflow)

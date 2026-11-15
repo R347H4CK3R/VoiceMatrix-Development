@@ -58,3 +58,12 @@ class LocalStudioSourceTests(unittest.TestCase):
   self.assertLess(s.index('LocalStudioEvidence.referenceTimestampMatches('),s.index('pcm.append(bytes)'))
   self.assertIn('CMSampleBufferGetPresentationTimeStamp(sample).seconds',s)
   self.assertIn('start: start, decodedFrames: pcm.count / 2',s)
+
+ def test_unusable_generation_retries_only_specific_failure(self):
+  engine=self.read('VoiceMatrix/F5ReferenceEngine.swift')
+  self.assertIn('throw F5ChunkError.unusableGeneratedAudio',engine)
+  source=self.read('VoiceMatrix/LocalVideoStudio.swift')
+  start=source.index('catch F5ChunkError.unusableGeneratedAudio')
+  block=source[start:source.index('try candidate.record(.verifying',start)]
+  for required in ['engine.finishRequest(keepWarm: false)','try check()','candidate.record(.generationRejected','if previews >= 3 { break }; continue']:
+   self.assertIn(required,block)

@@ -105,7 +105,7 @@ actor F5ReferenceEngine {
             try Task.checkCancellation()
             guard clip.count >= 2400, clip.allSatisfy({ $0.isFinite }),
                   clip.reduce(0.0, { $0 + Double($1) * Double($1) }) / Double(clip.count) > 1e-8 else {
-                throw NSError(domain: "VoiceMatrix.F5", code: 2, userInfo: [NSLocalizedDescriptionKey: "One part of the message did not produce usable speech. Try another reference."])
+                throw F5ChunkError.unusableGeneratedAudio
             }
             if index > 0, pauseSeconds > 0 { try append([Float](repeating: 0, count: Int(pauseSeconds * 24000))) }
             try append(clip)

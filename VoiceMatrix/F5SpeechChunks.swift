@@ -1,9 +1,10 @@
 import Foundation
 
 enum F5ChunkError: LocalizedError {
-    case invalidReference, emptyText, wordTooLong, jobTooLong
+    case invalidReference, emptyText, wordTooLong, jobTooLong, unusableGeneratedAudio
     var errorDescription: String? {
         switch self {
+        case .unusableGeneratedAudio: return "The generated preview was silent or invalid. Try another reference."
         case .invalidReference: return "This reference needs a clearer, shorter speech sample. Your saved reference was kept."
         case .emptyText: return "Type the words you want your character to say."
         case .jobTooLong: return "This job exceeds about 30 minutes of speech before speed changes. Split it into smaller jobs; no words were removed."

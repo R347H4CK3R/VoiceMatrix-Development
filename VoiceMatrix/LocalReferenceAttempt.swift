@@ -6,7 +6,7 @@ struct LocalReferenceAttempt: Codable, Sendable {
     enum Outcome: String, Codable, Sendable {
         case selected, extracted, transcribed, generating, verifying
         case extractionRejected, screeningRejected, referenceNoSpeech, referenceIncompatible
-        case previewNoSpeech, previewWordsRejected, saved, reused
+        case generationRejected, previewNoSpeech, previewWordsRejected, saved, reused
         var terminal: Bool {
             switch self {case .selected,.extracted,.transcribed,.generating,.verifying:return false;default:return true}
         }

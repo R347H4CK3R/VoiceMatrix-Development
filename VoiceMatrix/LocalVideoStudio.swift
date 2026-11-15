@@ -481,8 +481,15 @@ import CryptoKit
                         try update("Generating preview", "Loading the bundled F5 engine and generating preview \(previews) of at most 3 for speaker \(speaker.speaker). No laptop or server is used.")
                         let preview = jobFolder.appendingPathComponent("preview-" + attempt + ".wav")
                         try await engine.load(localBundle: bundle)
-                        try await engine.speak(text: previewText, referenceAudio: reference, referenceText: transcript, destination: preview, preserveIncomplete: true) { [weak self] part, total in
+                        do { try await engine.speak(text: previewText, referenceAudio: reference, referenceText: transcript, destination: preview, preserveIncomplete: true) { [weak self] part, total in
                             Task { @MainActor in guard let self, self.runToken == run, self.busy, self.current?.stage == "Generating preview", self.current?.referenceFile == reference.lastPathComponent else { return }; try? self.update("Generating preview", "Generating speech part \(part) of \(total).", log: false) }
+                        }
+                        } catch F5ChunkError.unusableGeneratedAudio {
+                            await engine.finishRequest(keepWarm: false)
+                            try check()
+                            try candidate.record(.generationRejected,reason:"Generated audio was silent, too short or nonfinite",referenceSHA256:referenceDigest,directory:jobFolder)
+                            try update("Preview rejected", "Generated audio was unusable. Reference and partial preview were retained; trying another candidate.")
+                            if previews >= 3 { break }; continue
                         }
                         await engine.finishRequest(keepWarm: false)
                         try candidate.record(.verifying,reason:"Generated preview pending word check",referenceSHA256:referenceDigest,directory:jobFolder)

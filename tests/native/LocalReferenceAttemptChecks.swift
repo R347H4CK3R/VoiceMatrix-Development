@@ -32,6 +32,13 @@ import Foundation
   }
   await task.value
   let afterPause=try Data(contentsOf:activeURL);precondition(afterPause==beforePause)
+  var rejected=try LocalReferenceAttempt(sourceSHA256:String(repeating:"a",count:64),speaker:"retry",start:0,end:4)
+  try rejected.record(.generating,reason:"Generating preview",referenceSHA256:String(repeating:"b",count:64),directory:root)
+  try rejected.record(.generationRejected,reason:"Silent output",referenceSHA256:String(repeating:"b",count:64),directory:root)
+  let rejectedData=try Data(contentsOf:root.appendingPathComponent("candidate-"+rejected.id+".json"))
+  let decoded=try JSONDecoder().decode(LocalReferenceAttempt.self,from:rejectedData)
+  precondition(decoded.events.last?.outcome == .generationRejected && decoded.events.last?.outcome.terminal == true)
+  do {try rejected.record(.saved,reason:"Must not save rejected preview",directory:root);fatalError("Rejected generation saved")} catch LocalReferenceAttempt.Failure.terminal {}
   print("Candidate provenance, terminal outcomes and saved-asset bindings passed")
  }
 }

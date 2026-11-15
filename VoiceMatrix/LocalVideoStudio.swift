@@ -422,7 +422,7 @@ import CryptoKit
                         let attempt=candidate.id
                         let clip: LocalVideoAudio.Reference
                         do { clip = try await LocalVideoAudio.extract(source: retained, start: window.start, seconds: window.seconds) }
-                        catch LocalVideoAudio.Failure.unusableAudio {
+                        catch LocalVideoAudio.Failure.unusableAudio, LocalVideoAudio.Failure.invalidTimeline {
                             try candidate.record(.extractionRejected,reason:"Clip failed single-track, audibility or clipping checks",directory:jobFolder)
                             try update("Candidate rejected", "Speaker reference audio was unusable. Source and attempt evidence were retained.")
                             continue

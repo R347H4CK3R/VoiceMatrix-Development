@@ -11,7 +11,7 @@ enum LocalVideoAudio {
         let rms: Double
         let clippedFraction: Double
     }
-    enum Failure: Error { case localFileRequired, bounds, unreadable, unusableAudio }
+    enum Failure: Error { case localFileRequired, bounds, unreadable, unusableAudio, invalidTimeline }
 
     static func extractWholeReference(source: URL) async throws -> Reference {
         try Task.checkCancellation()
@@ -62,7 +62,7 @@ enum LocalVideoAudio {
                   let block = CMSampleBufferGetDataBuffer(sample) else { throw Failure.unusableAudio }
             guard LocalStudioEvidence.referenceTimestampMatches(
                 timestamp: CMSampleBufferGetPresentationTimeStamp(sample).seconds,
-                start: start, decodedFrames: pcm.count / 2) else { throw Failure.unusableAudio }
+                start: start, decodedFrames: pcm.count / 2) else { throw Failure.invalidTimeline }
             let count = CMBlockBufferGetDataLength(block)
             guard count > 0, count % 2 == 0, count <= 720_000 - pcm.count else { throw Failure.bounds }
             var bytes = Data(count: count)

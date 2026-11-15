@@ -6,7 +6,8 @@ import AVFoundation
         let root = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
         let complete = root.appendingPathComponent("complete.wav")
         let short = root.appendingPathComponent("short-audio.mp4")
-        let originals = try [Data(contentsOf: complete), Data(contentsOf: short)]
+        let offset = root.appendingPathComponent("offset-audio.mov")
+        let originals = try [Data(contentsOf: complete), Data(contentsOf: short), Data(contentsOf: offset)]
         for (start, seconds) in [(0.0, 0.5), (0.2, 1.0), (1.5, 0.5)] {
             let reference = try await LocalVideoAudio.extract(source: complete, start: start, seconds: seconds)
             guard abs(reference.seconds - seconds) <= 0.05,
@@ -22,8 +23,20 @@ import AVFoundation
         } catch LocalVideoAudio.Failure.unusableAudio {
             // The actual decoder completed, but its PCM did not cover the interval.
         }
+        let offsetTracks = try await AVURLAsset(url: offset).loadTracks(withMediaType: .audio)
+        guard offsetTracks.count == 1 else { fatalError("Invalid offset fixture track count") }
+        let timeRange = try await offsetTracks[0].load(.timeRange)
+        guard abs(timeRange.start.seconds - 0.2) < 0.01 else { fatalError("Offset fixture lost its 200 ms delay") }
+        do {
+            _ = try await LocalVideoAudio.extract(source: offset, start: 0, seconds: 1)
+            fatalError("Offset speech admitted at the wrong source timestamp")
+        } catch LocalVideoAudio.Failure.invalidTimeline {
+            // A generic duration rejection is insufficient for this regression.
+        }
+        let aligned = try await LocalVideoAudio.extract(source: offset, start: 0.2, seconds: 1)
+        guard abs(aligned.seconds - 1) <= 0.05 else { fatalError("Correctly aligned offset audio rejected") }
         guard try Data(contentsOf: complete) == originals[0],
-              Data(contentsOf: short) == originals[1] else { fatalError("Source mutated") }
-        print("PASS: real AVFoundation extraction at start/end/minimum boundaries; short audio rejected; sources unchanged. macOS host only, not iPhone verification.")
+              Data(contentsOf: short) == originals[1], Data(contentsOf: offset) == originals[2] else { fatalError("Source mutated") }
+        print("PASS: real AVFoundation extraction at start/end/minimum boundaries; short audio and misaligned timestamps rejected; aligned offset accepted; sources unchanged. macOS host only, not iPhone verification.")
     }
 }

@@ -22,6 +22,8 @@ jobs:
           mkdir reference-audio-fixtures
           ffmpeg -v error -f lavfi -i 'sine=frequency=440:duration=2' -ac 2 -ar 44100 reference-audio-fixtures/complete.wav
           ffmpeg -v error -f lavfi -i 'color=c=purple:s=160x90:d=3' -f lavfi -i 'sine=frequency=440:duration=1' -c:v mpeg4 -c:a aac reference-audio-fixtures/short-audio.mp4
+          ffmpeg -v error -f lavfi -i 'color=c=purple:s=160x90:d=3' -itsoffset 0.2 -f lavfi -i 'sine=frequency=440:duration=2' -c:v mpeg4 -c:a pcm_s16le reference-audio-fixtures/offset-audio.mov
+          ffprobe -v error -select_streams a:0 -show_entries stream=start_time,duration -of json reference-audio-fixtures/offset-audio.mov > reference-offset-metadata.json
       - name: Compile production extraction and run real AVFoundation checks
         run: |
           set -o pipefail
@@ -31,5 +33,7 @@ jobs:
         if: always()
         with:
           name: native-reference-audio-evidence
-          path: reference-audio-results.log
+          path: |
+            reference-audio-results.log
+            reference-offset-metadata.json
           if-no-files-found: warn

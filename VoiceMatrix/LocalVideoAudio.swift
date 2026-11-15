@@ -20,10 +20,11 @@ enum LocalVideoAudio {
         return try await extract(source:source,start:0,seconds:duration)
     }
 
-    static func extract(source: URL, start: Double, seconds: Double) async throws -> Reference {
+    static func extract(source: URL, start: Double, seconds: Double, diagnostic: (String) -> Void = { _ in }) async throws -> Reference {
         guard source.isFileURL else { throw Failure.localFileRequired }
         guard start.isFinite, seconds.isFinite, start >= 0, (0.5...15).contains(seconds), start + seconds <= 1800 else { throw Failure.bounds }
         let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+        diagnostic("source regular=\(String(describing: values.isRegularFile)) size=\(String(describing: values.fileSize))")
         guard values.isRegularFile == true, values.isSymbolicLink != true,
               let size = values.fileSize, size > 0, size <= 536_870_912 else { throw Failure.unreadable }
         try Task.checkCancellation()
@@ -45,9 +46,10 @@ enum LocalVideoAudio {
             AVLinearPCMIsNonInterleaved: false
         ])
         output.alwaysCopiesSampleData = false
+        diagnostic("reader canAdd=\(reader.canAdd(output)) start=\(start) requested=\(seconds)")
         guard reader.canAdd(output) else { throw Failure.unreadable }
         reader.add(output)
-        guard reader.startReading() else { throw Failure.unreadable }
+        guard reader.startReading() else { diagnostic("start failed: \(String(describing: reader.error))"); throw Failure.unreadable }
         defer { if reader.status == .reading { reader.cancelReading() } }
         var pcm = Data()
         while let sample = output.copyNextSampleBuffer() {
@@ -73,6 +75,7 @@ enum LocalVideoAudio {
             pcm.append(bytes)
         }
         try Task.checkCancellation()
+        diagnostic("reader status=\(reader.status.rawValue) pcmBytes=\(pcm.count) error=\(String(describing: reader.error))")
         guard reader.status == .completed, (24_000...720_000).contains(pcm.count) else { throw Failure.unreadable }
         guard LocalStudioEvidence.referenceCoversInterval(frames: pcm.count / 2, requestedSeconds: seconds) else {
             throw Failure.unusableAudio

@@ -163,6 +163,8 @@ targets:
     platform: macOS
     sources:
     - path: probes/native-local-studio/Diagnostic.swift
+    - path: VoiceMatrix/LocalReferenceAttempt.swift
+    - path: VoiceMatrix/LocalVoiceProfilePackage.swift
     - path: VoiceMatrix/LocalVideoStudio.swift
     - path: VoiceMatrix/LocalVisualEvidence.swift
     - path: VoiceMatrix/SpeakerSimilarityPolicy.swift

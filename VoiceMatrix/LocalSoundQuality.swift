@@ -65,10 +65,12 @@ enum LocalSoundQuality {
                     let request=try SNClassifySoundRequest(classifierIdentifier: .version1)
                     let known=Set(request.knownClassifications)
                     guard self.labels.allSatisfy(known.contains) else { throw Failure.unavailableLabels }
-                    // Apple's version1 supports 0.5–15-second windows; one second
-                    // resolves brief contamination without score normalization.
-                    request.windowDuration=CMTime(seconds:1,preferredTimescale:48_000)
-                    request.overlapFactor=0.5
+                    // Real-speech calibration rejected all six candidates at 1 s;
+                    // 3 s admitted all six while rejecting all eight unsuitable controls.
+                    // Keep the 0.5 s hop and unchanged independent-score thresholds.
+                    let window=min(3.0,seconds)
+                    request.windowDuration=CMTime(seconds:window,preferredTimescale:48_000)
+                    request.overlapFactor=1 - 0.5/window
                     let analyzer=try SNAudioFileAnalyzer(url:source)
                     self.analyzer=analyzer;self.soundRequest=request
                     try analyzer.add(request,withObserver:self)

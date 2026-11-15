@@ -3,7 +3,7 @@ import Foundation
 /// Independent classifier scores are not mutually exclusive probabilities.
 /// Screening can miss contamination and never proves separation or likeness.
 enum LocalSoundQualityPolicy {
-    static let version = 1
+    static let version = 2
     struct Frame: Codable, Sendable {
         let start: Double; let end: Double
         let speech: Double; let music: Double; let singing: Double

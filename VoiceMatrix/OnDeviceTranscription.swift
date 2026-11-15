@@ -20,9 +20,10 @@ import FluidAudio
         }
     }
     struct Evidence: Codable, Sendable {
-        let schemaVersion = 1
+        let schemaVersion = 2
         let modelRevision = BundledASRAssets.revision
         let inputSHA256, transcriptSHA256: String
+        let recoveryTailSeconds: Double?
         let tokenCount: Int
         let meanTokenConfidence: Float
         let confidenceMeaning = "Uncalibrated mean token softmax, not transcript accuracy"
@@ -91,9 +92,24 @@ import FluidAudio
         do {
             try Task.checkCancellation()
             var decoder = try TdtDecoderState(decoderLayers: 2)
-            let result = try await manager.transcribe(file, decoderState: &decoder)
+            var result = try await manager.transcribe(file, decoderState: &decoder)
             try Task.checkCancellation()
-            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            var recoveryTailSeconds: Double?
+            if !LocalStudioEvidence.usableTranscript(text) {
+                _ = try inputDigest(file, byteCount: size, matching: inputSHA256)
+                if let (buffer, tail) = try recoveryBuffer(file, text:text) {
+                    try Task.checkCancellation()
+                    var retryDecoder=try TdtDecoderState(decoderLayers:2)
+                    let retry=try await manager.transcribe(buffer,decoderState:&retryDecoder)
+                    try Task.checkCancellation()
+                    let retryText=retry.text.trimmingCharacters(in:.whitespacesAndNewlines)
+                    if LocalStudioEvidence.usableTranscript(retryText), let timings=retry.tokenTimings,
+                       BundledASRPolicy.admittedRecoveryTokenMean(timings.map(\.confidence)) != nil {
+                        result=retry;text=retryText;recoveryTailSeconds=tail
+                    }
+                }
+            }
             // Do not use result.confidence: pinned SDK substitutes 0.5 if scores
             // are absent. tokenTimings exists only when actual per-token scores match.
             guard LocalStudioEvidence.usableTranscript(text), let timings = result.tokenTimings,
@@ -103,13 +119,34 @@ import FluidAudio
             _ = try inputDigest(file, byteCount: size, matching: inputSHA256)
             let evidence = Evidence(inputSHA256: inputSHA256,
                 transcriptSHA256: SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined(),
-                tokenCount: timings.count, meanTokenConfidence: mean)
+                recoveryTailSeconds: recoveryTailSeconds, tokenCount: timings.count, meanTokenConfidence: mean)
             await manager.cleanup()
             return (text, evidence)
         } catch {
             await manager.cleanup()
             throw error
         }
+    }
+    private nonisolated static func recoveryBuffer(_ file:URL,text:String) throws -> (AVAudioPCMBuffer,Double)? {
+        try Task.checkCancellation()
+        let audio=try AVAudioFile(forReading:file)
+        let rate=audio.processingFormat.sampleRate
+        guard rate.isFinite,(16000...48000).contains(rate),audio.processingFormat.channelCount==1,
+              audio.length>0,audio.length<=1440000,Double(audio.length)/rate<=30,
+              let original=AVAudioPCMBuffer(pcmFormat:audio.processingFormat,frameCapacity:AVAudioFrameCount(audio.length)) else { throw Failure.invalidAudio }
+        try audio.read(into:original)
+        guard original.frameLength==AVAudioFrameCount(audio.length),let input=original.floatChannelData?[0] else { throw Failure.invalidAudio }
+        let samples=Array(UnsafeBufferPointer(start:input,count:Int(original.frameLength)))
+        guard let tail=BundledASRPolicy.recoveryTailFrameCount(text:text,samples:samples,sampleRate:rate) else { return nil }
+        let total=original.frameLength+AVAudioFrameCount(tail)
+        guard let padded=AVAudioPCMBuffer(pcmFormat:original.format,frameCapacity:total),let output=padded.floatChannelData?[0] else { throw Failure.invalidAudio }
+        padded.frameLength=total
+        samples.withUnsafeBufferPointer { source in
+            if let base=source.baseAddress { output.update(from:base,count:samples.count) }
+        }
+        output.advanced(by:samples.count).initialize(repeating:0,count:tail)
+        try Task.checkCancellation()
+        return (padded,Double(tail)/rate)
     }
     nonisolated static func inputDigest(_ file: URL, byteCount: Int, matching: String? = nil) throws -> String {
         try Task.checkCancellation()

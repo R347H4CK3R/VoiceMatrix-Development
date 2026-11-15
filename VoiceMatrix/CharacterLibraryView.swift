@@ -112,13 +112,15 @@ struct CharacterLibraryView: View {
                 DisclosureGroup("Retained speech history") {
                     Text("Saved locally, including interrupted and unverified results. Review before use; history is never automatically promoted to ready. Deleting an item removes its audio and check receipt, not its voice reference.").font(.caption)
                     ForEach(library.speechHistory) { item in
+                        Group {
                         VStack(alignment: .leading) {
                             Text(item.identity.created.formatted()).font(.caption)
                             Text(item.identity.requestedText).lineLimit(3)
                             Text("Voice: " + item.identity.voiceID + " · reference " + String(item.identity.referenceHash.prefix(12))).font(.caption2)
                             Text(item.identity.controls).font(.caption)
                             Text(item.reason).font(.caption).foregroundStyle(.secondary)
-                            if let retainedAudio = item.audio { AudioActions(url: retainedAudio) }
+                        }
+                        if let retainedAudio = item.audio { AudioActions(url: retainedAudio) }
                             Button("Delete this retained result", role: .destructive) { speechHistoryDeletion = item.id }
                         }.buttonStyle(.borderless)
                     }

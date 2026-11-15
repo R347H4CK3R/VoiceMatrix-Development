@@ -110,12 +110,27 @@ jobs:
           PYCODE
       - name: Import a synthetic voice, select, play reference and relaunch
         run: |
-          xcodebuild test-without-building -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300 -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build -resultBundlePath character-workflow.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:VoiceMatrixUITests/CharacterWorkflowUITests > character-workflow.log 2>&1 || { tail -160 character-workflow.log; exit 1; }
+          xcodebuild test-without-building -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300 -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build -resultBundlePath character-workflow.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:VoiceMatrixUITests/CharacterWorkflowUITests/testImportSelectListenAndKeepVoicesAfterRelaunch > character-workflow.log 2>&1 || { tail -160 character-workflow.log; exit 1; }
+      - name: Restart only the owned simulator between independent character workflow methods
+        run: |
+          # Isolate test-runner state only; both tests retain their own relaunch assertions.
+          # No erase, uninstall or application-data reset.
+          python3 - <<'PYCODE'
+          import os,subprocess
+          device=os.environ['SIMULATOR_ID']
+          subprocess.run(['xcrun','simctl','shutdown',device],check=True,timeout=120)
+          subprocess.run(['xcrun','simctl','boot',device],check=True,timeout=60)
+          subprocess.run(['xcrun','simctl','bootstatus',device,'-b'],check=True,timeout=360)
+          PYCODE
+      - name: Assign a voice name, relaunch and reset it
+        run: |
+          xcodebuild test-without-building -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300 -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build -resultBundlePath character-naming.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:VoiceMatrixUITests/CharacterWorkflowUITests/testUserAssignedNamePersistsAndCanBeReset > character-naming.log 2>&1 || { tail -160 character-naming.log; exit 1; }
       - name: Export screenshots
         if: ${{ !cancelled() }}
         run: |
           if [ -d character-ui.xcresult ]; then xcrun xcresulttool export attachments --path character-ui.xcresult --output-path ui-screenshots; fi
           if [ -d character-workflow.xcresult ]; then xcrun xcresulttool export attachments --path character-workflow.xcresult --output-path workflow-screenshots; fi
+          if [ -d character-naming.xcresult ]; then xcrun xcresulttool export attachments --path character-naming.xcresult --output-path naming-screenshots; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -124,6 +139,9 @@ jobs:
             character-workflow.log
             character-workflow.xcresult
             workflow-screenshots
+            character-naming.log
+            character-naming.xcresult
+            naming-screenshots
             character-ui.log
             character-ui-build.log
             ui-simulator.json

@@ -63,3 +63,14 @@ class HistoryUITests(unittest.TestCase):
   self.assertIn('Same-byte sharing comparison',s)
   w=(ROOT/'.github/workflows/catalog-history-ui.yml').read_text()
   self.assertIn("root/'Documents/Recordings'",w)
+
+ def test_history_sharing_has_its_own_form_row(self):
+  s=(ROOT/'VoiceMatrix/CharacterLibraryView.swift').read_text()
+  block=s[s.index('ForEach(library.speechHistory)'):s.index('Button("Refresh / show more history")')]
+  self.assertIn('Group {\n                        VStack',block)
+  self.assertIn('}\n                        if let retainedAudio',block)
+ def test_share_gate_requires_visible_actionable_cells(self):
+  s=(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift').read_text()
+  self.assertIn('app.otherElements["ActivityListView"]',s)
+  self.assertIn('sheet.cells.matching(NSPredicate(format:"label == %@",label))',s)
+  self.assertIn('action.isHittable',s)

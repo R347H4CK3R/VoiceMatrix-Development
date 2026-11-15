@@ -38,8 +38,7 @@ import CoreGraphics
         let share=app.buttons.matching(identifier:"Share Audio").element(boundBy:0);reveal(share,in:app);share.tap()
         XCTAssertFalse(app.buttons["Delete retained result"].exists,"Sharing must not trigger deletion")
         XCTAssertEqual(stops.count,0,"Sharing must not restart playback")
-        let saveFiles=app.buttons["Save to Files"],copy=app.buttons["Copy"]
-        let sharePresented=saveFiles.waitForExistence(timeout:10) || copy.waitForExistence(timeout:5)
+        let sharePresented=actionableShareSheet(in:app)
         // Observe both surfaces without activating another app or selecting a recipient.
         for (name,surface) in [("VoiceMatrix",app),("SpringBoard",XCUIApplication(bundleIdentifier:"com.apple.springboard"))] {
             let tree=XCTAttachment(string:surface.debugDescription);tree.name="Share diagnostic "+name+" hierarchy";tree.lifetime = .keepAlways;add(tree)
@@ -53,7 +52,7 @@ import CoreGraphics
             let recording=app.buttons["speech-A8D5A8AA-2864-4BB3-BF19-AEE5CF424A16"]
             XCTAssertTrue(recording.waitForExistence(timeout:15));reveal(recording,in:app);recording.tap()
             let savedShare=app.buttons["Share"];XCTAssertTrue(savedShare.waitForExistence(timeout:10));reveal(savedShare,in:app);savedShare.tap()
-            let savedPresented=app.buttons["Save to Files"].waitForExistence(timeout:10) || app.buttons["Copy"].waitForExistence(timeout:5)
+            let savedPresented=actionableShareSheet(in:app)
             let comparison=XCTAttachment(string:"historySharePresented=\(sharePresented); savedCopySharePresented=\(savedPresented)")
             comparison.name="Same-byte sharing comparison";comparison.lifetime = .keepAlways;add(comparison)
             for (name,surface) in [("Saved app",app),("Saved SpringBoard",XCUIApplication(bundleIdentifier:"com.apple.springboard"))] {
@@ -84,6 +83,16 @@ import CoreGraphics
         let secondDelete=app.buttons["Delete this retained result"];reveal(secondDelete,in:app);secondDelete.tap();XCTAssertTrue(confirm.waitForExistence(timeout:10));confirm.tap();XCTAssertTrue(remaining.waitForNonExistence(timeout:10))
         let choose=app.buttons["choose-character"];reveal(choose,in:app);choose.tap()
         XCTAssertTrue(app.buttons["select-character-diagnostic-neutral"].waitForExistence(timeout:15),"Deleting output must retain imported voice")
+    }
+    private func actionableShareSheet(in app:XCUIApplication)->Bool {
+        let sheet=app.otherElements["ActivityListView"]
+        guard sheet.waitForExistence(timeout:10) else { return false }
+        // Actual iOS26 AX exposes export actions as Cells, not Buttons.
+        for label in ["Save to Files","Copy"] {
+            let action=sheet.cells.matching(NSPredicate(format:"label == %@",label)).firstMatch
+            if action.waitForExistence(timeout:5) && action.isHittable { return true }
+        }
+        return false
     }
     private func reveal(_ item:XCUIElement,in app:XCUIApplication) {
         for _ in 0..<12 {

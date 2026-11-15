@@ -17,8 +17,12 @@ import CoreGraphics
         }
         openHistory()
         let listen=app.buttons.matching(identifier:"Listen / Replay").element(boundBy:0);reveal(listen,in:app);listen.tap()
-        let stop=app.buttons["Stop"];XCTAssertTrue(stop.waitForExistence(timeout:10));stop.tap()
-        XCTAssertTrue(stop.waitForNonExistence(timeout:10))
+        let stops=app.buttons.matching(identifier:"Stop")
+        expectation(for:NSPredicate(format:"count == 2"),evaluatedWith:stops);waitForExpectations(timeout:10)
+        // AudioActions exposes the same global Stop in both retained rows.
+        // Select the first row, exactly as for Listen / Replay above.
+        let stop=stops.element(boundBy:0);reveal(stop,in:app);stop.tap()
+        expectation(for:NSPredicate(format:"count == 0"),evaluatedWith:stops);waitForExpectations(timeout:10)
         let saves=app.buttons.matching(identifier:"save-recording");XCTAssertEqual(saves.count,2)
         let save=saves.element(boundBy:0);reveal(save,in:app);save.tap()
         expectation(for:NSPredicate(format:"enabled == false"),evaluatedWith:save);waitForExpectations(timeout:10)

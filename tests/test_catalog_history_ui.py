@@ -30,7 +30,7 @@ class HistoryUITests(unittest.TestCase):
   for step in d['jobs']['ui']['steps']:
    if 'run' in step:subprocess.run(['bash','-n'],input=step['run'],text=True,check=True)
   s=(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift').read_text()
-  for text in ['stop.waitForExistence','save.label,"Saved"','app.buttons["Cancel"].tap()','confirm.tap()','select-character-diagnostic-neutral','Save to Files']:
+  for text in ['count == 2','stops.element(boundBy:0)','count == 0','save.label,"Saved"','app.buttons["Cancel"].tap()','confirm.tap()','select-character-diagnostic-neutral','Save to Files']:
    self.assertIn(text,s)
   swift=shutil.which('swiftc')
   if swift:subprocess.run([swift,'-frontend','-parse',str(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift')],check=True)

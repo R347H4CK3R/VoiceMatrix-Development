@@ -2,6 +2,8 @@ import Foundation
 import AVFoundation
 import CryptoKit
 import Metal
+@preconcurrency import CoreML
+import FluidAudio
 
 /// Exercises the real production coordinator and stores, not a parallel pipeline.
 @main struct LocalStudioDiagnostic {
@@ -28,6 +30,27 @@ import Metal
     }
     static func digest(_ url: URL) throws -> String {
         SHA256.hash(data: try Data(contentsOf: url)).map { String(format:"%02x",$0) }.joined()
+    }
+    /// Diagnostic-only raw recognition after a rejected production result.
+    /// Never converts a rejection into a passing generation result.
+    static func inspectRejectedSpeech(_ file:URL, resources:URL, destination:URL) async throws {
+        let config=MLModelConfiguration();config.computeUnits = .cpuAndNeuralEngine
+        let manager=AsrManager(config:ASRConfig(parallelChunkConcurrency:1),models:
+            try AsrModels.loadLocal(from:resources.appendingPathComponent("ParakeetASR"),version:.v3,configuration:config,
+                                    encoderPrecision:.int8V2,encoderComputeUnits:.cpuAndNeuralEngine))
+        do {
+            var decoder=try TdtDecoderState(decoderLayers:2)
+            let result=try await manager.transcribe(file,decoderState:&decoder)
+            let scores=result.tokenTimings?.map(\.confidence) ?? []
+            let text=result.text.trimmingCharacters(in:.whitespacesAndNewlines)
+            let evidence:[String:Any] = ["inputSHA256":try digest(file),"rawText":text,
+                "usableTranscript":LocalStudioEvidence.usableTranscript(text),
+                "hasTokenTimings":result.tokenTimings != nil,"tokenScores":scores.map { String($0) },
+                "tokenMeanAdmitted":BundledASRPolicy.admittedTokenMean(scores) != nil,
+                "diagnosticOnly":true,"productionRejectionPreserved":true]
+            try JSONSerialization.data(withJSONObject:evidence,options:[.prettyPrinted,.sortedKeys]).write(to:destination,options:.atomic)
+            await manager.cleanup()
+        } catch { await manager.cleanup();throw error }
     }
     @MainActor static func settle(_ studio: LocalVideoStudio, seconds: Double = 1200) async throws {
         let deadline=Date().addingTimeInterval(seconds)
@@ -161,7 +184,15 @@ import Metal
             let verificationOwner=try await reloaded.beginLocalGeneration()
             defer { reloaded.endLocalGeneration(verificationOwner) }
             let recognizer=OnDeviceTranscription(bundle:resources.appendingPathComponent("ParakeetASR"))
-            let words=try await recognizer.transcribe(freshSpeech)
+            let words:String
+            do { words=try await recognizer.transcribe(freshSpeech) }
+            catch {
+                let rejection:[String:Any] = ["error":String(describing:error),"inputSHA256":try digest(finalSpeech),"expectedText":newText]
+                try JSONSerialization.data(withJSONObject:rejection,options:[.prettyPrinted,.sortedKeys]).write(to:work.appendingPathComponent("new-speech-rejection.json"),options:.atomic)
+                do { try await inspectRejectedSpeech(finalSpeech,resources:resources,destination:work.appendingPathComponent("new-speech-raw-asr.json")) }
+                catch { try? String(describing:error).write(to:work.appendingPathComponent("raw-asr-error.txt"),atomically:true,encoding:.utf8) }
+                throw error
+            }
             reloaded.endLocalGeneration(verificationOwner)
             let wer=LocalStudioEvidence.wordErrorRate(expected:newText,actual:words)
             guard wer<=0.1,let detail=recognizer.lastEvidence,

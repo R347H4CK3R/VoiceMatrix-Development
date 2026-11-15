@@ -5,7 +5,7 @@ import Metal
 
 /// Exercises the real production coordinator and stores, not a parallel pipeline.
 @main struct LocalStudioDiagnostic {
-    enum Failure: Error { case arguments, fixture, timeout, pipeline, evidence, preservation }
+    enum Failure: Error { case arguments, fixture, timeout, pipeline, evidence, preservation, sourceTranscript }
     struct Report: Codable {
         let sourceCommit: String
         let fixtureKind: String
@@ -24,7 +24,7 @@ import Metal
         let physicalIPhoneVerified = false
         let likenessVerified = false
         let characterIdentificationVerified = false
-        let pipelineKind = "Actual production local coordinator on macOS; synthetic neutral fixture"
+        let pipelineKind = "Actual production local coordinator on macOS; fixture provenance recorded separately"
     }
     static func digest(_ url: URL) throws -> String {
         SHA256.hash(data: try Data(contentsOf: url)).map { String(format:"%02x",$0) }.joined()
@@ -37,7 +37,7 @@ import Metal
         }
     }
     @MainActor static func main() async throws {
-        guard CommandLine.arguments.count==8, MTLCreateSystemDefaultDevice() != nil else { throw Failure.arguments }
+        guard [8,9].contains(CommandLine.arguments.count), MTLCreateSystemDefaultDevice() != nil else { throw Failure.arguments }
         let resources=URL(fileURLWithPath:CommandLine.arguments[1],isDirectory:true)
         let fixture=URL(fileURLWithPath:CommandLine.arguments[2])
         let priorCollection=URL(fileURLWithPath:CommandLine.arguments[3],isDirectory:true)
@@ -60,6 +60,16 @@ import Metal
             guard decoded.processingFormat.channelCount==1 else { throw Failure.fixture }
         }
         let fixtureHash=try digest(fixture)
+        if CommandLine.arguments.count == 9 {
+            let expected = try String(contentsOfFile:CommandLine.arguments[8],encoding:.utf8)
+            guard !expected.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty, expected.utf8.count <= 8192 else {throw Failure.arguments}
+            let recognizer = OnDeviceTranscription(bundle:resources.appendingPathComponent("ParakeetASR"))
+            let actual = try await recognizer.transcribe(fixture)
+            let wer = LocalStudioEvidence.wordErrorRate(expected:expected,actual:actual)
+            let evidence: [String:Any] = ["expected":expected,"actual":actual,"wordErrorRate":wer,"inputSHA256":fixtureHash,"independentCorpusTranscript":true]
+            try JSONSerialization.data(withJSONObject:evidence,options:[.prettyPrinted,.sortedKeys]).write(to:report.deletingLastPathComponent().appendingPathComponent("source-transcript-check.json"),options:.atomic)
+            guard wer <= 0.1, recognizer.lastEvidence?.inputSHA256 == fixtureHash else {throw Failure.sourceTranscript}
+        }
         let support=work.appendingPathComponent("Support",isDirectory:true)
         let store=CharacterFolderStore(root:support.appendingPathComponent("CharacterReferences",isDirectory:true))
         let prior=try await store.importCollection(at:priorCollection)

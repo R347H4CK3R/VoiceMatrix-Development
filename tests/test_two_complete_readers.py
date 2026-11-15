@@ -22,6 +22,22 @@ class TwoReaderTests(unittest.TestCase):
   for bad in [valid+b'M\0VoiceMatrix/LocalVideoStudio.swift\0',valid.replace(b'D\0',b'M\0',1),valid.replace(b'M\0probes',b'D\0probes'),b'',valid+valid]:
    with self.assertRaises(AssertionError):m.verify(bad)
 
+ def test_source_checks_bind_each_original_and_keep_transcription_limit(self):
+  m=module('check')
+  with tempfile.TemporaryDirectory() as d:
+   p=pathlib.Path(d);h=lambda b:hashlib.sha256(b).hexdigest();records=[]
+   for i in range(2):
+    raw=f'original{i}'.encode();(p/f'original-{i}.wav').write_bytes(raw);(p/f'original-{i}.txt').write_text('hello world')
+    records.append(dict(index=i,inputSHA256=h(raw),expected='hello world',actual='hello world',wordErrorRate=0,asrInputSHA256=h(raw),asrTranscriptSHA256=h(b'hello world')))
+   fixture=dict(originalSHA256=[r['inputSHA256'] for r in records])
+   m.verify_sources(p,fixture,records)
+   for key,value in [('index',0),('inputSHA256','bad'),('wordErrorRate',.2),('actual','wrong'),('asrInputSHA256','bad'),('expected','wrong')]:
+    bad=copy.deepcopy(records);bad[1][key]=value
+    with self.subTest(key=key),self.assertRaises(AssertionError):m.verify_sources(p,fixture,bad)
+  harness=(ROOT/'probes/two-complete-readers/Diagnostic.swift').read_text()
+  self.assertNotIn('recognizer.transcribe(fixture)',harness)
+  self.assertIn('recognizer.transcribe(original)',harness)
+  self.assertIn('(0.2...30)',(ROOT/'VoiceMatrix/OnDeviceTranscription.swift').read_text())
  def test_compose_preserves_each_pcm_and_exact_silence(self):
   m=module('prepare')
   def wav(value,frames):

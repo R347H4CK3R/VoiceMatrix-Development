@@ -92,16 +92,31 @@ import FluidAudio
             guard decoded.processingFormat.channelCount==1 else { throw Failure.fixture }
         }
         let fixtureHash=try digest(fixture)
-        if CommandLine.arguments.count == 9 {
-            let expected = try String(contentsOfFile:CommandLine.arguments[8],encoding:.utf8)
-            guard !expected.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty, expected.utf8.count <= 8192 else {throw Failure.arguments}
-            let recognizer = OnDeviceTranscription(bundle:resources.appendingPathComponent("ParakeetASR"))
-            let actual = try await recognizer.transcribe(fixture)
-            let wer = LocalStudioEvidence.wordErrorRate(expected:expected,actual:actual)
-            let evidence: [String:Any] = ["expected":expected,"actual":actual,"wordErrorRate":wer,"inputSHA256":fixtureHash,"independentCorpusTranscript":true]
-            try JSONSerialization.data(withJSONObject:evidence,options:[.prettyPrinted,.sortedKeys]).write(to:report.deletingLastPathComponent().appendingPathComponent("source-transcript-check.json"),options:.atomic)
-            guard wer <= 0.1, recognizer.lastEvidence?.inputSHA256 == fixtureHash else {throw Failure.sourceTranscript}
+        guard CommandLine.arguments.count == 9 else { throw Failure.arguments }
+        let sourceRoot=fixture.deletingLastPathComponent()
+        let combinedExpected=try String(contentsOfFile:CommandLine.arguments[8],encoding:.utf8).trimmingCharacters(in:.whitespacesAndNewlines)
+        var sourceChecks: [[String:Any]]=[]
+        var sourceTexts: [String]=[]
+        for index in 0..<2 {
+            let original=sourceRoot.appendingPathComponent("original-\(index).wav")
+            let expected=try String(contentsOf:sourceRoot.appendingPathComponent("original-\(index).txt"),encoding:.utf8).trimmingCharacters(in:.whitespacesAndNewlines)
+            guard !expected.isEmpty,expected.utf8.count<=8192 else { throw Failure.arguments }
+            sourceTexts.append(expected)
+            let originalHash=try digest(original)
+            let recognizer=OnDeviceTranscription(bundle:resources.appendingPathComponent("ParakeetASR"))
+            do {
+                let actual=try await recognizer.transcribe(original)
+                let wer=LocalStudioEvidence.wordErrorRate(expected:expected,actual:actual)
+                guard let receipt=recognizer.lastEvidence else { throw Failure.sourceTranscript }
+                sourceChecks.append(["index":index,"expected":expected,"actual":actual,"wordErrorRate":wer,"inputSHA256":originalHash,"asrInputSHA256":receipt.inputSHA256,"asrTranscriptSHA256":receipt.transcriptSHA256])
+                try JSONSerialization.data(withJSONObject:sourceChecks,options:[.prettyPrinted,.sortedKeys]).write(to:sourceRoot.appendingPathComponent("source-transcript-check.json"),options:.atomic)
+                guard wer<=0.1,receipt.inputSHA256==originalHash else { throw Failure.sourceTranscript }
+            } catch {
+                try JSONSerialization.data(withJSONObject:["index":index,"inputSHA256":originalHash,"error":String(describing:error)],options:[.prettyPrinted,.sortedKeys]).write(to:sourceRoot.appendingPathComponent("source-transcript-error.json"),options:.atomic)
+                throw error
+            }
         }
+        guard sourceTexts.joined(separator:" ")==combinedExpected else { throw Failure.sourceTranscript }
         let support=work.appendingPathComponent("Support",isDirectory:true)
         let store=CharacterFolderStore(root:support.appendingPathComponent("CharacterReferences",isDirectory:true))
         let prior=try await store.importCollection(at:priorCollection)

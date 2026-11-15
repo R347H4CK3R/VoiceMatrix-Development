@@ -22,7 +22,8 @@ def main():
   transcripts=[z.read(n+'/transcript.txt').decode().strip() for n in ('first','second')]
  assert [hashlib.sha256(w).hexdigest() for w in waves]==SOURCES
  mixed,timeline=compose(waves);assert timeline[-1]['end']<60
- for i,w in enumerate(waves):(root/f'original-{i}.wav').write_bytes(w)
+ for i,w in enumerate(waves):
+  (root/f'original-{i}.wav').write_bytes(w);(root/f'original-{i}.txt').write_text(transcripts[i]+'\n')
  (root/'complete-source.wav').write_bytes(mixed);(root/'transcript.txt').write_text(' '.join(transcripts)+'\n')
  (root/'fixture.json').write_text(json.dumps(dict(audioSHA256=hashlib.sha256(mixed).hexdigest(),timeline=timeline,sources=sources,originalSHA256=SOURCES,archiveSHA256=ARCHIVE_SHA,scope='Synthesized sequential composition of two known complete licensed recordings with two seconds of silence. No speaker IDs injected; not blind, overlap, identity, likeness or iPhone evidence.'),indent=2)+'\n')
 if __name__=='__main__':main()

@@ -2,6 +2,13 @@
 import pathlib,json,hashlib,sys,math,re
 
 def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+def verify_sources(root,fixture,records):
+ root=pathlib.Path(root);assert len(records)==2 and [r['index'] for r in records]==[0,1]
+ for i,r in enumerate(records):
+  assert digest(root/f'original-{i}.wav')==fixture['originalSHA256'][i]==r['inputSHA256']==r['asrInputSHA256']
+  assert (root/f'original-{i}.txt').read_text().strip()==r['expected']
+  assert hashlib.sha256(r['actual'].encode()).hexdigest()==r['asrTranscriptSHA256']
+  assert math.isfinite(r['wordErrorRate']) and 0<=r['wordErrorRate']<=.1
 def verify(root,fixture,report):
  root=pathlib.Path(root);source=fixture['audioSHA256'];assert report['fixtureSHA256']==report['sourceRetainedSHA256']==source==digest(root/'complete-source.wav')
  assert all(report[k] is True for k in ['resumeCompleted','cancellationRetainedSource','freshStoreReloadPreservedIDs','priorProfilePreserved'])
@@ -28,4 +35,4 @@ def verify(root,fixture,report):
  assert seen=={0,1}
  return dict(twoDistinctSourceIntervals=True,allImportedProfilesGenerated=True,retainedSources=True,scope='Controlled sequential known-reader composition only; no identity, overlap, likeness or device verification')
 if __name__=='__main__':
- root=pathlib.Path(sys.argv[1]);proof=verify(root,json.loads((root/'fixture.json').read_text()),json.loads((root/'pipeline-evidence.json').read_text()));(root/'independent-two-speaker-check.json').write_text(json.dumps(proof,indent=2)+'\n');print(json.dumps(proof))
+ root=pathlib.Path(sys.argv[1]);verify_sources(root,json.loads((root/'fixture.json').read_text()),json.loads((root/'source-transcript-check.json').read_text()));proof=verify(root,json.loads((root/'fixture.json').read_text()),json.loads((root/'pipeline-evidence.json').read_text()));(root/'independent-two-speaker-check.json').write_text(json.dumps(proof,indent=2)+'\n');print(json.dumps(proof))

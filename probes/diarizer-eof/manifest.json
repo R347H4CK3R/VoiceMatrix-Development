@@ -4,12 +4,14 @@
   "license": "Apache-2.0",
   "files": {
     "Sources/FluidAudio/Diarizer/Offline/Utils/OfflineReconstruction.swift": {
-      "before": "f6054ae203b7638db5d9dc0263b2b55d6e06a4d884fe9378674c159acf5041dd",
-      "after": "2501e457abc77872261fc9e919228508f9d377a105203a6400b48042efd4e92f"
+      "before": "b37660ffde74ff79d8aaf6e18f22a1b73b53fdfb3fa1f34f1e6961c9296c332e",
+      "after": "d5b9f2532ecb3c5d40cb621f83ea2768a5cab56d6817c9123dc987b67b6d2c54",
+      "upstreamGitBlob": "b2ba82dbcee0372c636f3229e2069b1b5593df11"
     },
     "Sources/FluidAudio/Diarizer/Offline/Core/OfflineDiarizerManager.swift": {
-      "before": "441e0f1a1335b4729953ff1c75cd7cfb9214a77c092a325cc48585b029bace09",
-      "after": "12b4239dce70ba860bcb88abaac93c7481b52fa9def543c12638c9c5365f7cef"
+      "before": "16d3e91ff605890cea2f585e0cd804823a56c0aef27e411f16a1572bd06431ae",
+      "after": "db5cbe9fa368dce0524c50f9610bf848fc253e108ce99eaf702a66755f4000f7",
+      "upstreamGitBlob": "97555ef7a8d242320165c2679819b1f17275dabe"
     }
   },
   "patchSHA256": "76cff14e94767d362abc75625ab0706c7ea6996318d3e7708de1028f3d785f8e"

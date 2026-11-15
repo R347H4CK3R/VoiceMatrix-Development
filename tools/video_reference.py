@@ -1,7 +1,7 @@
 """Development helper: accessible public video -> labeled reference slices.
 No cookies, authentication bypass, model training claim, or model-file renaming.
 """
-import hashlib,json,pathlib,re,shutil,subprocess,tempfile,math
+import hashlib,json,pathlib,re,shutil,subprocess,tempfile,math,wave
 from tools.process_control import checked_process
 from urllib.parse import urlparse
 from contextlib import contextmanager
@@ -98,6 +98,14 @@ def acquire(url,segments,downloader_factory=None,*,cancelled=lambda:False,max_du
    if s['end']>metadata['duration']:raise ValueError('Reference extends beyond video')
    output=usage/(s['id']+'.wav')
    checked_process([ff,'-v','error','-ss',str(s['start']),'-i',str(movie),'-t',str(s['end']-s['start']),'-vn','-ac','1','-ar','24000','-c:a','pcm_s16le',str(output)],timeout=60,cancelled=cancelled)
+   # Container duration can exceed its audio track. Never admit a shortened
+   # reference under the requested timestamps. Allow 50 ms codec-frame rounding.
+   with wave.open(str(output),'rb') as decoded:
+    frames=decoded.getnframes()
+    if (decoded.getnchannels(),decoded.getsampwidth(),decoded.getframerate(),decoded.getcomptype())!=(1,2,24000,'NONE'):
+     raise ValueError('Invalid decoded reference audio')
+    if abs(frames/24000-(s['end']-s['start']))>0.05 or len(decoded.readframes(frames))!=frames*2:
+     raise ValueError('Reference audio does not cover the requested interval')
    rows.append(dict(s,audioPath=str(output),sha256=hashlib.sha256(output.read_bytes()).hexdigest()))
   with movie.open('rb') as f:source_hash=hashlib.file_digest(f,'sha256').hexdigest()
   yield dict(retentionDirectory=str(usage),cleanupEligible=False,privateMoviePath=str(movie),sourceURL=url,title=metadata['title'],duration=metadata['duration'],videoID=metadata['id'],sourceSHA256=source_hash,segments=rows,characterIdentification='Reviewed source labels, not biometric identification.',authorizedLikeness=False)

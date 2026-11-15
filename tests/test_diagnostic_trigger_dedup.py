@@ -26,13 +26,14 @@ def fires(text,event,branch,paths=()):
  if any(matches(pattern,branch) for pattern in push_filter(text,'branches-ignore')):return False
  return any(matches(pattern,path) for pattern in push_filter(text,'paths') for path in paths)
 class DiagnosticTriggerDedupTests(unittest.TestCase):
- def test_only_exact_candidate_direct_push_is_suppressed(self):
+ def test_only_explicit_candidate_and_packaging_branches_are_suppressed(self):
   for name in FILES:
    text=source(name)
-   self.assertEqual(push_filter(text,'branches-ignore'),[CANDIDATE])
+   ignored=['codex/iphone-build4','codex/iphone-build5',CANDIDATE]
+   self.assertEqual(push_filter(text,'branches-ignore'),ignored)
    for path in ['VoiceMatrix/OnDeviceTranscription.swift','project.yml']:
-    self.assertFalse(fires(text,'push',CANDIDATE,[path]),name)
-    for branch in ['main','work/standalone',CANDIDATE+'-fix','candidate/voicematrix-1.0.0']:
+    for excluded in ignored:self.assertFalse(fires(text,'push',excluded,[path]),(name,excluded))
+    for branch in ['main','work/standalone',CANDIDATE+'-fix','candidate/voicematrix-1.0.0','codex/iphone-build4-fix','codex/iphone-build5-fix']:
      self.assertTrue(fires(text,'push',branch,[path]),(name,branch,path))
    self.assertFalse(fires(text,'push','main',['README.md']),name)
    self.assertFalse(fires(text,'push','main',['VoiceMatrix/unrelated/OnDeviceTranscription.swift']),name)

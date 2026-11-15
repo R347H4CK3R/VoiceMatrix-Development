@@ -91,3 +91,19 @@ class VideoReferenceTests(unittest.TestCase):
    self.assertEqual([f['format_id'] for f in chosen[0]['requested_formats']],['135','140'])
    highonly=[f for f in formats if f['format_id']!='135']
    self.assertEqual(list(selector(dict(formats=highonly,incomplete_formats=False))),[])
+
+ @unittest.skipUnless(shutil.which('ffmpeg'),'FFmpeg required')
+ def test_short_audio_track_cannot_be_admitted_as_full_reference(self):
+  fixture=pathlib.Path(self.tmp.name)/'short-audio.mp4'
+  subprocess.run([module.ffmpeg_path(),'-v','error','-f','lavfi','-i','color=c=purple:s=160x90:d=3','-f','lavfi','-i','sine=frequency=440:duration=1','-c:v','mpeg4','-c:a','aac',str(fixture)],check=True,capture_output=True)
+  class Downloader:
+   def __init__(self,options):self.root=pathlib.Path(options['outtmpl']).parent
+   def __enter__(self):return self
+   def __exit__(self,*args):pass
+   def extract_info(self,*args,**kwargs):
+    shutil.copyfile(fixture,self.root/'source.mp4');return dict(id='fixture',title='fixture',duration=3)
+  with self.assertRaisesRegex(ValueError,'audio does not cover'):
+   with module.acquire('https://youtu.be/example',[dict(id='speaker',start=0,end=2)],Downloader,retention_root=self.retained):
+    pass
+  self.assertTrue(list(self.retained.rglob('source.mp4')))
+  self.assertTrue(list(self.retained.rglob('speaker.wav')))

@@ -1,0 +1,319 @@
+{
+  "scope": "Real LibriSpeech speech; assembled A-B-A turns with known boundaries, not natural conversation; repeated A is the same utterance",
+  "sources": [
+    {
+      "id": "2961-960-0003",
+      "sha256": "b5c4083af476a6ba5d33c73d65715b996ed873db4c92e6433c661839cedf548c",
+      "seconds": 17.315
+    },
+    {
+      "id": "4507-16021-0031",
+      "sha256": "f26750838bc55372b7f31976e099978e608db57ba054d3f184b332e6cadcb3af",
+      "seconds": 14.31
+    }
+  ],
+  "truth": [
+    {
+      "speaker": "A",
+      "start": 0,
+      "end": 17.315
+    },
+    {
+      "speaker": "B",
+      "start": 18.315,
+      "end": 32.625
+    },
+    {
+      "speaker": "A",
+      "start": 33.625,
+      "end": 50.940000000000005
+    }
+  ],
+  "networkBlocked": true,
+  "moduleSHA256": "847340696607b3b9e018e033f2f9d735dfeabee595e9d76903052f44d964ce9d",
+  "modelSHA256": "0575cb64845e6b9a10db9bcb74d5ac32b326b8dc90352671d345e2ee3d0126a2",
+  "vadSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+  "versions": {
+    "torch": "2.6.0+cpu",
+    "torchaudio": "2.6.0+cpu",
+    "speechbrain": "1.0.3",
+    "silero-vad": "6.2.3",
+    "onnxruntime": "1.20.1",
+    "numpy": "1.26.4",
+    "scikit-learn": "1.8.0"
+  },
+  "cases": {
+    "silence": {
+      "schemaVersion": 1,
+      "engine": "speechbrain-ecapa-silero",
+      "status": "no-candidates",
+      "durationSeconds": 8.0,
+      "candidates": [],
+      "memberIntervals": [],
+      "labelsVerified": false,
+      "speakerSeparated": false,
+      "overlapDetection": "not-supported",
+      "truncated": false,
+      "groupLimitExceeded": false,
+      "limits": {
+        "maxSeconds": 1800,
+        "maxGroups": 32,
+        "maxWindows": 512,
+        "maxRegions": 3600,
+        "minimumCandidateSeconds": 3,
+        "maximumCandidateSeconds": 12
+      },
+      "omitted": [],
+      "omittedCount": 0,
+      "warnings": [
+        "Tentative voice groups only; some speakers may be missed or merged.",
+        "Overlapping speech and background music are not separated."
+      ],
+      "analyzedWindows": 0,
+      "elapsedSeconds": 0.2942579119990114,
+      "sourceSHA256": "190415015d40eef0cd797e1b59ffe00846b01873050b12d44b3a216de3faa2a9"
+    },
+    "speakerA": {
+      "schemaVersion": 1,
+      "engine": "speechbrain-ecapa-silero",
+      "status": "candidates",
+      "durationSeconds": 17.315,
+      "candidates": [
+        {
+          "start": 5.92,
+          "end": 13.92,
+          "group": 1,
+          "confidence": null,
+          "score": 0.81479,
+          "uncertainty": [
+            "label-unverified",
+            "overlap-not-assessed",
+            "grouping-not-calibrated"
+          ],
+          "supportingWindows": 1
+        }
+      ],
+      "memberIntervals": [
+        {
+          "group": 1,
+          "start": 5.92,
+          "end": 13.92
+        }
+      ],
+      "labelsVerified": false,
+      "speakerSeparated": false,
+      "overlapDetection": "not-supported",
+      "truncated": false,
+      "groupLimitExceeded": false,
+      "limits": {
+        "maxSeconds": 1800,
+        "maxGroups": 32,
+        "maxWindows": 512,
+        "maxRegions": 3600,
+        "minimumCandidateSeconds": 3,
+        "maximumCandidateSeconds": 12
+      },
+      "omitted": [
+        {
+          "reason": "speech-too-short",
+          "start": 0.576,
+          "end": 3.168
+        },
+        {
+          "reason": "speech-too-short",
+          "start": 3.456,
+          "end": 5.408
+        },
+        {
+          "reason": "speech-too-short",
+          "start": 14.432,
+          "end": 16.928
+        }
+      ],
+      "omittedCount": 3,
+      "warnings": [
+        "Tentative voice groups only; some speakers may be missed or merged.",
+        "Overlapping speech and background music are not separated."
+      ],
+      "analyzedWindows": 1,
+      "elapsedSeconds": 0.9822639510093722,
+      "sourceSHA256": "b5c4083af476a6ba5d33c73d65715b996ed873db4c92e6433c661839cedf548c"
+    },
+    "speakerB": {
+      "schemaVersion": 1,
+      "engine": "speechbrain-ecapa-silero",
+      "status": "candidates",
+      "durationSeconds": 14.31,
+      "candidates": [
+        {
+          "start": 0.608,
+          "end": 8.608,
+          "group": 1,
+          "confidence": null,
+          "score": 0.785886,
+          "uncertainty": [
+            "label-unverified",
+            "overlap-not-assessed",
+            "grouping-not-calibrated"
+          ],
+          "supportingWindows": 1
+        }
+      ],
+      "memberIntervals": [
+        {
+          "group": 1,
+          "start": 0.608,
+          "end": 8.608
+        }
+      ],
+      "labelsVerified": false,
+      "speakerSeparated": false,
+      "overlapDetection": "not-supported",
+      "truncated": false,
+      "groupLimitExceeded": false,
+      "limits": {
+        "maxSeconds": 1800,
+        "maxGroups": 32,
+        "maxWindows": 512,
+        "maxRegions": 3600,
+        "minimumCandidateSeconds": 3,
+        "maximumCandidateSeconds": 12
+      },
+      "omitted": [
+        {
+          "reason": "unstable-voice-window",
+          "start": 6.608,
+          "end": 10.112
+        },
+        {
+          "reason": "unstable-voice-window",
+          "start": 10.528,
+          "end": 13.952
+        }
+      ],
+      "omittedCount": 2,
+      "warnings": [
+        "Tentative voice groups only; some speakers may be missed or merged.",
+        "Overlapping speech and background music are not separated."
+      ],
+      "analyzedWindows": 3,
+      "elapsedSeconds": 1.458930879001855,
+      "sourceSHA256": "f26750838bc55372b7f31976e099978e608db57ba054d3f184b332e6cadcb3af"
+    },
+    "assembledABA": {
+      "schemaVersion": 1,
+      "engine": "speechbrain-ecapa-silero",
+      "status": "candidates",
+      "durationSeconds": 50.94,
+      "candidates": [
+        {
+          "start": 5.92,
+          "end": 13.92,
+          "group": 1,
+          "confidence": null,
+          "score": 0.81479,
+          "uncertainty": [
+            "label-unverified",
+            "overlap-not-assessed",
+            "grouping-not-calibrated"
+          ],
+          "supportingWindows": 2
+        },
+        {
+          "start": 18.912,
+          "end": 26.912,
+          "group": 2,
+          "confidence": null,
+          "score": 0.777542,
+          "uncertainty": [
+            "label-unverified",
+            "overlap-not-assessed",
+            "grouping-not-calibrated"
+          ],
+          "supportingWindows": 1
+        }
+      ],
+      "memberIntervals": [
+        {
+          "group": 1,
+          "start": 5.92,
+          "end": 13.92
+        },
+        {
+          "group": 1,
+          "start": 39.552,
+          "end": 47.552
+        },
+        {
+          "group": 2,
+          "start": 18.912,
+          "end": 26.912
+        }
+      ],
+      "labelsVerified": false,
+      "speakerSeparated": false,
+      "overlapDetection": "not-supported",
+      "truncated": false,
+      "groupLimitExceeded": false,
+      "limits": {
+        "maxSeconds": 1800,
+        "maxGroups": 32,
+        "maxWindows": 512,
+        "maxRegions": 3600,
+        "minimumCandidateSeconds": 3,
+        "maximumCandidateSeconds": 12
+      },
+      "omitted": [
+        {
+          "reason": "speech-too-short",
+          "start": 0.576,
+          "end": 3.168
+        },
+        {
+          "reason": "speech-too-short",
+          "start": 3.456,
+          "end": 5.408
+        },
+        {
+          "reason": "speech-too-short",
+          "start": 14.432,
+          "end": 16.928
+        },
+        {
+          "reason": "unstable-voice-window",
+          "start": 24.912,
+          "end": 28.448
+        },
+        {
+          "reason": "unstable-voice-window",
+          "start": 28.832,
+          "end": 32.288
+        },
+        {
+          "reason": "speech-too-short",
+          "start": 34.208,
+          "end": 36.8
+        },
+        {
+          "reason": "speech-too-short",
+          "start": 37.088,
+          "end": 39.04
+        },
+        {
+          "reason": "speech-too-short",
+          "start": 48.064,
+          "end": 50.528
+        }
+      ],
+      "omittedCount": 8,
+      "warnings": [
+        "Tentative voice groups only; some speakers may be missed or merged.",
+        "Overlapping speech and background music are not separated."
+      ],
+      "analyzedWindows": 5,
+      "elapsedSeconds": 3.0431548269989435,
+      "sourceSHA256": "ad1299eec5651d10a126fc16e996723f2b5d87461361baa4a93d5ea58d019bd2"
+    }
+  },
+  "loadSeconds": 3.1996974299981957
+}

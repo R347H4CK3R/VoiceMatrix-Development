@@ -148,6 +148,43 @@ def _unit(vector):
     return vector / norm
 
 
+def _join_supported_regions(audio, regions, model, cancelled):
+    """Join disjoint pairs only with independent full-region speaker support.
+
+    Never bridge an intervening VAD region or chain matches transitively. The
+    resulting window still passes the original clipping, energy and stability
+    gates. At most MAX_WINDOWS extra embeddings, each at most eight seconds.
+    """
+    joined = []
+    index = 0
+    examined = 0
+    while index < len(regions):
+        _cancel(cancelled)
+        start, end = regions[index]
+        if index + 1 < len(regions) and examined + 2 <= MAX_WINDOWS:
+            other_start, other_end = regions[index + 1]
+            if (3 * RATE <= end - start <= 8 * RATE and
+                    3 * RATE <= other_end - other_start <= 8 * RATE and
+                    0 <= other_start - end <= int(.6 * RATE) and
+                    other_end - start <= 12 * RATE):
+                left = _unit(model.embed(audio[start:end]))
+                _cancel(cancelled)
+                right = _unit(model.embed(audio[other_start:other_end]))
+                _cancel(cancelled)
+                examined += 2
+                if left.shape != right.shape:
+                    raise ValueError('Inconsistent speaker embedding dimensions')
+                # Same threshold as complete-link clustering, without relaxing
+                # the later independent full/half-window stability threshold.
+                if float(left @ right) >= .70:
+                    joined.append((start, other_end))
+                    index += 2
+                    continue
+        joined.append((start, end))
+        index += 1
+    return joined
+
+
 def analyze(path_16k_mono_pcm16, model, cancelled=lambda: False):
     """Return up to 32 tentative representatives (3–12 s), with no identity claim.
 
@@ -198,6 +235,7 @@ def analyze(path_16k_mono_pcm16, model, cancelled=lambda: False):
         start, end = int(start), int(end)
         previous_end = end
         regions.append((start, end))
+    regions = _join_supported_regions(audio, regions, model, cancelled)
     windows = []
     examined = 0
     stop = False

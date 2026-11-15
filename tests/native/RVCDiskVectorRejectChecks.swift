@@ -17,6 +17,17 @@ import Foundation
   let link=root.appendingPathComponent("link.f32")
   try FileManager.default.createSymbolicLink(at:link,withDestinationURL:source)
   try rejected(link,8,zeros)
+  let finishedDigest=Task {
+   do {
+    _=try RVCDiskVectorBank.snapshot(source:source,cache:cache,count:8,expectedSHA256:zeros,update:{_ in},finish:{
+     withUnsafeCurrentTask{$0?.cancel()}
+     return zeros
+    })
+    fatalError("post-digest cancellation admitted vectors")
+   } catch is CancellationError {} catch {fatalError("wrong cancellation error")}
+  }
+  await finishedDigest.value
+  let cancelledFiles=try FileManager.default.contentsOfDirectory(atPath:cache.path);precondition(cancelledFiles.isEmpty)
   let writer=try FileHandle(forWritingTo:source)
   var bits=Float.nan.bitPattern.littleEndian
   try writer.write(contentsOf:withUnsafeBytes(of:&bits){Data($0)});try writer.close()

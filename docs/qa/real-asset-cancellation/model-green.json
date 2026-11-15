@@ -1,0 +1,22 @@
+{
+  "returncode": 0,
+  "cases": [
+    {
+      "blocks": 3,
+      "returnedSnapshot": false,
+      "cancelled": true,
+      "cacheEmpty": true,
+      "phase": "middle"
+    },
+    {
+      "blocks": 361,
+      "returnedSnapshot": false,
+      "cancelled": true,
+      "cacheEmpty": true,
+      "phase": "afterDigest"
+    }
+  ],
+  "stderr": "",
+  "sourceSHA256": "980f264a909ff3d85d513e924304b1c179ff5d17280dda0b011ec01cb366aa68",
+  "sourceUnchanged": true
+}

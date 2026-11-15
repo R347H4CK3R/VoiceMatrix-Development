@@ -1,6 +1,6 @@
 import Foundation
 @main struct Checks {
- static func main() throws {
+ static func main() async throws {
   var input=RVCSynthesisInputs(phone:[Float](repeating:0,count:922*768),pitch:[Int64](repeating:1,count:922),pitchHz:[Float](repeating:0,count:922),latentNoise:[Float](repeating:0,count:922*192),phaseNoise:0.5,excitationNoise:[Float](repeating:0,count:368800))
   try input.validate()
   let tensors=try input.tensors()
@@ -67,6 +67,17 @@ import Foundation
   let copied=try Data(contentsOf:saved);precondition(copied==bytes)
   precondition(blocks == [1048576,7])
   try fm.removeItem(at:saved.deletingLastPathComponent())
+  let cancelled=Task {
+   do {
+    _=try RVCSynthesisAssets.snapshot(root:pack,cache:cache,update:{_ in},finish:{
+     withUnsafeCurrentTask{$0?.cancel()}
+     return RVCSynthesisAssets.verifiedSHA256
+    })
+    fatalError("post-digest cancellation admitted model")
+   } catch is CancellationError {} catch {fatalError("wrong cancellation error")}
+  }
+  await cancelled.value
+  let cancelledFiles=try fm.contentsOfDirectory(atPath:cache.path);precondition(cancelledFiles.isEmpty)
   do { _=try RVCSynthesisAssets.snapshot(root:pack,cache:cache,update:{_ in},finish:{"wrong"});fatalError("digest mismatch accepted") } catch {}
   let remaining=try fm.contentsOfDirectory(atPath:cache.path);precondition(remaining.isEmpty)
   try fm.removeItem(at:pack.appendingPathComponent("synthesizer.onnx"))

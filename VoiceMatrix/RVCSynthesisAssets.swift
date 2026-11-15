@@ -90,7 +90,9 @@ enum RVCSynthesisAssets {
             try output.write(contentsOf: data)
         }
         guard total == m.bytes, finish() == m.sha256 else { throw RVCSynthesisFailure.invalidAsset }
+        try Task.checkCancellation()
         try output.synchronize()
+        try Task.checkCancellation()
         accepted = true
         return destination
     }

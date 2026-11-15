@@ -1,0 +1,24 @@
+{
+  "returncode": 1,
+  "stderr": "",
+  "sourceSHA256": "2326a4ca21cedbea61532a5c5b9fcba752f6de2ba9ff9cee5ecb8abda3a6bb98",
+  "sourceUnchanged": true,
+  "cases": [
+    {
+      "returnedBank": false,
+      "cacheEmpty": true,
+      "descriptorsReleased": true,
+      "phase": "middle",
+      "cancelled": true,
+      "blocks": 3
+    },
+    {
+      "returnedBank": true,
+      "cacheEmpty": true,
+      "descriptorsReleased": true,
+      "phase": "afterDigest",
+      "cancelled": false,
+      "blocks": 2833
+    }
+  ]
+}

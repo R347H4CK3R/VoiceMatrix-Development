@@ -46,7 +46,9 @@ final class RVCDiskVectorBank {
             try update(data);try output.write(contentsOf:data)
         }
         guard total==bytes,try finish()==expectedSHA256 else {throw Failure.invalidFile}
+        try Task.checkCancellation()
         try output.synchronize()
+        try Task.checkCancellation()
         let reader=try FileHandle(forReadingFrom:target)
         do {
             // The verified inode remains open; no caller can reopen its pathname.

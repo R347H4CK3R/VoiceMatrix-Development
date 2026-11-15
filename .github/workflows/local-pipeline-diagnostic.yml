@@ -11,7 +11,6 @@ on:
     branches-ignore:
       - codex/iphone-build4
       - codex/iphone-build5
-      - codex/rvc-conversion-controls
       - 'candidate/voicematrix-0.4.9'
     paths:
       - 'probes/native-local-studio/**'
@@ -34,6 +33,10 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: character-cache
+          key: character-assets-685e8816-716d2f41
       - uses: actions/download-artifact@v4
         if: ${{ inputs.use-frozen }}
         with:

@@ -41,6 +41,36 @@ class VideoReferenceTests(unittest.TestCase):
    with module.acquire('https://youtu.be/example',[dict(id='rick',start=0,end=.6)],FakeDownloader,retention_root=self.retained) as result:
     path=pathlib.Path(result['segments'][0]['audioPath']);self.assertGreater(path.stat().st_size,44)
    self.assertTrue(path.exists())
+ @unittest.skipUnless(shutil.which('ffmpeg'),'FFmpeg required')
+ def test_low_rate_aac_exact_intervals_decode_before_seeking(self):
+  import wave,struct,math
+  from unittest.mock import patch
+  fixture=self.retained.parent/'low-rate.mp4'
+  subprocess.run([module.ffmpeg_path(),'-v','error','-f','lavfi','-i','color=c=purple:s=160x90:d=5','-f','lavfi','-i','sine=frequency=440:sample_rate=16000:duration=5','-af',"volume='if(lt(t,1),0.1,0.8)':eval=frame",'-c:v','mpeg4','-c:a','aac','-shortest',str(fixture)],check=True,capture_output=True)
+  original=fixture.read_bytes()
+  class Downloader:
+   def __init__(self,options):self.root=pathlib.Path(options['outtmpl']).parent
+   def __enter__(self):return self
+   def __exit__(self,*args):pass
+   def extract_info(self,*args,**kwargs):
+    shutil.copyfile(fixture,self.root/'source.mp4');return dict(id='fixture',title='fixture',duration=5)
+  # Wrap, rather than replace, real extraction. Assert the known Apple regression
+  # cannot return through accidental input-side seeking even on older FFmpeg.
+  with patch.object(module,'checked_process',wraps=module.checked_process) as execute:
+   with module.acquire('https://youtu.be/example',[dict(id='start',start=0,end=.5),dict(id='offset',start=1.25,end=1.75)],Downloader,retention_root=self.retained) as result:
+    levels={}
+    for row in result['segments']:
+     with wave.open(row['audioPath']) as audio:
+      self.assertEqual(audio.getnframes(),12000)
+      pcm=audio.readframes(12000);self.assertEqual(len(pcm),24000)
+      samples=struct.unpack('<12000h',pcm)
+      levels[row['id']]=math.sqrt(sum(v*v for v in samples)/len(samples))
+    self.assertGreater(levels['start'],10)
+    self.assertGreater(levels['offset'],levels['start']*4, 'Nonzero offset returned the first interval instead of the later marker')
+   extraction=[call.args[0] for call in execute.call_args_list if '-ss' in call.args[0]]
+   self.assertEqual(len(extraction),2)
+   for command in extraction:self.assertLess(command.index('-i'),command.index('-ss'))
+  self.assertEqual(fixture.read_bytes(),original)
  def test_split_av_fallback_and_mp4_merge_are_bounded(self):
   captured={}
   class Downloader:

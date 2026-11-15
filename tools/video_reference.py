@@ -97,7 +97,9 @@ def acquire(url,segments,downloader_factory=None,*,cancelled=lambda:False,max_du
    activity('extracting',index,len(segments))
    if s['end']>metadata['duration']:raise ValueError('Reference extends beyond video')
    output=usage/(s['id']+'.wav')
-   checked_process([ff,'-v','error','-ss',str(s['start']),'-i',str(movie),'-t',str(s['end']-s['start']),'-vn','-ac','1','-ar','24000','-c:a','pcm_s16le',str(output)],timeout=60,cancelled=cancelled)
+   # Decode before seeking: input seeking can drop AAC priming samples on
+   # Apple FFmpeg, shortening an otherwise valid requested interval.
+   checked_process([ff,'-v','error','-i',str(movie),'-ss',str(s['start']),'-t',str(s['end']-s['start']),'-vn','-ac','1','-ar','24000','-c:a','pcm_s16le',str(output)],timeout=60,cancelled=cancelled)
    # Container duration can exceed its audio track. Never admit a shortened
    # reference under the requested timestamps. Allow 50 ms codec-frame rounding.
    with wave.open(str(output),'rb') as decoded:

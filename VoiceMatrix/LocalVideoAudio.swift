@@ -71,6 +71,9 @@ enum LocalVideoAudio {
         }
         try Task.checkCancellation()
         guard reader.status == .completed, (24_000...720_000).contains(pcm.count) else { throw Failure.unreadable }
+        guard LocalStudioEvidence.referenceCoversInterval(frames: pcm.count / 2, requestedSeconds: seconds) else {
+            throw Failure.unusableAudio
+        }
         var energy = 0.0, clipped = 0
         for i in stride(from: 0, to: pcm.count, by: 2) {
             let value = Int16(bitPattern: UInt16(pcm[i]) | UInt16(pcm[i + 1]) << 8)

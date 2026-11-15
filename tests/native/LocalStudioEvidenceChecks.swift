@@ -10,6 +10,22 @@ import Foundation
             precondition(!windows.isEmpty && windows.count <= 300)
             precondition(windows.allSatisfy { $0.start >= 0 && $0.seconds >= 3 && $0.seconds <= 8 && $0.start + $0.seconds <= duration })
         }
+        precondition(LocalStudioEvidence.referenceCoversInterval(frames: 24000, requestedSeconds: 1))
+        precondition(LocalStudioEvidence.referenceCoversInterval(frames: 23760, requestedSeconds: 1))
+        precondition(!LocalStudioEvidence.referenceCoversInterval(frames: 24000, requestedSeconds: 2))
+        precondition(!LocalStudioEvidence.referenceCoversInterval(frames: 24000, requestedSeconds: 0.5))
+        precondition(LocalStudioEvidence.referenceCoversInterval(frames: 22800, requestedSeconds: 1))
+        precondition(LocalStudioEvidence.referenceCoversInterval(frames: 25200, requestedSeconds: 1))
+        precondition(!LocalStudioEvidence.referenceCoversInterval(frames: 22799, requestedSeconds: 1))
+        precondition(!LocalStudioEvidence.referenceCoversInterval(frames: 25201, requestedSeconds: 1))
+        precondition(LocalStudioEvidence.referenceCoversInterval(frames: 12000, requestedSeconds: 0.5))
+        precondition(LocalStudioEvidence.referenceCoversInterval(frames: 360000, requestedSeconds: 15))
+        for seconds in [Double.nan, Double.infinity, 0.49, 15.01] {
+            precondition(!LocalStudioEvidence.referenceCoversInterval(frames: 24000, requestedSeconds: seconds))
+        }
+        for frames in [-1, 0, 11999, 360001] {
+            precondition(!LocalStudioEvidence.referenceCoversInterval(frames: frames, requestedSeconds: 0.5))
+        }
         print("Native local evidence checks passed; no model inference was performed")
     }
 }

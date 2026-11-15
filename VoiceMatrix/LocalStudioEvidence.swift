@@ -2,6 +2,13 @@ import Foundation
 
 /// Intelligibility evidence is not speaker identity, diarization or likeness proof.
 enum LocalStudioEvidence {
+    /// PCM16 mono output at 24 kHz must cover the requested reference interval.
+    /// Fifty milliseconds allows codec-frame rounding, not missing speech.
+    static func referenceCoversInterval(frames: Int, requestedSeconds: Double) -> Bool {
+        guard (12_000...360_000).contains(frames), requestedSeconds.isFinite,
+              (0.5...15).contains(requestedSeconds) else { return false }
+        return abs(Double(frames) - requestedSeconds * 24_000) <= 1_200
+    }
     static func words(_ text: String) -> [String] {
         text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
     }

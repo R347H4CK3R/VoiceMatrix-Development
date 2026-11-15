@@ -46,3 +46,9 @@ class LocalStudioSourceTests(unittest.TestCase):
    binary=pathlib.Path(directory)/'local-evidence'
    subprocess.run(['swiftc',str(ROOT/'VoiceMatrix/LocalStudioEvidence.swift'),str(ROOT/'tests/native/LocalStudioEvidenceChecks.swift'),'-o',str(binary)],check=True,timeout=60)
    subprocess.run([str(binary)],check=True,timeout=10)
+
+ def test_extraction_requires_requested_duration_before_reference_creation(self):
+  s=self.read('VoiceMatrix/LocalVideoAudio.swift')
+  check=s.index('LocalStudioEvidence.referenceCoversInterval(frames: pcm.count / 2, requestedSeconds: seconds)')
+  self.assertLess(check,s.index('var energy ='))
+  self.assertLess(check,s.index('return Reference('))

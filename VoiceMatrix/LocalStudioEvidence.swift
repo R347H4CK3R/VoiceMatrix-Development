@@ -5,7 +5,7 @@ enum LocalStudioEvidence {
     /// PCM16 mono output at 24 kHz must cover the requested reference interval.
     /// Fifty milliseconds allows codec-frame rounding, not missing speech.
     static func referenceCoversInterval(frames: Int, requestedSeconds: Double) -> Bool {
-        guard (12_000...360_000).contains(frames), requestedSeconds.isFinite,
+        guard (10_800...360_000).contains(frames), requestedSeconds.isFinite,
               (0.5...15).contains(requestedSeconds) else { return false }
         return abs(Double(frames) - requestedSeconds * 24_000) <= 1_200
     }

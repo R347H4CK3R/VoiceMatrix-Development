@@ -76,7 +76,7 @@ enum LocalVideoAudio {
         }
         try Task.checkCancellation()
         diagnostic("reader status=\(reader.status.rawValue) pcmBytes=\(pcm.count) error=\(String(describing: reader.error))")
-        guard reader.status == .completed, (24_000...720_000).contains(pcm.count) else { throw Failure.unreadable }
+        guard reader.status == .completed else { throw Failure.unreadable }
         guard LocalStudioEvidence.referenceCoversInterval(frames: pcm.count / 2, requestedSeconds: seconds) else {
             throw Failure.unusableAudio
         }

@@ -24,11 +24,13 @@ enum LocalSoundQualityPolicy {
             return unknown("Incomplete local sound evidence; this candidate needs review.")
         }
         guard frames.allSatisfy({ frame in
-            frame.start.isFinite && frame.end.isFinite && frame.start >= 0 && frame.end > frame.start && frame.start < duration && frame.end <= duration + 1 &&
+            frame.start.isFinite && frame.end.isFinite && frame.start >= -0.001 && frame.end > 0 && frame.end > frame.start && frame.start < duration && frame.end <= duration + 1 &&
             [frame.speech,frame.music,frame.singing].allSatisfy { $0.isFinite && (0...1).contains($0) }
         }) else { return unknown("Invalid local sound evidence; this candidate needs review.") }
         func covered(_ values:[Frame]) -> Double {
-            let ranges=values.map { (start:$0.start,end:min($0.end,duration)) }.sorted { $0.start < $1.start }
+            // SoundAnalysis may round its first timestamp slightly below zero.
+            // Bound that tolerance above and never count pre-source time as coverage.
+            let ranges=values.map { (start:max(0,$0.start),end:min($0.end,duration)) }.sorted { $0.start < $1.start }
             var total=0.0, start=0.0, end=0.0
             for range in ranges {
                 if range.start > end { total += end-start;start=range.start;end=range.end }

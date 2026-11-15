@@ -1,0 +1,155 @@
+{
+  "cases": [
+    {
+      "case": "5683-32865-0017",
+      "rows": 461,
+      "neighbors": 3688,
+      "neighborIDDifferences": 0,
+      "coarsePitchExact": true,
+      "pitchHzError": {
+        "maxAbs": 0.0,
+        "rms": 0.0
+      },
+      "phoneError": {
+        "maxAbs": 2.384185791015625e-07,
+        "rms": 7.3028332775002406e-09
+      },
+      "originalAdapterError": {
+        "maxAbs": 0.0,
+        "rms": 0.0
+      },
+      "nativeReferenceAudioError": {
+        "maxAbs": 4.7031790018081665e-06,
+        "rms": 8.670538656861878e-08
+      },
+      "nativeProcess": {
+        "returncode": 0,
+        "stdout": "Full real window prepared with verified disk-backed retrieval\n",
+        "stderr": "",
+        "maxRSSKiB": 50476
+      },
+      "nativeLoadSeconds": 0.48404802000004565,
+      "nativePrepareSeconds": 1.7538948549990891,
+      "outputSamples": 218200,
+      "outputSHA256": {
+        "reference": "9ca0994aa2ad7aaf57693f093a322762a2129945a6eb534ed842ea93e3501c19",
+        "native": "8e5a08abb42d63aa5a38b989306a443ab6d8b0d9335c445c2bd4401e5d8c1c17"
+      },
+      "inputProvenance": {
+        "dataset": "openslr/librispeech_asr",
+        "datasetRevision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "config": "clean",
+        "split": "test",
+        "row": 2500,
+        "id": "5683-32865-0017",
+        "speakerID": 5683,
+        "chapterID": 32865,
+        "referenceText": "ALL THE TIME HE WAS TALKING TO ME HIS ANGRY LITTLE EYES WERE FOLLOWING LAKE",
+        "license": "CC-BY-4.0",
+        "sourcePage": "https://www.openslr.org/12",
+        "rowAPI": "https://datasets-server.huggingface.co/rows?dataset=openslr/librispeech_asr&config=clean&split=test&offset=2500&length=1",
+        "audioAssetPath": "https://datasets-server.huggingface.co/cached-assets/openslr/librispeech_asr/--/71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/--/clean/test/2500/audio/audio.flac",
+        "sourceSHA256": "d0027b49e5e0c29b3b59d1d782b8d4d9753f90e4343f243a15698e787c8e64ca",
+        "pcmSHA256": "44477e160959a9526d3545567baa9b096405cf9d914595d737ffdf3d46ce1e6f",
+        "input16kSamples": 87280,
+        "inputSeconds": 5.455,
+        "selection": "Rows 2500 and 2600 preselected before scoring; rates 0 and 0.125",
+        "files": {
+          "filter-forward.f64": "717c1821bddba0712f976b62b1935b75174abcabaf89a094c8dfced3bc64614c",
+          "prepared.f32": "ab2bc8ba849d5f5a1f392e311ef38ebbc3b363c6e0aad4ae993b08b1146d8176",
+          "pitch.json": "e65ced6266ad1c7ede4d07bcb18e698ba45d09a13eb39615f9e90c9de339a305",
+          "resampled.f32": "a2cb55f48070d07f4f7a09d098a56a574637adb9ebd5453423db08b1cff77bb5"
+        },
+        "windowSHA256": [
+          "3fb5b69cfcf7d347d60b846fdb0b02b563edfcee60517cb6838cc70ccb8d1dc7"
+        ],
+        "nativeBinarySHA256": "748360c66bb9df02655754aef7f7b67947ec80a251e864a4d53aea36d190feda",
+        "featuresSHA256": "a77c41969ea73a027b35a44fd64dc3c9380edb50aacd19a09461b23e78872b90"
+      },
+      "physicalIPhoneVerified": false,
+      "humanListeningVerified": false,
+      "parityPassed": true
+    },
+    {
+      "case": "121-127105-0022",
+      "rows": 461,
+      "neighbors": 3688,
+      "neighborIDDifferences": 0,
+      "coarsePitchExact": true,
+      "pitchHzError": {
+        "maxAbs": 0.0,
+        "rms": 0.0
+      },
+      "phoneError": {
+        "maxAbs": 2.384185791015625e-07,
+        "rms": 7.115462866694288e-09
+      },
+      "originalAdapterError": {
+        "maxAbs": 0.0,
+        "rms": 0.0
+      },
+      "nativeReferenceAudioError": {
+        "maxAbs": 3.7550926208496094e-06,
+        "rms": 5.063030984484216e-08
+      },
+      "nativeProcess": {
+        "returncode": 0,
+        "stdout": "Full real window prepared with verified disk-backed retrieval\n",
+        "stderr": "",
+        "maxRSSKiB": 50556
+      },
+      "nativeLoadSeconds": 0.6250458850045106,
+      "nativePrepareSeconds": 1.6926619660007418,
+      "outputSamples": 203000,
+      "outputSHA256": {
+        "reference": "a80bcc50e950a7e3d90f085b97cf2511abb6efb483cd7650f3422bc292765be5",
+        "native": "5606482a7b0f74399c0c0ca6b25cf525f7753155cbd6d3f89f3c5873c048edab"
+      },
+      "inputProvenance": {
+        "dataset": "openslr/librispeech_asr",
+        "datasetRevision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "config": "clean",
+        "split": "test",
+        "row": 2600,
+        "id": "121-127105-0022",
+        "speakerID": 121,
+        "chapterID": 127105,
+        "referenceText": "WELL IF I DON'T KNOW WHO SHE WAS IN LOVE WITH I KNOW WHO HE WAS",
+        "license": "CC-BY-4.0",
+        "sourcePage": "https://www.openslr.org/12",
+        "rowAPI": "https://datasets-server.huggingface.co/rows?dataset=openslr/librispeech_asr&config=clean&split=test&offset=2600&length=1",
+        "audioAssetPath": "https://datasets-server.huggingface.co/cached-assets/openslr/librispeech_asr/--/71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/--/clean/test/2600/audio/audio.flac",
+        "sourceSHA256": "fb25d5d8b07290d6d072475eaddac1ba51fc33c58f07ab475d2dd176dab6414e",
+        "pcmSHA256": "a537add88533a2c071d6b80700064569e96b62f95ee81afd54ef13be04f15e22",
+        "input16kSamples": 81200,
+        "inputSeconds": 5.075,
+        "selection": "Rows 2500 and 2600 preselected before scoring; rates 0 and 0.125",
+        "files": {
+          "filter-forward.f64": "fa1fd7553bcba2b5bef93eef34e23013a83ba8b7b350841bea1bed72a27b662d",
+          "prepared.f32": "f14b09e4f3316fc6d3ec4ffe5c9b43450e7cfd086a44971dcd53fd632dd7adcb",
+          "pitch.json": "c0d04ed71aa4ff9b7b791b8423f3b5a257a41079ca7ce5a7063df9f5676a242a",
+          "resampled.f32": "85549299de0365ad6bb715f9a7f7e1b3a47546b5560ae79caa1e37d10fe9ec5f"
+        },
+        "windowSHA256": [
+          "d103dd48150b22798fec2e9fc38ee451be36dcdd59e0225ec8ce0fc48741d72f"
+        ],
+        "nativeBinarySHA256": "748360c66bb9df02655754aef7f7b67947ec80a251e864a4d53aea36d190feda",
+        "featuresSHA256": "cebbd29a1949aeb3733d4f126dc61fc2cb96b1d00b419d6da8eafd057edba994"
+      },
+      "physicalIPhoneVerified": false,
+      "humanListeningVerified": false,
+      "parityPassed": true
+    }
+  ],
+  "modelSHA256": "3c4c2e8ea977d7c08793126aace4baa47028b4c1bf7cd46ae5a9c359b0216693",
+  "sourceHashes": {
+    "models.py": "769615b8dbed4775c8083881663a79c0e5ec0b662dd5f0c0a1bc3ccdd9827e99",
+    "modules.py": "b1aa77b0921468a61492fa89ed1f1212cd22fee3caa551befe44d8ab359fd2f1",
+    "attentions.py": "8820e6047353d99344fc73fbb6c69d85e4f61066fc498982cc895e9577d4519f",
+    "commons.py": "132a907eff444907861e63684c04c88ae631d03707470858f7c53f857b0cc5c8",
+    "transforms.py": "fb0d3320adf32ca0eaa44dd56e8922927f77ec3dd45c775e10c3da1704072c6a"
+  },
+  "sourceRevision": "81eed5e8f68b6bed1789f682fe78cdd324495afc",
+  "scope": "Native pack loader/retrieval/preparation feeding a controlled CPU PyTorch synthesizer; not iPhone execution",
+  "allPassed": true
+}

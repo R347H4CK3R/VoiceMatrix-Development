@@ -10,7 +10,11 @@ import CryptoKit
             let legacy = LocalSpeakerDiarization.Analysis(modelRevision:"df2625ac79a7ac6b65ad868fee6d80f320da4232",seconds:4.3,segments:segments,speakerWindows:oldWindows,selectionPolicyVersion:version)
             let migrated = try LocalSpeakerDiarization.validatedForCurrentPolicy(legacy)
             guard oldWindows[0].windows.isEmpty, migrated.selectionPolicyVersion == 3,
-                  migrated.speakerWindows[0].windows.count == 1 else {fatalError("Legacy migration failed")}
+                  migrated.speakerWindows[0].windows.count == 2,
+                  abs(migrated.speakerWindows[0].windows[0].start - 0.15) < 0.000001,
+                  abs(migrated.speakerWindows[0].windows[0].end - 4.15) < 0.000001,
+                  abs(migrated.speakerWindows[0].windows[1].start - 1.15) < 0.000001,
+                  abs(migrated.speakerWindows[0].windows[1].end - 4.15) < 0.000001 else {fatalError("Legacy migration failed")}
             let tampered = LocalSpeakerDiarization.Analysis(modelRevision:legacy.modelRevision,seconds:4.3,segments:segments,speakerWindows:migrated.speakerWindows,selectionPolicyVersion:version)
             do { _ = try LocalSpeakerDiarization.validatedForCurrentPolicy(tampered); fatalError("Tampered legacy crops accepted") }
             catch LocalSpeakerDiarization.Failure.invalidAudio {}

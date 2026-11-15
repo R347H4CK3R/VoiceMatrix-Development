@@ -1,3 +1,4 @@
+# Verify retained generated output and diagnose raw recognition rejection.
 # Recheck real voice generation after calibrated screening window change.
 name: Human speech standalone pipeline
 'on':

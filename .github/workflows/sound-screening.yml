@@ -1,3 +1,4 @@
+# Verify retained generated output and diagnose raw recognition rejection.
 name: Real sound screening calibration
 'on':
   push:

@@ -1,0 +1,47 @@
+name: Diagnose retained real-reference diarizer failure
+'on':
+  push:
+    branches: [diagnostic/real-reference-diarizer]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Read exact failed fixture without replacing retained data
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        mkdir -p diagnostic-evidence
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14160546381/zip > diagnostic-evidence/prior.zip
+        python3 - <<'PY'
+        import zipfile,json,pathlib,hashlib
+        p=pathlib.Path('diagnostic-evidence')
+        assert hashlib.sha256((p/'prior.zip').read_bytes()).hexdigest()=='ed10a0ec0ef3a292ffd0df2b6f1261217fc532b73367a720a5bd862c79cd8db9'
+        with zipfile.ZipFile(p/'prior.zip') as z:
+            b=z.read('recovery.wav');f=json.loads(z.read('fixture.json'))
+        assert hashlib.sha256(b).hexdigest()==f['sha256']
+        (p/'recovery.wav').write_bytes(b)
+        (p/'proof.json').write_text(json.dumps(dict(audioSHA256=f['sha256'])))
+        PY
+        python3 tools/bundle_diarization.py --destination "$RUNNER_TEMP/models"
+    - name: Build trace-only production adapter copy
+      run: |
+        cp VoiceMatrix/LocalSpeakerPolicy.swift probes/coreml-real-speakers/Sources/Probe/
+        python3 probes/reference-pool-recovery/instrument.py probes/coreml-real-speakers/Sources/Probe/LocalSpeakerDiarization.swift diagnostic-evidence
+        swift build --package-path probes/coreml-real-speakers -c release > diagnostic-evidence/build.log 2>&1 || { tail -100 diagnostic-evidence/build.log; exit 1; }
+    - name: Diagnose without networking or altered acceptance gates
+      run: |
+        set -o pipefail
+        sandbox-exec -p '(version 1)(allow default)(deny network*)' probes/coreml-real-speakers/.build/release/Probe "$RUNNER_TEMP/models" diagnostic-evidence/recovery.wav diagnostic-evidence/proof.json diagnostic-evidence/analysis.json 2>&1 | tee diagnostic-evidence/analysis.log
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Retained-real-reference-diarizer-diagnostic
+        path: diagnostic-evidence

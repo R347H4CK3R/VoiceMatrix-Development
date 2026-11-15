@@ -1,0 +1,44 @@
+[
+  {
+    "speaker": "group_1",
+    "knownSourceSpeaker": "A",
+    "start": 39.702,
+    "end": 47.402,
+    "decodedSeconds": 7.7
+  },
+  {
+    "speaker": "group_1",
+    "knownSourceSpeaker": "A",
+    "start": 6.07,
+    "end": 13.77,
+    "decodedSeconds": 7.7
+  },
+  {
+    "speaker": "group_1",
+    "knownSourceSpeaker": "A",
+    "start": 43.402,
+    "end": 47.402,
+    "decodedSeconds": 4.0
+  },
+  {
+    "speaker": "group_2",
+    "knownSourceSpeaker": "B",
+    "start": 19.061999999999998,
+    "end": 26.762,
+    "decodedSeconds": 7.7
+  },
+  {
+    "speaker": "group_2",
+    "knownSourceSpeaker": "B",
+    "start": 22.762,
+    "end": 26.762,
+    "decodedSeconds": 4.0
+  },
+  {
+    "speaker": "group_2",
+    "knownSourceSpeaker": "B",
+    "start": 23.762,
+    "end": 26.762,
+    "decodedSeconds": 3.0
+  }
+]

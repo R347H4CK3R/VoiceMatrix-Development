@@ -35,6 +35,18 @@ import Foundation
             }
         }
         precondition(long[0].windows.enumerated().allSatisfy { index,window in !long[0].windows.prefix(index).contains(window) })
+        let paused:[LocalSpeakerPolicy.Segment] = [.init(speaker:"A",start:0,end:2),.init(speaker:"A",start:2.3,end:4.3)]
+        let recovered = try LocalSpeakerPolicy.speakerWindows(paused,duration:5)
+        precondition(recovered[0].windows.count >= 1)
+        precondition(recovered[0].windows[0].start == 0.15 && abs(recovered[0].windows[0].end-4.15)<0.000001)
+        let legacyPause = try LocalSpeakerPolicy.speakerWindows(paused,duration:5,joinSameSpeakerPauses:false)
+        precondition(legacyPause[0].windows.isEmpty)
+        let interruption = paused + [.init(speaker:"B",start:2.05,end:2.25)]
+        let interrupted = try LocalSpeakerPolicy.speakerWindows(interruption,duration:5)
+        precondition(interrupted[0].windows.isEmpty)
+        let overlapPause:[LocalSpeakerPolicy.Segment] = [.init(speaker:"A",start:0,end:4.3),.init(speaker:"B",start:2,end:2.3)]
+        let overlapping = try LocalSpeakerPolicy.speakerWindows(overlapPause,duration:5)
+        precondition(overlapping[0].windows.isEmpty)
         print("Local speaker overlap/bounds policy passed. This is not model inference.")
     }
 }

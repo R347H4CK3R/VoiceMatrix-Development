@@ -6,7 +6,7 @@ enum LocalSpeakerPolicy {
     struct Window: Codable, Sendable, Equatable { let start: Double; let end: Double; var seconds: Double { end - start } }
     struct Speaker: Codable, Sendable, Equatable { let speaker: String; let windows: [Window] }
     enum Failure: Error { case invalidEvidence, resourceBound }
-    static func speakerWindows(_ segments: [Segment], duration: Double, includeFallbacks: Bool = true) throws -> [Speaker] {
+    static func speakerWindows(_ segments: [Segment], duration: Double, includeFallbacks: Bool = true, joinSameSpeakerPauses: Bool = true) throws -> [Speaker] {
         guard duration.isFinite, (3...1800).contains(duration), segments.count <= 10_000 else { throw Failure.resourceBound }
         guard segments.allSatisfy({ $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.start < duration && $0.end > $0.start && $0.end <= duration + 0.05 && $0.speaker.range(of: "^[A-Za-z0-9_-]{1,40}$", options: .regularExpression) != nil }) else { throw Failure.invalidEvidence }
         let identities = Set(segments.map(\.speaker)).sorted()
@@ -36,7 +36,26 @@ enum LocalSpeakerPolicy {
         var speakers: [Speaker] = []
         for speaker in identities {
             var clean: [Window] = []
-            for span in spans[speaker] ?? [] {
+            let original = spans[speaker] ?? []
+            var selected: [Window] = []
+            var position = 0
+            while position < original.count {
+                let first = original[position]
+                if joinSameSpeakerPauses, position + 1 < original.count {
+                    let second = original[position + 1]
+                    let gap = second.start - first.end
+                    if first.seconds >= 1.5, second.seconds >= 1.5, gap >= 0, gap <= 0.6,
+                       second.end - first.start <= 12,
+                       !segments.contains(where: { $0.speaker != speaker && $0.start < second.start && $0.end > first.end }) {
+                        selected.append(Window(start:first.start,end:second.end))
+                        position += 2
+                        continue
+                    }
+                }
+                selected.append(first)
+                position += 1
+            }
+            for span in selected {
                 let trimmed = Window(start: span.start + 0.15, end: span.end - 0.15)
                 if trimmed.seconds >= 3 { clean.append(trimmed) }
             }

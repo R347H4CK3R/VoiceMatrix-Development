@@ -288,8 +288,7 @@ import CryptoKit
                 if let source {
                     let access = source.startAccessingSecurityScopedResource()
                     defer { if access { source.stopAccessingSecurityScopedResource() } }
-                    let ext = source.pathExtension.lowercased()
-                    guard ["mp4", "mov", "m4v", "wav", "m4a", "aac", "caf"].contains(ext) else { throw LocalError.source }
+                    let ext = try LocalMediaImportPolicy.fileExtension(source)
                     let destination = jobFolder.appendingPathComponent("source." + ext)
                     try update("Copying source", "Keeping a private source copy for recovery.")
                     let copy = Task.detached { () throws -> String in

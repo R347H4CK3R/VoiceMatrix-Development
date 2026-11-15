@@ -1,5 +1,5 @@
 """Verify a clean, complete source-vendored FluidAudio package, not a patched checkout."""
-import hashlib,json,pathlib,re,stat
+import hashlib,json,pathlib,re,stat,os,subprocess
 REVISION='ee78635d23d52379117554ba72358b65a0612447'
 TREE='2234ed3bb9af2f02d187dbd4c35e51f9eef18f44'
 MODIFIED={
@@ -30,6 +30,24 @@ def check_manifest(m):
    raw+=mode.encode()+b' '+name.encode()+b'\0'+bytes.fromhex(oid)
   return git_hash('tree',raw)
  if treehash(tree)!=TREE:raise ValueError('Upstream tree proof differs')
+def verify_modes(root,files,platform=None):
+ root=pathlib.Path(root)
+ if (os.name if platform is None else platform)=='nt':
+  # NTFS does not expose POSIX executable bits. Require the exact Git index modes,
+  # not a synthetic chmod/stat result; content hashes are independently checked.
+  try: raw=subprocess.check_output(['git','-C',str(root),'ls-files','--stage','-z','--','Vendors/FluidAudio'])
+  except subprocess.CalledProcessError as e:raise ValueError('Cannot verify vendor Git modes') from e
+  modes={}
+  for row in raw.split(b'\0'):
+   if not row:continue
+   header,name=row.split(b'\t');mode,oid,stage=header.decode().split();name=name.decode()
+   prefix='Vendors/FluidAudio/'
+   if not name.startswith(prefix) or stage!='0' or name[len(prefix):] in modes:raise ValueError('Ambiguous vendor Git index')
+   modes[name[len(prefix):]]=mode
+  if modes!={name:info['mode'] for name,info in files.items()}:raise ValueError('Vendor Git modes differ')
+ else:
+  for name,info in files.items():
+   if bool((root/'Vendors/FluidAudio'/name).stat().st_mode & stat.S_IXUSR)!=(info['mode']=='100755'):raise ValueError('Vendor executable mode differs')
 def verify(root):
  root=pathlib.Path(root);base=root/'Vendors/FluidAudio';manifest=root/'Vendors/FluidAudio.inventory.json'
  if base.is_symlink() or manifest.is_symlink():raise ValueError('Symlinked vendor')
@@ -42,8 +60,8 @@ def verify(root):
   data=p.read_bytes()
   if sha(data)!=info['sha256']:raise ValueError('Changed vendor source: '+name)
   if name not in MODIFIED and info['upstreamBlob'] is not None and git_hash('blob',data)!=info['upstreamBlob']:raise ValueError('Upstream bytes differ: '+name)
-  if bool(p.stat().st_mode & stat.S_IXUSR)!=(info['mode']=='100755'):raise ValueError('Vendor executable mode differs')
  if seen!=set(m['files']):raise ValueError('Missing vendor source')
+ verify_modes(root,m['files'])
  return dict(schemaVersion=1,upstream=m['upstream'],revision=REVISION,upstreamTree=TREE,inventorySHA256=sha(raw),fileCount=len(seen),modified=MODIFIED,added=sorted(ADDED))
 def notices(root):
  root=pathlib.Path(root);verify(root);base=root/'Vendors/FluidAudio'

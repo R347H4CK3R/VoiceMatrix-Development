@@ -1,2 +1,6 @@
 # Exact bytes are pinned by the bundled on-device integrity verifier.
 tools/asr-resource-lock.json text eol=lf
+# Vendored sources and reviewed patches must retain upstream exact bytes on Windows too.
+Vendors/FluidAudio/** -text
+Vendors/FluidAudio.inventory.json -text
+probes/diarizer-eof/fluid-eof.patch -text

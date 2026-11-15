@@ -1,0 +1,20 @@
+name: Exact vendor checkout portability
+on:
+  push:
+    branches: [fix/vendor-checkout-portability]
+permissions:
+  contents: read
+jobs:
+  checkout:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - run: python -m unittest tests.test_vendor_checkout_portability tests.test_vendored_fluid -v

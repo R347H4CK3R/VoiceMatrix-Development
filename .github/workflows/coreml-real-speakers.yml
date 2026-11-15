@@ -1,5 +1,10 @@
 name: Production CoreML real speech grouping
 on:
+  push:
+    branches: [codex/rvc-conversion-controls]
+    paths:
+      - '.github/workflows/coreml-real-speakers.yml'
+      - 'probes/coreml-real-speakers/**'
   workflow_dispatch:
 permissions:
   contents: read

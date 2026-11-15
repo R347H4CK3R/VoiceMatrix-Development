@@ -28,7 +28,7 @@ jobs:
         run: |
           set -o pipefail
           swiftc -parse-as-library VoiceMatrix/LocalStudioEvidence.swift VoiceMatrix/LocalVideoAudio.swift probes/native-reference-audio/Checks.swift -o reference-audio-checks
-          ./reference-audio-checks reference-audio-fixtures | tee reference-audio-results.log
+          ./reference-audio-checks reference-audio-fixtures 2>&1 | tee reference-audio-results.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -140,8 +140,19 @@ import XCTest
             let bottom = app.tabBars.firstMatch.frame.minY - 160
             if element.exists && element.isHittable &&
                 element.frame.minY > top && element.frame.maxY < bottom { return }
-            if element.exists && element.frame.minY <= top { app.swipeDown() }
-            else { app.swipeUp() }
+            guard element.exists else { app.swipeUp(); continue }
+            let viewport = CGRect(x: app.frame.minX, y: top,
+                                  width: app.frame.width, height: bottom - top)
+            let offset = UIRevealPolicy.offset(target: element.frame, viewport: viewport)
+            print("Reveal \(element.identifier): target=\(element.frame), viewport=\(viewport), offset=\(offset)")
+            // The trailing form gutter avoids scrolling inside the TextEditor.
+            // A press-and-drag has no full-screen swipe inertia.
+            let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+            let start = origin.withOffset(CGVector(dx: app.frame.width - 12,
+                                                  dy: viewport.midY - app.frame.minY))
+            let end = origin.withOffset(CGVector(dx: app.frame.width - 12,
+                                                dy: viewport.midY - app.frame.minY - offset))
+            start.press(forDuration: 0.05, thenDragTo: end)
         }
         XCTAssertTrue(element.exists && element.isHittable)
         XCTAssertGreaterThan(element.frame.minY, app.navigationBars.firstMatch.frame.maxY + 16)

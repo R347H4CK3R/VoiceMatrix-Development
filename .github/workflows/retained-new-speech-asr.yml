@@ -1,0 +1,57 @@
+name: Inspect retained fresh-speech verification failure
+'on':
+  push:
+    branches: [diagnostic/retained-new-speech-asr]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+    - uses: actions/checkout@v4
+    - name: Recover exact failed output without generating or altering audio
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        mkdir -p retained-evidence
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14162305892/zip > retained-evidence/prior.zip
+        python3 - <<'PY'
+        import hashlib,zipfile,pathlib,json
+        p=pathlib.Path('retained-evidence')
+        assert hashlib.sha256((p/'prior.zip').read_bytes()).hexdigest()=='b3623b6847223e0c0704aa60a896b746d733b141152478534200fcfeb19e6779'
+        with zipfile.ZipFile(p/'prior.zip') as z:
+            b=z.read('isolated-work/new-speech.wav')
+        assert hashlib.sha256(b).hexdigest()=='fe750049af1dc3f52ca50d3d9f6b3411a9154417a7e53b1df26fb687a47e541a'
+        (p/'new-speech.wav').write_bytes(b)
+        PY
+        python3 tools/bundle_asr.py --destination "$RUNNER_TEMP/asr"
+    - name: Build exact production recognizer with proved diagnostic dependency
+      run: |
+        for source in OnDeviceTranscription BundledASRPolicy BundledASRAssets LocalStudioEvidence; do
+          cp "VoiceMatrix/$source.swift" probes/retained-new-speech-asr/Sources/Probe/
+        done
+        swift package --package-path probes/retained-new-speech-asr resolve > retained-evidence/resolve.log 2>&1
+        cp probes/retained-new-speech-asr/Package.resolved retained-evidence/Package.resolved
+        python3 probes/diarizer-eof/apply.py probes/retained-new-speech-asr/.build/checkouts/FluidAudio retained-evidence
+        swift build --package-path probes/retained-new-speech-asr -c release > retained-evidence/build.log 2>&1 || { tail -100 retained-evidence/build.log; exit 1; }
+        cmp retained-evidence/Package.resolved probes/retained-new-speech-asr/Package.resolved
+        python3 - <<'PY'
+        import pathlib,hashlib,json
+        p=pathlib.Path('probes/retained-new-speech-asr/.build/checkouts/FluidAudio')
+        m=json.loads(pathlib.Path('probes/diarizer-eof/manifest.json').read_text())
+        for n,h in m['files'].items(): assert hashlib.sha256((p/n).read_bytes()).hexdigest()==h['after']
+        PY
+    - name: Save actual recognition before unchanged acceptance guard
+      run: |
+        set -o pipefail
+        sandbox-exec -p '(version 1)(allow default)(deny network*)' probes/retained-new-speech-asr/.build/release/Probe retained-evidence/new-speech.wav "$RUNNER_TEMP/asr" retained-evidence/recognition.json 2>&1 | tee retained-evidence/recognition.log
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Retained-new-speech-verification-diagnostic
+        retention-days: 14
+        path: |
+          retained-evidence/*
+          !retained-evidence/prior.zip

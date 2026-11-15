@@ -4,9 +4,13 @@ MODEL_HASHES={'tiny.en.bin':'921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75
 def digest(path):
  with pathlib.Path(path).open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
 def source_proof(resolved):
+ try: from tools.vendored_fluid import verify,check_resolved
+ except ModuleNotFoundError: from vendored_fluid import verify,check_resolved
+ check_resolved(resolved)
+ vendored=verify(pathlib.Path(__file__).resolve().parents[1])
  paths=[pathlib.Path('probes/native-conversion/RuntimeHost.swift')]+list(pathlib.Path('VoiceMatrix').glob('*.swift'))+list(pathlib.Path('Assets.xcassets').rglob('*'))+[pathlib.Path('project.yml'),pathlib.Path('VoiceMatrix/LaptopSettings.json'),pathlib.Path('tools/f5-listening-lock.json'),pathlib.Path('tools/no-stock-resource-lock.json')]
  files={p.as_posix():digest(p) for p in sorted(set(paths)) if p.is_file()}
- record=dict(sourceCommit=os.environ['GITHUB_SHA'],files=files,dependencyResolvedSHA256=digest(resolved))
+ record=dict(sourceCommit=os.environ['GITHUB_SHA'],files=files,dependencyResolvedSHA256=digest(resolved),vendoredDependencies={'FluidAudio':vendored})
  record['inferenceSourceFingerprint']=hashlib.sha256(json.dumps(record,sort_keys=True,separators=(',',':')).encode()).hexdigest();return record
 
 def words(text):return re.findall('[a-z0-9]+',text.lower())

@@ -43,6 +43,8 @@ class CharacterPackageTests(unittest.TestCase):
         license_bytes=b'fixture dependency license'
         self.entries['F5TTS/DependencyNotices/Package.resolved']=resolved
         self.entries['F5TTS/DependencyNotices/speech-swift/LICENSE']=license_bytes
+        from tools.vendored_fluid import notices
+        self.entries.update({'F5TTS/DependencyNotices/'+name:data for name,data in notices(ROOT).items()})
         inventory={name.removeprefix('F5TTS/DependencyNotices/'):{'size':len(data),'sha256':hashlib.sha256(data).hexdigest()}
                    for name,data in self.entries.items() if name.startswith('F5TTS/DependencyNotices/')}
         self.dependency_proof={'schemaVersion':1,'files':inventory}
@@ -188,8 +190,8 @@ class CharacterPackageTests(unittest.TestCase):
         resolved=self.root/'Package.resolved';resolved.write_text(json.dumps({'pins':[{'identity':'example','state':{'revision':revision}}]}))
         resources=self.root/'resources'
         result=self.module.collect_dependency_notices(checkouts,resolved,resources)
-        self.assertEqual(result['dependencies'],1)
-        self.assertEqual(result['noticeFiles'],2)
+        self.assertEqual(result['dependencies'],2)
+        self.assertEqual(result['noticeFiles'],2+len(__import__('tools.vendored_fluid',fromlist=['notices']).notices(ROOT)))
         inventory=json.loads((resources/'F5TTS/dependency-notices.json').read_text())['files']
         self.assertIn('example/LICENSES/MIT.txt',inventory)
         (source/'LICENSE').write_text('modified license')
@@ -233,5 +235,19 @@ class CharacterPackageTests(unittest.TestCase):
         self.entries['mlx-swift_Cmlx.bundle/default.metallib']=b'not-a-metal-library'*100
         with self.assertRaises(ValueError): self.module.inspect_ipa(self.archive(),self.files,self.base_files,self.dependency_proof)
 
-if __name__=='__main__':unittest.main()
 
+
+
+    def test_matching_external_inventory_cannot_override_vendored_license(self):
+        name='fluid-audio-vendored/LICENSE'; data=b'forged vendored license'
+        self.entries['F5TTS/DependencyNotices/'+name]=data
+        self.dependency_proof['files'][name]={'size':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+        self.entries['F5TTS/dependency-notices.json']=json.dumps(self.dependency_proof).encode()
+        with self.assertRaises(ValueError): self.module.inspect_ipa(self.archive(),self.files,self.base_files,self.dependency_proof)
+
+    def test_matching_external_inventory_cannot_reintroduce_remote_fluid(self):
+        name='Package.resolved'; resolved=json.loads(self.entries['F5TTS/DependencyNotices/'+name]);resolved['pins'].append({'identity':'fluidaudio','state':{'revision':'0'*40}})
+        data=json.dumps(resolved).encode();self.entries['F5TTS/DependencyNotices/'+name]=data
+        self.dependency_proof['files'][name]={'size':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+        self.entries['F5TTS/dependency-notices.json']=json.dumps(self.dependency_proof).encode()
+        with self.assertRaises(ValueError): self.module.inspect_ipa(self.archive(),self.files,self.base_files,self.dependency_proof)

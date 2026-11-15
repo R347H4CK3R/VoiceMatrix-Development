@@ -1,0 +1,132 @@
+name: Vendored source bounded EOF integration
+permissions:
+  contents: read
+  actions: read
+jobs:
+  actual-local-pipeline:
+    runs-on: macos-26
+    timeout-minutes: 55
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/cache@v4
+      with:
+        path: character-cache
+        key: character-assets-685e8816-716d2f41
+    - name: Validate source and prepare pinned shared assets
+      run: 'python3 -m unittest tests.test_real_reference_pool_diagnostic tests.test_local_pipeline_diagnostic
+        tests.test_local_video_studio -v
+
+        python3 tools/bundle_asr.py
+
+        python3 tools/bundle_diarization.py
+
+        python3 tools/character_package.py prepare --cache character-cache --resources
+        character-resources > assets.json
+
+        python3 - <<''PY''
+
+        from pathlib import Path
+
+        import shutil
+
+        target=Path(''VoiceMatrix/Resources/F5TTS'')
+
+        if target.is_symlink(): raise SystemExit(''Unexpected link'')
+
+        if target.exists(): shutil.rmtree(target)
+
+        shutil.copytree(''character-resources/F5TTS'',target)
+
+        PY
+
+        '
+    - name: Recover complete pinned human source
+      run: 'brew install ffmpeg
+
+        mkdir -p local-evidence
+
+        python3 probes/full-retained-speaker-route/prepare.py local-evidence/first
+
+        python3 probes/second-complete-speaker-route/prepare.py local-evidence/second
+
+        python3 tools/create_diagnostic_collection.py
+
+        '
+    - name: Build clean source-vendored dependency and validate native boundary tests
+      run: 'test "$(uname -m)" = arm64
+
+        brew install xcodegen
+
+        python3 tools/vendored_fluid.py > local-evidence/vendor-before.json
+
+        swift test --package-path Vendors/FluidAudio --scratch-path vendor-tests --filter
+        EOFTimelineTests > local-evidence/eof-tests.log 2>&1 || { tail -100 local-evidence/eof-tests.log;
+        exit 1; }
+
+        python3 tools/vendored_fluid.py > local-evidence/vendor-after-tests.json
+
+        cmp local-evidence/vendor-before.json local-evidence/vendor-after-tests.json
+
+        mkdir -p VoiceMatrix/Resources/{Phonon,OpenVoice,F5TTS}
+
+        xcodegen generate
+
+        graph=VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+        xcodebuild -resolvePackageDependencies -skipPackagePluginValidation -project
+        VoiceMatrix.xcodeproj -scheme LocalStudioDiagnostic -derivedDataPath local-build
+        > local-evidence/resolve.log 2>&1 || { tail -100 local-evidence/resolve.log;
+        exit 1; }
+
+        cp "$graph" local-evidence/Package.resolved
+
+        python3 tools/character_package.py notices --checkouts local-build/SourcePackages/checkouts
+        --resolved "$graph" --resources VoiceMatrix/Resources > local-evidence/dependency-notices.json
+
+        xcodebuild -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile
+        -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme LocalStudioDiagnostic
+        -configuration Release -derivedDataPath local-build CODE_SIGNING_ALLOWED=NO
+        ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build > local-evidence/build.log 2>&1 ||
+        { tail -100 local-evidence/build.log; exit 1; }
+
+        cmp local-evidence/Package.resolved "$graph"
+
+        python3 tools/vendored_fluid.py > local-evidence/vendor-after-build.json
+
+        cmp local-evidence/vendor-before.json local-evidence/vendor-after-build.json
+
+        python3 tools/character_evidence.py source "$graph" local-evidence/source-proof.json
+
+        '
+    - name: Run both complete recordings through unchanged coordinator offline
+      run: "for reader in first second; do\n sandbox-exec -p '(version 1)(allow default)(deny\
+        \ network*)' local-build/Build/Products/Release/LocalStudioDiagnostic VoiceMatrix/Resources\
+        \ local-evidence/$reader/complete-source.wav tests/fixtures/DiagnosticVoices\
+        \ local-evidence/$reader/work local-evidence/$reader/pipeline-evidence.json\
+        \ \"$GITHUB_SHA\" audio local-evidence/$reader/transcript.txt\ndone\n"
+    - name: Compile iPhone ARM64 with same vendored source
+      run: 'xcodebuild -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile
+        -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix
+        -configuration Release -sdk iphoneos -destination ''generic/platform=iOS''
+        -derivedDataPath local-build CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
+        build > local-evidence/iphone-build.log 2>&1 || { tail -100 local-evidence/iphone-build.log;
+        exit 1; }
+
+        cmp local-evidence/Package.resolved VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+        python3 tools/vendored_fluid.py > local-evidence/vendor-after-iphone.json
+
+        cmp local-evidence/vendor-before.json local-evidence/vendor-after-iphone.json
+
+        '
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Vendored-EOF-integration-evidence
+        path: local-evidence/**
+        if-no-files-found: error
+        retention-days: 14
+'on':
+  push:
+    branches:
+    - integration/vendored-fluid-eof

@@ -1,0 +1,11 @@
+VoiceMatrix modified FluidAudio source
+
+Upstream: https://github.com/FluidInference/FluidAudio
+Revision: ee78635d23d52379117554ba72358b65a0612447
+License: Apache-2.0; original LICENSE and third-party notices preserved.
+
+Modifications: OfflineReconstruction.swift and OfflineDiarizerManager.swift
+exclude model padding beyond the actual source sample count during offline
+speaker timeline reconstruction. EOFTimelineTests.swift adds boundary tests.
+No ASR, model weights, voice identity, or app acceptance thresholds are changed.
+This source integration is under validation and is not in published build 8.

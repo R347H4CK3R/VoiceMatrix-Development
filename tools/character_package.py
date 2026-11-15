@@ -221,6 +221,11 @@ def collect_dependency_notices(checkouts, resolved, resources):
             count += 1
         if count == 0:
             raise ValueError('Dependency has no captured license or notice: '+identity)
+    try: from tools.vendored_fluid import notices,check_resolved
+    except ModuleNotFoundError: from vendored_fluid import notices,check_resolved
+    check_resolved(resolved)
+    for name,data in notices(Path(__file__).resolve().parents[1]).items():
+        destination=target/name;destination.parent.mkdir(parents=True,exist_ok=True);destination.write_bytes(data)
     inventory = {}
     for path in sorted(target.rglob('*')):
         if path.is_file():
@@ -229,7 +234,7 @@ def collect_dependency_notices(checkouts, resolved, resources):
             inventory[path.relative_to(target).as_posix()]={'size':path.stat().st_size,'sha256':digest}
     proof={'schemaVersion':1,'files':inventory}
     (target.parent/'dependency-notices.json').write_text(json.dumps(proof,indent=2)+'\n')
-    return {'dependencies':len(pins),'noticeFiles':len(inventory)-1,'proof':proof}
+    return {'dependencies':len(pins)+1,'noticeFiles':len(inventory)-1,'proof':proof}
 
 
 def check_dependency_notices(archive, expected):
@@ -243,8 +248,15 @@ def check_dependency_notices(archive, expected):
         if path.is_absolute() or '..' in path.parts or '\\' in name:
             raise ValueError('Unsafe dependency notice path')
         verify_entry(archive,PREFIX+'F5TTS/DependencyNotices/'+name,expected)
+    try: from tools.vendored_fluid import notices,check_resolved
+    except ModuleNotFoundError: from vendored_fluid import notices,check_resolved
+    for name,data in notices(Path(__file__).resolve().parents[1]).items():
+        if archive.read(PREFIX+'F5TTS/DependencyNotices/'+name)!=data:
+            raise ValueError('Vendored source proof or license differs')
     resolved=json_entry(archive,PREFIX+'F5TTS/DependencyNotices/Package.resolved')
     pins=resolved.get('pins',[])
+    if any(pin.get('identity','').casefold()=='fluidaudio' for pin in pins):
+        raise ValueError('Remote FluidAudio cannot substitute the verified local dependency')
     runtime=next((pin for pin in pins if pin.get('identity')=='speech-swift'),None)
     if runtime is None or runtime.get('state',{}).get('revision') != RUNTIME_REVISION:
         raise ValueError('Wrong resolved speech runtime')

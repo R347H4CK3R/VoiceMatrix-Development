@@ -1,0 +1,146 @@
+name: Exact second-reader reference fresh-process replay
+'on':
+  push:
+    branches:
+    - diagnostic/two-reader-replay
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnostic:
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install native fixture test dependencies
+      run: python3 -m pip install -r tests/requirements-native.txt
+    - name: Recover exact published-build frozen graph and retained licensed sources
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: "mkdir -p frozen local-evidence\n gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14171746105/zip\
+        \ > frozen.zip\n echo '42472557ab8e854fcfd8e3f858da8a7fe06f1fa5d2e8a4962d7e34cd8ed446d5\
+        \  frozen.zip' | shasum -a 256 -c -\n python3 - <<'PYCODE'\nimport zipfile,pathlib\n\
+        with zipfile.ZipFile('frozen.zip') as z:\n assert z.namelist()==['Package.resolved']\n\
+        \ pathlib.Path('frozen/Package.resolved').write_bytes(z.read('Package.resolved'))\n\
+        PYCODE\n gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14177206631/zip\
+        \ > retained.zip\n echo '1c9c3c29e36a23e7d62bc58a0afcfd8ef66c62c6bc7ba1a087114151be85758f\
+        \  retained.zip' | shasum -a 256 -c -\n"
+    - uses: actions/cache@v4
+      with:
+        path: character-cache
+        key: character-assets-685e8816-716d2f41
+    - name: Validate source and prepare pinned shared assets
+      run: 'python3 -m unittest tests.test_real_reference_pool_diagnostic tests.test_local_pipeline_diagnostic
+        tests.test_local_video_studio -v
+
+        python3 tools/bundle_asr.py
+
+        python3 tools/bundle_diarization.py
+
+        python3 tools/character_package.py prepare --cache character-cache --resources
+        character-resources > assets.json
+
+        python3 - <<''PY''
+
+        from pathlib import Path
+
+        import shutil
+
+        target=Path(''VoiceMatrix/Resources/F5TTS'')
+
+        if target.is_symlink(): raise SystemExit(''Unexpected link'')
+
+        if target.exists(): shutil.rmtree(target)
+
+        shutil.copytree(''character-resources/F5TTS'',target)
+
+        PY
+
+        '
+    - name: Recover exact failed reference and transcript
+      run: 'python3 probes/two-reader-replay/prepare.py retained.zip
+
+        python3 tools/create_diagnostic_collection.py
+
+        shasum -a 256 probes/native-local-studio/Diagnostic.swift probes/two-reader-replay/Diagnostic.swift
+        > local-evidence/harness-sha256.txt
+
+        cp probes/two-reader-replay/Diagnostic.swift probes/native-local-studio/Diagnostic.swift
+
+        python3 probes/two-complete-readers/staged_changes.py
+
+        git diff -- probes/native-local-studio/Diagnostic.swift > local-evidence/diagnostic-only.diff
+
+        '
+    - name: Build clean source-vendored dependency and validate native boundary tests
+      run: 'test "$(uname -m)" = arm64
+
+        brew install xcodegen
+
+        python3 tools/vendored_fluid.py > local-evidence/vendor-before.json
+
+        swift test --package-path Vendors/FluidAudio --scratch-path vendor-tests --filter
+        EOFTimelineTests > local-evidence/eof-tests.log 2>&1 || { tail -100 local-evidence/eof-tests.log;
+        exit 1; }
+
+        python3 tools/vendored_fluid.py > local-evidence/vendor-after-tests.json
+
+        cmp local-evidence/vendor-before.json local-evidence/vendor-after-tests.json
+
+        mkdir -p VoiceMatrix/Resources/{Phonon,OpenVoice,F5TTS}
+
+        xcodegen generate
+
+        graph=VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+        mkdir -p "$(dirname "$graph")"
+
+        cp frozen/Package.resolved "$graph"
+
+        xcodebuild -resolvePackageDependencies -disableAutomaticPackageResolution
+        -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation -project
+        VoiceMatrix.xcodeproj -scheme LocalStudioDiagnostic -derivedDataPath local-build
+        > local-evidence/resolve.log 2>&1 || { tail -100 local-evidence/resolve.log;
+        exit 1; }
+
+        cmp frozen/Package.resolved "$graph"
+
+        cp "$graph" local-evidence/Package.resolved
+
+        python3 tools/character_package.py notices --checkouts local-build/SourcePackages/checkouts
+        --resolved "$graph" --resources VoiceMatrix/Resources > local-evidence/dependency-notices.json
+
+        xcodebuild -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile
+        -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme LocalStudioDiagnostic
+        -configuration Release -derivedDataPath local-build CODE_SIGNING_ALLOWED=NO
+        ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build > local-evidence/build.log 2>&1 ||
+        { tail -100 local-evidence/build.log; exit 1; }
+
+        cmp local-evidence/Package.resolved "$graph"
+
+        python3 tools/vendored_fluid.py > local-evidence/vendor-after-build.json
+
+        cmp local-evidence/vendor-before.json local-evidence/vendor-after-build.json
+
+        python3 tools/character_evidence.py source "$graph" local-evidence/source-proof.json
+
+        '
+    - name: Record one exact-input fresh-process attempt with networking denied
+      run: "sandbox-exec -p '(version 1)(allow default)(deny network*)' local-build/Build/Products/Release/LocalStudioDiagnostic\
+        \ VoiceMatrix/Resources local-evidence \"$GITHUB_SHA\"\npython3 - <<'PYCODE'\n\
+        import pathlib,json,hashlib\np=pathlib.Path('local-evidence');a=json.loads((p/'seed-attempts.json').read_text());assert\
+        \ len(a)==1 and a[0]['seed']==0\na=a[0]\nfor key,name in [('outputSHA256','seed-0.wav'),('rawOutputSHA256','seed-0-raw.wav')]:\n\
+        \ if a.get(key):assert hashlib.sha256((p/name).read_bytes()).hexdigest()==a[key]\n\
+        if a['accepted']:assert a['wordErrorRate']<=.1 and a['evidence']['inputSHA256']==a['outputSHA256']\n\
+        print('Replay evidence recorded; job success does not imply speech acceptance')\n\
+        PYCODE\n"
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Exact-second-reader-replay-evidence
+        path: local-evidence/**
+        if-no-files-found: error
+        retention-days: 14

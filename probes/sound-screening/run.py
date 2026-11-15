@@ -1,3 +1,4 @@
+# Recheck bounded classifier timestamp rounding on the short human recording.
 """Compare window lengths at fixed 0.5-second hop; do not alter production source."""
 import json,pathlib,subprocess,sys
 root=pathlib.Path(sys.argv[1]);source=pathlib.Path('VoiceMatrix/LocalSoundQuality.swift').read_text()

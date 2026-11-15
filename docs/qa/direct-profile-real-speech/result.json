@@ -1,0 +1,14 @@
+{
+  "chunks" : [
+    "This is a separate test sentence."
+  ],
+  "engine" : "F5TTS_v1_Base",
+  "libraryRoundtripPassed" : true,
+  "neuralInferenceRun" : false,
+  "physicalIPhoneVerified" : false,
+  "plannedText" : "This is a separate test sentence.",
+  "referenceSHA256" : "a1e5ff2119d606f558bf584dc8fc8e335f1d13ca2f4efd305611f498bf950074",
+  "referenceText" : "ONLY FOR A MINUTE OR SO",
+  "seconds" : 1.98,
+  "trainedModel" : false
+}

@@ -7,13 +7,17 @@ import Foundation
   let package=root.appendingPathComponent("package")
   let profile=try LocalVoiceProfilePackage.write(wave:wave,name:"  My voice  ",transcript:"The exact spoken words.",permissionConfirmed:true,directory:package,digest:{_ in digest})
   precondition(profile.name=="My voice" && profile.referenceText=="The exact spoken words." && !profile.trainedModel)
+  let planned=try F5SpeechChunks.plan(text:"Hello there.",referenceText:profile.referenceText,referenceSeconds:profile.seconds)
+  precondition(planned.joined(separator:" ")=="Hello there.")
+  try F5SpeechChunks.validateReference(text:String(repeating:"x",count:512),seconds:1)
+  try F5SpeechChunks.validateReference(text:String(repeating:"語",count:170),seconds:1)
   let manifest=try JSONDecoder().decode(LocalVoiceProfilePackage.Profile.self,from:Data(contentsOf:package.appendingPathComponent(profile.id+"/manifest.json")))
   precondition(manifest.referenceSHA256==digest && manifest.engine=="F5TTS_v1_Base")
   let savedWave=try Data(contentsOf:package.appendingPathComponent(profile.id+"/reference.wav"))
   precondition(savedWave == wave)
   let collection=try JSONSerialization.jsonObject(with:Data(contentsOf:package.appendingPathComponent("collection.json"))) as! [String:Any]
   precondition((collection["voices"] as! [[String:String]])[0]["id"]==profile.id)
-  for (name,text,permission) in [("", "words",true),("Name","",true),("Name","words",false),(String(repeating:"x",count:81),"words",true),("Name",String(repeating:"x",count:2001),true)] {
+  for (name,text,permission) in [("", "words",true),("Name","",true),("Name","words",false),(String(repeating:"x",count:81),"words",true),("Name",String(repeating:"x",count:513),true),("Name",String(repeating:"語",count:180),true),("Name",String(repeating:"x",count:2001),true)] {
    let target=root.appendingPathComponent(UUID().uuidString)
    do {_=try LocalVoiceProfilePackage.write(wave:wave,name:name,transcript:text,permissionConfirmed:permission,directory:target,digest:{_ in digest});fatalError("invalid metadata accepted")} catch {}
    precondition(!FileManager.default.fileExists(atPath:target.path))

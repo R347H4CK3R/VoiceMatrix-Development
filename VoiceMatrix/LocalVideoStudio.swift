@@ -456,6 +456,11 @@ import CryptoKit
                               transcriptionEvidence.inputSHA256 == Self.hash(clip.wave) else { throw LocalError.candidate }
                         try JSONEncoder().encode(transcriptionEvidence).write(to: jobFolder.appendingPathComponent("transcription-evidence-" + attempt + ".json"), options: .atomic)
                         try Data(transcript.utf8).write(to: jobFolder.appendingPathComponent("transcript-" + attempt + ".txt"), options: .atomic)
+                        do {try F5SpeechChunks.validateReference(text:transcript,seconds:clip.seconds)}
+                        catch is F5ChunkError {
+                            try update("Candidate needs review", "The recognized reference does not fit the speech engine. Transcript evidence was kept; trying another candidate.")
+                            continue
+                        }
                         try check(); previews += 1
                         try update("Generating preview", "Loading the bundled F5 engine and generating preview \(previews) of at most 3 for speaker \(speaker.speaker). No laptop or server is used.")
                         let preview = jobFolder.appendingPathComponent("preview-" + attempt + ".wav")

@@ -22,6 +22,18 @@ import CryptoKit
   _=try LocalVoiceProfilePackage.write(wave:nextWave,name:"Duplicate",transcript:"New words",permissionConfirmed:true,directory:duplicateFolder,digest:hash)
   do {_=try await store.importCollection(at:duplicateFolder);fatalError("duplicate reference admitted")} catch {}
   var unchanged=try Data(contentsOf:index);precondition(unchanged==before)
+  let manifestURL=newFolder.appendingPathComponent(new.id+"/manifest.json")
+  let originalManifest=try Data(contentsOf:manifestURL)
+  var changed=try JSONSerialization.jsonObject(with:originalManifest) as! [String:Any]
+  changed["referenceText"]="Different words for the same audio"
+  try JSONSerialization.data(withJSONObject:changed).write(to:manifestURL)
+  do {_=try await store.importCollection(at:newFolder);fatalError("changed transcript replaced saved reference")} catch {}
+  unchanged=try Data(contentsOf:index);precondition(unchanged==before)
+  try originalManifest.write(to:manifestURL)
+  let resolved=try await store.profiles().first{$0.id==new.id}!
+  precondition(resolved.referenceText=="New words" && resolved.engine=="F5TTS_v1_Base")
+  let planned=try F5SpeechChunks.plan(text:"A new sentence.",referenceText:resolved.referenceText,referenceSeconds:resolved.seconds)
+  precondition(planned.joined(separator:" ")=="A new sentence.")
   let broken=newFolder.appendingPathComponent(new.id+"/reference.wav")
   try wave.write(to:broken)
   do {_=try await store.importCollection(at:newFolder);fatalError("tampered profile admitted")} catch {}

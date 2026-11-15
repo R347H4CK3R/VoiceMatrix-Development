@@ -10,7 +10,7 @@ class DirectVoiceProfileTests(unittest.TestCase):
     audio.writeframes(b''.join(struct.pack('<h',int(4000*math.sin(i*2*math.pi*220/24000))) for i in range(24000)))
    digest=hashlib.sha256(source.read_bytes()).hexdigest()
    binary=root/'checks'
-   subprocess.run(['swiftc',str(ROOT/'VoiceMatrix/LocalVoiceProfilePackage.swift'),str(ROOT/'tests/native/LocalVoiceProfileChecks.swift'),'-o',str(binary)],check=True,timeout=60)
+   subprocess.run(['swiftc',str(ROOT/'VoiceMatrix/F5SpeechChunks.swift'),str(ROOT/'VoiceMatrix/LocalVoiceProfilePackage.swift'),str(ROOT/'tests/native/LocalVoiceProfileChecks.swift'),'-o',str(binary)],check=True,timeout=60)
    subprocess.run([str(binary),str(root),digest],check=True,timeout=30)
    collection=json.loads((root/'package/collection.json').read_text())
    self.assertEqual(collection['schemaVersion'],1)
@@ -36,7 +36,7 @@ class DirectVoiceProfileTests(unittest.TestCase):
     '-emit-module-path',str(root/'CryptoKit.swiftmodule')],check=True,timeout=60)
    binary=root/'library-checks'
    subprocess.run(['swiftc','-I',str(root),'-L',str(root),'-lCryptoKit',
-    str(ROOT/'VoiceMatrix/LocalVoiceProfilePackage.swift'),str(ROOT/'VoiceMatrix/CharacterFolderStore.swift'),
+    str(ROOT/'VoiceMatrix/F5SpeechChunks.swift'),str(ROOT/'VoiceMatrix/LocalVoiceProfilePackage.swift'),str(ROOT/'VoiceMatrix/CharacterFolderStore.swift'),
     str(ROOT/'tests/native/LocalVoiceLibraryChecks.swift'),'-o',str(binary)],check=True,timeout=60)
    env=dict(os.environ);env['LD_LIBRARY_PATH']=str(root)
    subprocess.run([str(binary),str(root)],env=env,check=True,timeout=60)

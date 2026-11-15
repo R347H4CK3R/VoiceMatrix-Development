@@ -16,6 +16,13 @@ enum F5ChunkError: LocalizedError {
 // Dynamic programming keeps complete words, including short-text speed behavior.
 enum F5SpeechChunks {
     static let maximumJobSeconds: Double = 1800
+    static let maximumReferenceBytes = 512
+    static func validateReference(text: String, seconds: Double) throws {
+        try Task.checkCancellation()
+        guard seconds.isFinite, (0.5...15.01).contains(seconds),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              text.utf8.count <= maximumReferenceBytes else {throw F5ChunkError.invalidReference}
+    }
     static func normalizedReference(_ text: String) -> String {
         var result = text
         if !result.hasSuffix(". "), !result.hasSuffix("。") { result += result.hasSuffix(".") ? " " : ". " }
@@ -34,9 +41,7 @@ enum F5SpeechChunks {
         return Double(max(referenceFrames + extraFrames, referenceFrames + 1)) * 256 / 24000
     }
     static func plan(text: String, referenceText: String, referenceSeconds: Double) throws -> [String] {
-        guard referenceSeconds.isFinite, (0.5...15.01).contains(referenceSeconds),
-              !referenceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              referenceText.utf8.count <= 512 else { throw F5ChunkError.invalidReference }
+        try validateReference(text: referenceText, seconds: referenceSeconds)
         let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !words.isEmpty else { throw F5ChunkError.emptyText }
         guard Double(text.utf8.count) * referenceSeconds / Double(normalizedReference(referenceText).utf8.count) <= maximumJobSeconds else { throw F5ChunkError.jobTooLong }

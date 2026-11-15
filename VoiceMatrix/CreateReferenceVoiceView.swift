@@ -34,7 +34,10 @@ struct CreateReferenceVoiceView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 TextEditor(text:$transcript).frame(minHeight:100)
                     .accessibilityLabel("Exact words in reference recording").disabled(blocked)
-                Text("\(transcript.count)/2,000 characters").font(.caption)
+                Text("\(transcript.count) characters").font(.caption)
+                if transcript.utf8.count > F5SpeechChunks.maximumReferenceBytes {
+                    Text("This transcript is too long for the speech engine. Use a shorter clip and its exact words.").font(.caption).foregroundStyle(.secondary)
+                }
                 Toggle("I have permission to use this voice recording",isOn:$permitted).disabled(blocked)
             }
             Section("3 · Save to Voices") {
@@ -46,7 +49,7 @@ struct CreateReferenceVoiceView: View {
                 }.buttonStyle(.borderedProminent)
                     .disabled(blocked || recorder.recording || recorder.output == nil || !permitted ||
                         name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || name.count>80 ||
-                        transcript.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || transcript.count>2000)
+                        transcript.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || transcript.utf8.count>F5SpeechChunks.maximumReferenceBytes)
                     .accessibilityIdentifier("save-reference-voice")
                 if library.busy {
                     ProgressView()

@@ -6,7 +6,7 @@ enum LocalVoiceProfilePackage {
         case metadata, audio, destination, digest
         var errorDescription: String? {
             switch self {
-            case .metadata: return "Enter a name (1–80 characters), the exact spoken words (1–2,000 characters), and confirm permission to use the recording."
+            case .metadata: return "Enter a name (1–80 characters), a short exact transcript compatible with the speech engine, and confirm permission to use the recording."
             case .audio: return "Use a clear, audible recording between half a second and 15 seconds long."
             case .destination: return "The temporary voice folder could not be created. Existing voices were kept."
             case .digest: return "The recording could not be verified."
@@ -28,7 +28,7 @@ enum LocalVoiceProfilePackage {
         let name=name.trimmingCharacters(in:.whitespacesAndNewlines)
         let text=transcript.trimmingCharacters(in:.whitespacesAndNewlines)
         guard (1...80).contains(name.count), !name.unicodeScalars.contains(where:{CharacterSet.controlCharacters.contains($0)}),
-              (1...2000).contains(text.count), permissionConfirmed else {throw Failure.metadata}
+              !text.isEmpty, permissionConfirmed else {throw Failure.metadata}
         // Canonical PCM16 WAV emitted by LocalVideoAudio; never infer sample metadata.
         guard (24044...720044).contains(wave.count) else {throw Failure.audio}
         let b=[UInt8](wave)
@@ -44,6 +44,7 @@ enum LocalVoiceProfilePackage {
             energy+=value*value
         }
         guard sqrt(energy/Double((wave.count-44)/2))>=0.0002 else {throw Failure.audio}
+        try F5SpeechChunks.validateReference(text:text,seconds:Double(wave.count-44)/48000)
         let hash=try digest(wave)
         guard hash.count==64,hash.allSatisfy({"0123456789abcdef".contains($0)}) else {throw Failure.digest}
         try Task.checkCancellation()

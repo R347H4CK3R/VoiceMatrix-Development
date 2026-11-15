@@ -25,7 +25,7 @@ actor RVCONNXHuBERT {
         try Task.checkCancellation()
         guard audio.count == 147680, audio.allSatisfy({$0.isFinite && abs($0)<=1}) else {throw RVCSynthesisFailure.invalidInput}
         guard let session else {throw RVCSynthesisFailure.unavailable}
-        let data=NSMutableData(data:audio.withUnsafeBytes{Data($0)})
+        let data=audio.withUnsafeBytes { NSMutableData(bytes:$0.baseAddress!,length:$0.count) }
         let value=try ORTValue(tensorData:data,elementType:.float,shape:[1,147680])
         let result=try withExtendedLifetime(data) {try session.run(withInputs:["audio":value],outputNames:["features"],runOptions:nil)}
         try Task.checkCancellation()

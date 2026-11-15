@@ -9,6 +9,31 @@ import Foundation
   precondition(tensors["pitch"]!.bytes.count==7376)
   precondition(tensors["lengths"]!.bytes.withUnsafeBytes { $0.loadUnaligned(as:Int64.self) } == 922)
   precondition(tensors["speaker"]!.bytes.withUnsafeBytes { $0.loadUnaligned(as:Int64.self) } == 0)
+  var streamed:[String:Data]=[:]
+  try input.withTensorBytes {name,bytes,shape,kind in
+   precondition(shape == tensors[name]!.shape)
+   streamed[name]=Data(bytes)
+  }
+  precondition(streamed.count == 8)
+  for (name,tensor) in tensors {precondition(streamed[name] == tensor.bytes)}
+  var changed=input
+  changed.phone[17]=0.375;changed.pitch[19]=173;changed.excitationNoise[23] = -0.25
+  var retained:[String:NSMutableData]=[:]
+  try changed.withTensorBytes {name,bytes,_,_ in
+   retained[name]=NSMutableData(bytes:bytes.baseAddress!,length:bytes.count)
+  }
+  changed.phone[17]=0.75
+  precondition(retained["phone"]!.bytes.loadUnaligned(fromByteOffset:17*4,as:Float.self) == 0.375)
+  precondition(retained["pitch"]!.bytes.loadUnaligned(fromByteOffset:19*8,as:Int64.self) == 173)
+  precondition(retained["excitation_noise"]!.bytes.loadUnaligned(fromByteOffset:23*4,as:Float.self) == -0.25)
+  var bad=input;bad.phone=[]
+  var visited=false
+  do {try bad.withTensorBytes {_,_,_,_ in visited=true};fatalError("bad input streamed")} catch {}
+  precondition(!visited)
+  enum Stop:Error {case now}
+  var visits=0
+  do {try input.withTensorBytes {_,_,_,_ in visits+=1;throw Stop.now};fatalError("callback error ignored")} catch Stop.now {}
+  precondition(visits==1)
   let original=input
   func rejected(_ value:RVCSynthesisInputs) -> Bool { do { try value.validate();return false } catch {return true} }
   input.phone.removeLast();precondition(rejected(input));input=original

@@ -38,15 +38,14 @@ actor RVCONNXSynthesizer {
     func run(_ input: RVCSynthesisInputs) throws -> [Float] {
         try Task.checkCancellation()
         guard let session else { throw RVCSynthesisFailure.unavailable }
-        let encoded = try input.tensors()
         var backing: [String: NSMutableData] = [:]
         var values: [String: ORTValue] = [:]
-        for (name, tensor) in encoded {
-            let data = NSMutableData(data: tensor.bytes)
+        try input.withTensorBytes { name, bytes, shape, kind in
+            let data = NSMutableData(bytes: bytes.baseAddress!, length: bytes.count)
             backing[name] = data
             values[name] = try ORTValue(tensorData: data,
-                elementType: tensor.kind == .float32 ? .float : .int64,
-                shape: tensor.shape.map { NSNumber(value: $0) })
+                elementType: kind == .float32 ? .float : .int64,
+                shape: shape.map { NSNumber(value: $0) })
         }
         let result = try withExtendedLifetime(backing) {
             try session.run(withInputs: values, outputNames: ["audio"], runOptions: nil)

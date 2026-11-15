@@ -24,6 +24,28 @@ struct RVCSynthesisInputs {
               latentNoise.allSatisfy({ $0.isFinite }), excitationNoise.allSatisfy({ $0.isFinite }),
               phaseNoise.isFinite, phaseNoise >= 0, phaseNoise < 1 else { throw RVCSynthesisFailure.invalidInput }
     }
+    /// Buffer pointers are valid only during the callback. Consumers must copy
+    /// into their owned runtime buffers before returning; no pointer escapes.
+    func withTensorBytes(_ body: (String, UnsafeRawBufferPointer, [Int], Tensor.Kind) throws -> Void) throws {
+        try validate()
+        func floats(_ name: String, _ values: [Float], _ shape: [Int]) throws {
+            try Task.checkCancellation()
+            try values.withUnsafeBytes { try body(name, $0, shape, .float32) }
+        }
+        func integers(_ name: String, _ values: [Int64], _ shape: [Int]) throws {
+            try Task.checkCancellation()
+            try values.withUnsafeBytes { try body(name, $0, shape, .int64) }
+        }
+        try floats("phone", phone, [1,922,768])
+        try integers("lengths", [922], [1])
+        try integers("pitch", pitch, [1,922])
+        try floats("pitchf", pitchHz, [1,922])
+        try integers("speaker", [0], [1])
+        try floats("latent_noise", latentNoise, [1,192,922])
+        try floats("phase_noise", [phaseNoise], [1,1,1])
+        try floats("excitation_noise", excitationNoise, [1,368800,1])
+    }
+
     func tensors() throws -> [String: Tensor] {
         try validate()
         func floats(_ values: [Float], _ shape: [Int]) -> Tensor {

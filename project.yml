@@ -186,6 +186,8 @@ targets:
     - path: VoiceMatrix/F5ReferenceEngine.swift
     - path: VoiceMatrix/F5SpeechChunks.swift
     - path: VoiceMatrix/CharacterLibrary.swift
+    - path: VoiceMatrix/CatalogSpeechQuality.swift
+    - path: VoiceMatrix/CatalogSpeechQualityPolicy.swift
     - path: VoiceMatrix/CharacterFolderStore.swift
     - path: VoiceMatrix/CharacterReviewStore.swift
     - path: VoiceMatrix/CharacterNameStore.swift

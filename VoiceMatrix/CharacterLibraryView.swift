@@ -12,6 +12,7 @@ struct CharacterLibraryView: View {
     @State private var showingImporter = false
     @State private var choosingVoice = false
     @State private var showingSyncLog = false
+    @State private var speechHistoryDeletion: UUID?
     @FocusState private var editingWords: Bool
     init(mode: CharacterStudioMode = .speech) { _mode = State(initialValue: mode) }
     @EnvironmentObject private var library: CharacterLibrary
@@ -108,9 +109,35 @@ struct CharacterLibraryView: View {
                 if library.busy { ProgressView(library.message); Button("Stop after current step", role: .cancel) { library.cancel() } }
                 Text(library.message).font(.caption).foregroundStyle(.secondary).accessibilityAddTraits(.updatesFrequently)
                 if !library.engineAvailable { Text("The shared F5 engine is absent from this build. Your imported voice samples remain saved; speech testing becomes available in a build containing that engine.").foregroundStyle(.secondary) }
-                Text("Creates new words using your selected voice.").font(.caption).foregroundStyle(.secondary)
+                DisclosureGroup("Retained speech history") {
+                    Text("Saved locally, including interrupted and unverified results. Review before use; history is never automatically promoted to ready. Deleting an item removes its audio and check receipt, not its voice reference.").font(.caption)
+                    ForEach(library.speechHistory) { item in
+                        VStack(alignment: .leading) {
+                            Text(item.identity.created.formatted()).font(.caption)
+                            Text(item.identity.requestedText).lineLimit(3)
+                            Text("Voice: " + item.identity.voiceID + " · reference " + String(item.identity.referenceHash.prefix(12))).font(.caption2)
+                            Text(item.identity.controls).font(.caption)
+                            Text(item.reason).font(.caption).foregroundStyle(.secondary)
+                            if let retainedAudio = item.audio { AudioActions(url: retainedAudio) }
+                            Button("Delete this retained result", role: .destructive) { speechHistoryDeletion = item.id }
+                        }
+                    }
+                    Button("Refresh / show more history") { library.refreshSpeechHistory(more: true) }
+                }.disabled(library.busy)
+                .confirmationDialog("Delete this retained audio and its check receipt? Export it first if you need a copy. This does not delete the voice reference.", isPresented: Binding(get: { speechHistoryDeletion != nil }, set: { if !$0 { speechHistoryDeletion = nil } })) {
+                    Button("Delete retained result", role: .destructive) { if let id = speechHistoryDeletion { audio.stop(); library.deleteSpeechHistory(id) }; speechHistoryDeletion = nil }
+                    Button("Cancel", role: .cancel) { speechHistoryDeletion = nil }
+                }
+                if let pending = library.pendingSpeech, library.pendingSpeechMatchesSelection {
+                    DisclosureGroup("Review unverified audio") {
+                        Text(pending.reason).font(.caption)
+                        Text("Not marked ready or word-checked. Automated recognition supports 3–100 recognized words and up to 30 seconds and can reject correct speech, especially with pitch or speed effects. Listening/exporting does not change its verification status.").font(.caption).foregroundStyle(.secondary)
+                        AudioActions(url: pending.audio)
+                    }.disabled(library.busy).accessibilityIdentifier("unverified-character-speech")
+                }
+                Text("Creates new words using your selected voice. A local word check adds processing time; longer or uncertain results are kept for explicit review.").font(.caption).foregroundStyle(.secondary)
                 if let output = library.output, library.outputKind == "speech", library.outputMatchesSelection {
-                    Text("Created with " + library.outputSettings).font(.caption).foregroundStyle(.secondary)
+                    Text("Last word-checked result · " + library.outputSettings).font(.caption).foregroundStyle(.secondary)
                     AudioActions(url: output)
                 }
                 else { Text("Create speech with this character to listen or save.").foregroundStyle(.secondary) }

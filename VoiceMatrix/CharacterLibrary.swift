@@ -53,6 +53,29 @@ import CryptoKit
     @Published private(set) var outputReferenceHash = ""
     @Published private(set) var reviewSummaries: [String: CharacterListeningReview] = [:]
     @Published var message = "Create voices from authorized video or audio on this iPhone, or choose an imported voice. Existing voices stay saved."
+    @Published private(set) var pendingSpeech: CatalogSpeechQuality.Pending?
+    @Published private(set) var speechHistory: [CatalogSpeechQuality.HistoryItem] = []
+    private var speechHistoryLimit = 50
+    var pendingSpeechMatchesSelection: Bool {
+        guard let pendingSpeech else { return false }
+        return profiles.contains { $0.id == selectedID && $0.id == pendingSpeech.voiceID && $0.referenceSHA256 == pendingSpeech.referenceHash }
+    }
+    func refreshSpeechHistory(more: Bool = false) {
+        if more { speechHistoryLimit = min(10000, speechHistoryLimit + 50) }
+        do { speechHistory = try quality.history(limit: speechHistoryLimit) }
+        catch { message = "Retained speech history could not be read. Audio was not deleted." }
+    }
+    func deleteSpeechHistory(_ id: UUID) {
+        guard !busy, let item = speechHistory.first(where: { $0.id == id }) else { return }
+        do {
+            try quality.remove(id)
+            if let file = item.audio, output == file { output = nil; outputCharacterID = ""; outputReferenceHash = "" }
+            if let file = item.audio, pendingSpeech?.audio == file { pendingSpeech = nil }
+            refreshSpeechHistory()
+            message = "Selected retained speech and its check receipt were deleted. Voice references were kept."
+        } catch { message = "History could not be deleted. Other results and voice references were kept." }
+    }
+    private let quality: CatalogSpeechQuality
     private let f5Bundle: URL?
     private let remoteCache: RemoteVoiceCatalogCache
     private let store: CharacterFolderStore
@@ -135,6 +158,7 @@ import CryptoKit
     init(supportRoot: URL? = nil, f5Bundle: URL? = Bundle.main.url(forResource: "F5TTS", withExtension: nil)) {
         self.f5Bundle = f5Bundle
         let support = supportRoot ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        quality = CatalogSpeechQuality(root: support.appendingPathComponent("CatalogSpeechChecks", isDirectory: true), asrBundle: f5Bundle?.deletingLastPathComponent().appendingPathComponent("ParakeetASR", isDirectory: true))
         remoteCache = RemoteVoiceCatalogCache(file: support.appendingPathComponent("RemoteVoiceCatalog/catalog.json"))
         store = CharacterFolderStore(root: support.appendingPathComponent("CharacterReferences", isDirectory: true))
         reviewStore = CharacterReviewStore(root: support.appendingPathComponent("CharacterReviews", isDirectory: true))
@@ -142,6 +166,7 @@ import CryptoKit
     }
     func loadAndRefresh() async {
         guard !busy else { return }
+        refreshSpeechHistory()
         let ticket = UUID(); catalogRefresh = ticket
         do {
             let saved = try await store.profiles()
@@ -428,10 +453,12 @@ import CryptoKit
         retainCurrentSpeech = true
         busy = true; message = "Starting the local character speech engine…"
         let token = UUID(); operationID = token
-        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("Speech-" + voice.id + "-" + UUID().uuidString + ".wav")
+        let destination: URL
+        do { destination = try quality.destination(identity: .init(voiceID: voice.id, referenceHash: voice.referenceSHA256, requestedText: text, controls: controls.summary, created: Date())) }
+        catch { busy = false; audio.releaseProcessing(lease); message = error.localizedDescription; return }
         let raw = destination.deletingPathExtension().appendingPathExtension("raw.wav")
         job = Task {
-            defer { busy = false; audio.releaseProcessing(lease); try? FileManager.default.removeItem(at: raw) }
+            defer { busy = false; audio.releaseProcessing(lease); try? FileManager.default.removeItem(at: raw); refreshSpeechHistory() }
             do {
                 await studio.releaseModelsForCharacter()
                 let reference = try await store.referenceURL(id: voice.id)
@@ -441,17 +468,32 @@ import CryptoKit
                     Task { @MainActor in if self.busy && self.operationID == token { self.message = "Creating part \(part) of \(total)…" } }
                 }
                 try Task.checkCancellation()
-                if controls.needsRendering { await engine.unload() }
+                await engine.unload() // Never keep F5 resident while loading recognition models.
                 message = "Applying speed, pitch and volume…"
                 try await SpeechRendering.render(source: raw, destination: destination, controls: controls)
                 try Task.checkCancellation()
-                TemporaryAudio.discard(output); output = destination; outputKind = "speech"
+                pendingSpeech = .init(audio: destination, voiceID: voice.id, referenceHash: voice.referenceSHA256, reason: "Awaiting local word check; not verified.")
+                message = "Checking the rendered words locally… Longer or uncertain audio remains available for manual review."
+                let result = try await quality.check(destination, expected: text)
+                try Task.checkCancellation()
+                guard result.verified else {
+                    pendingSpeech = .init(audio: destination, voiceID: voice.id, referenceHash: voice.referenceSHA256, reason: result.reason)
+                    message = result.reason + " Previous checked output was not replaced."
+                    return
+                }
+                pendingSpeech = nil
+                output = destination; outputKind = "speech"
                 outputSettings = controls.summary
                 outputCharacterID = voice.id; outputReferenceHash = voice.referenceSHA256
-                message = "Ready to listen, save or share. Please judge the character resemblance by listening; it has not been verified."
-                await engine.finishRequest(keepWarm: retainCurrentSpeech && applicationActive && !controls.needsRendering)
+                message = "Local word check passed; ready to listen, save or share. Recognition can be wrong and character resemblance is not verified."
+                await engine.finishRequest(keepWarm: false)
             } catch {
-                try? FileManager.default.removeItem(at: destination)
+                // Retain any fully rendered pending result and the previous good output.
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    let reason = (error is CancellationError || Task.isCancelled) ? "Word check stopped. Retained audio is unverified; review it before use." : "Word check could not finish. Retained audio is unverified. " + error.localizedDescription
+                    pendingSpeech = .init(audio: destination, voiceID: voice.id, referenceHash: voice.referenceSHA256, reason: reason)
+                    try? quality.markUnverified(destination, expected: text, reason: reason)
+                }
                 message = error is CancellationError || Task.isCancelled ? "Stopped. Your saved voices were kept." : "Speech could not be created. " + error.localizedDescription
                 await engine.finishRequest(keepWarm: false)
             }

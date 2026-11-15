@@ -17,28 +17,41 @@ import CoreGraphics
         }
         openHistory()
         let listen=app.buttons.matching(identifier:"Listen / Replay").element(boundBy:0);reveal(listen,in:app);listen.tap()
+        XCTAssertFalse(app.buttons["Delete retained result"].exists,"Playback must not trigger deletion")
         let stops=app.buttons.matching(identifier:"Stop")
         expectation(for:NSPredicate(format:"count == 2"),evaluatedWith:stops);waitForExpectations(timeout:10)
         // AudioActions exposes the same global Stop in both retained rows.
         // Select the first row, exactly as for Listen / Replay above.
         let stop=stops.element(boundBy:0);reveal(stop,in:app);stop.tap()
         expectation(for:NSPredicate(format:"count == 0"),evaluatedWith:stops);waitForExpectations(timeout:10)
+        XCTAssertFalse(app.buttons["Delete retained result"].exists,"Stopping playback must not trigger deletion")
         let saves=app.buttons.matching(identifier:"save-recording");XCTAssertEqual(saves.count,2)
         let save=saves.element(boundBy:0);reveal(save,in:app);save.tap()
         expectation(for:NSPredicate(format:"enabled == false"),evaluatedWith:save);waitForExpectations(timeout:10)
         XCTAssertEqual(save.label,"Saved")
+        XCTAssertFalse(app.buttons["Delete retained result"].exists,"Saving first audio must not trigger deletion")
+        XCTAssertEqual(stops.count,0,"Saving first audio must not restart playback")
         let secondSave=saves.element(boundBy:1);reveal(secondSave,in:app);XCTAssertTrue(secondSave.isEnabled,"Other attempt with same basename must remain independently saveable");secondSave.tap()
         expectation(for:NSPredicate(format:"enabled == false"),evaluatedWith:secondSave);waitForExpectations(timeout:10);XCTAssertEqual(secondSave.label,"Saved")
+        XCTAssertFalse(app.buttons["Delete retained result"].exists,"Saving second audio must not trigger deletion")
+        XCTAssertEqual(stops.count,0,"Saving second audio must not restart playback")
         let share=app.buttons.matching(identifier:"Share Audio").element(boundBy:0);reveal(share,in:app);share.tap()
+        XCTAssertFalse(app.buttons["Delete retained result"].exists,"Sharing must not trigger deletion")
+        XCTAssertEqual(stops.count,0,"Sharing must not restart playback")
         let saveFiles=app.buttons["Save to Files"],copy=app.buttons["Copy"]
         XCTAssertTrue(saveFiles.waitForExistence(timeout:10) || copy.waitForExistence(timeout:5),"System share sheet must expose a real export action; no external destination selected")
         let shot=XCTAttachment(screenshot:app.screenshot());shot.name="Retained unverified audio system sharing";shot.lifetime = .keepAlways;add(shot)
-        let close=app.buttons["Close"]
-        if close.exists && close.isHittable { close.tap() } else { app.swipeDown() }
         app.terminate();app.launchArguments=["-tutorialSeen","YES"];app.launch();openHistory()
         let remove=app.buttons.matching(identifier:"Delete this retained result").element(boundBy:0);reveal(remove,in:app);remove.tap()
         let confirm=app.buttons["Delete retained result"];XCTAssertTrue(confirm.waitForExistence(timeout:10))
-        app.buttons["Cancel"].tap();XCTAssertTrue(remove.exists,"Cancel must retain the history item")
+        let cancel=app.buttons["Cancel"]
+        if cancel.exists && cancel.isHittable { cancel.tap() }
+        else {
+            // iOS popover confirmation omits a Cancel row and exposes this dismiss region.
+            let dismiss=app.otherElements["PopoverDismissRegion"];XCTAssertTrue(dismiss.exists && dismiss.isHittable);dismiss.tap()
+        }
+        XCTAssertTrue(confirm.waitForNonExistence(timeout:10))
+        XCTAssertTrue(remove.exists,"Cancel/dismiss must retain the history item")
         reveal(remove,in:app);remove.tap();XCTAssertTrue(confirm.waitForExistence(timeout:10));confirm.tap()
         XCTAssertTrue(app.staticTexts["Synthetic retained speech UI fixture"].waitForNonExistence(timeout:10))
         app.terminate();app.launch();XCTAssertTrue(app.tabBars.buttons["Voices"].waitForExistence(timeout:30));app.tabBars.buttons["Voices"].tap()

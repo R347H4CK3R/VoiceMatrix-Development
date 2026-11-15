@@ -30,7 +30,13 @@ class HistoryUITests(unittest.TestCase):
   for step in d['jobs']['ui']['steps']:
    if 'run' in step:subprocess.run(['bash','-n'],input=step['run'],text=True,check=True)
   s=(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift').read_text()
-  for text in ['count == 2','stops.element(boundBy:0)','count == 0','save.label,"Saved"','app.buttons["Cancel"].tap()','confirm.tap()','select-character-diagnostic-neutral','Save to Files']:
+  for text in ['count == 2','stops.element(boundBy:0)','count == 0','save.label,"Saved"','PopoverDismissRegion','confirm.waitForNonExistence','confirm.tap()','select-character-diagnostic-neutral','Save to Files']:
    self.assertIn(text,s)
   swift=shutil.which('swiftc')
   if swift:subprocess.run([swift,'-frontend','-parse',str(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift')],check=True)
+
+ def test_history_actions_do_not_use_automatic_form_row_button_style(self):
+  s=(ROOT/'VoiceMatrix/CharacterLibraryView.swift').read_text()
+  start=s.index('ForEach(library.speechHistory)')
+  end=s.index('Button("Refresh / show more history")',start)
+  self.assertIn('}.buttonStyle(.borderless)',s[start:end])

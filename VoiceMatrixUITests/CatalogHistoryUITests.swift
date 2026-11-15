@@ -39,7 +39,13 @@ import CoreGraphics
         XCTAssertFalse(app.buttons["Delete retained result"].exists,"Sharing must not trigger deletion")
         XCTAssertEqual(stops.count,0,"Sharing must not restart playback")
         let saveFiles=app.buttons["Save to Files"],copy=app.buttons["Copy"]
-        XCTAssertTrue(saveFiles.waitForExistence(timeout:10) || copy.waitForExistence(timeout:5),"System share sheet must expose a real export action; no external destination selected")
+        let sharePresented=saveFiles.waitForExistence(timeout:10) || copy.waitForExistence(timeout:5)
+        // Observe both surfaces without activating another app or selecting a recipient.
+        for (name,surface) in [("VoiceMatrix",app),("SpringBoard",XCUIApplication(bundleIdentifier:"com.apple.springboard"))] {
+            let tree=XCTAttachment(string:surface.debugDescription);tree.name="Share diagnostic "+name+" hierarchy";tree.lifetime = .keepAlways;add(tree)
+        }
+        let display=XCTAttachment(screenshot:XCUIScreen.main.screenshot());display.name="Share diagnostic full display";display.lifetime = .keepAlways;add(display)
+        XCTAssertTrue(sharePresented,"System share sheet must expose a real export action; no external destination selected")
         let shot=XCTAttachment(screenshot:app.screenshot());shot.name="Retained unverified audio system sharing";shot.lifetime = .keepAlways;add(shot)
         app.terminate();app.launchArguments=["-tutorialSeen","YES"];app.launch();openHistory()
         let remove=app.buttons.matching(identifier:"Delete this retained result").element(boundBy:0);reveal(remove,in:app);remove.tap()

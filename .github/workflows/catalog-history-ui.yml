@@ -83,6 +83,22 @@ jobs:
         python3 probes/catalog-history-ui/storage.py verify
 
         '
+    - name: Retain owned simulator sharing diagnostics
+      if: ${{ !cancelled() }}
+      run: |
+        if [ -n "${SIMULATOR_ID:-}" ]; then
+          xcrun simctl spawn "$SIMULATOR_ID" log show --last 10m --style compact --info --debug --predicate 'process == "VoiceMatrix" OR process CONTAINS[c] "sharing" OR process CONTAINS[c] "Share" OR subsystem CONTAINS[c] "Share" OR subsystem CONTAINS[c] "UIKit"' > history-sharing-system.log 2>&1 || true
+          python3 - <<'PYCODE'
+        import subprocess,os,pathlib,hashlib,json
+        root=pathlib.Path(subprocess.check_output(['xcrun','simctl','get_app_container',os.environ['SIMULATOR_ID'],'com.voicematrix.app','data'],text=True).strip())
+        checks=root/'Library/Application Support/CatalogSpeechChecks'
+        report=[]
+        for p in sorted(checks.glob('*/*')):
+            if p.is_file() and not p.is_symlink():
+                report.append(dict(path=str(p.relative_to(checks)),bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()))
+        pathlib.Path('history-sharing-files.json').write_text(json.dumps(report,indent=2))
+        PYCODE
+        fi
     - name: Retain screenshots
       if: ${{ !cancelled() }}
       run: if [ -d history-ui.xcresult ]; then xcrun xcresulttool export attachments
@@ -101,7 +117,11 @@ jobs:
 
           history-storage-results.json
 
-          character-ui-build.log'
+          character-ui-build.log
+
+          history-sharing-system.log
+
+          history-sharing-files.json'
         retention-days: 14
     - name: Remove only this job simulator
       if: always()

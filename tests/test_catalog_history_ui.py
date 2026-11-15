@@ -40,3 +40,16 @@ class HistoryUITests(unittest.TestCase):
   start=s.index('ForEach(library.speechHistory)')
   end=s.index('Button("Refresh / show more history")',start)
   self.assertIn('}.buttonStyle(.borderless)',s[start:end])
+
+ def test_share_diagnostics_preserve_actual_export_gate(self):
+  s=(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift').read_text()
+  self.assertIn('XCTAssertTrue(sharePresented,',s)
+  self.assertIn('XCUIApplication(bundleIdentifier:"com.apple.springboard")',s)
+  self.assertIn('XCUIScreen.main.screenshot()',s)
+  d=yaml.safe_load((ROOT/'.github/workflows/catalog-history-ui.yml').read_text())
+  step=next(x for x in d['jobs']['ui']['steps'] if x.get('name')=='Retain owned simulator sharing diagnostics')
+  self.assertIn('!cancelled()',step['if'])
+  self.assertIn('log show --last 10m',step['run'])
+  self.assertIn('sha256(p.read_bytes())',step['run'])
+  self.assertIn("'com.voicematrix.app','data'",step['run'])
+  self.assertIn('PRODUCT_BUNDLE_IDENTIFIER: com.voicematrix.app',(ROOT/'project.yml').read_text())

@@ -4,7 +4,9 @@ import Combine
 
 @MainActor final class RVCOnDeviceStudio:ObservableObject {
     @Published private(set) var voiceName="No voice model installed"
-    @Published private(set) var retrievalSupported=true
+    @Published private(set) var retrievalSupported=false
+    @Published private(set) var defaultIndexRate:Float=0.75
+    private var currentModelSHA:String?
     @Published var indexRate:Float=0.75
     @Published var refinePitch=false
     @Published var semitones:Double=0
@@ -21,19 +23,26 @@ import Combine
     func refresh() {
         do {
             try RVCPreviewStore.prepare();installed=try RVCPreviewStore.locations()
-            voiceName="No voice model installed";retrievalSupported=true
+            voiceName="No voice model installed";retrievalSupported=false
             if let folder=installed[.synthesizer] {
                 let manifest=try RVCSynthesisAssets.manifest(at:folder)
                 voiceName=try RVCSynthesisAssets.voiceName(manifest)
-                retrievalSupported=(try? RVCSynthesisAssets.validateRetrievalPair(manifest,usesRetrieval:true)) != nil
+                defaultIndexRate=try RVCSynthesisAssets.defaultRetrievalRate(manifest)
+                if currentModelSHA != manifest.sha256 {
+                    currentModelSHA=manifest.sha256;indexRate=defaultIndexRate
+                }
+                if let retrieval=installed[.retrieval] {
+                    let profile=try RVCRetrievalAssets.descriptor(at:retrieval).profile
+                    retrievalSupported=(try? RVCSynthesisAssets.validateRetrievalPair(manifest,usesRetrieval:true,retrievalProfile:profile)) != nil
+                }
                 if !retrievalSupported && indexRate != 0 {
                     indexRate=0
-                    message="Retrieval disabled: this evaluation model has no admitted matching index."
+                    message="Retrieval disabled: install a matching verified pack to enable it."
                     state.append(message)
                 }
             }
         }
-        catch {installed=[:];message="Diagnostic storage could not be opened."}
+        catch {installed=[:];retrievalSupported=false;currentModelSHA=nil;indexRate=0;message="Diagnostic storage could not be opened."}
     }
     var assetsReady:Bool {
         installed[.hubert] != nil && installed[.synthesizer] != nil &&

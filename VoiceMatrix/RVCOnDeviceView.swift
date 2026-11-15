@@ -28,7 +28,7 @@ struct RVCOnDeviceView:View {
                         }
                     }.disabled(unavailable).accessibilityIdentifier("rvc-preview-pack-"+role.rawValue)
                 }
-                Text("Choose the supported pack folders from Files. Files are verified and copied privately onto this iPhone.")
+                Text("Choose the supported pack folders from Files. Files are verified and copied privately onto this iPhone. Large packs need extra free storage during import and conversion.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("2 · Import your audio") {
@@ -44,7 +44,7 @@ struct RVCOnDeviceView:View {
                 Text(String(format:"Retrieval strength · %.1f%%",Double(preview.indexRate)*100))
                 Slider(value:$preview.indexRate,in:0...1,step:0.125)
                     .disabled(unavailable || !preview.retrievalSupported).accessibilityLabel("Retrieval strength")
-                Text("Zero skips retrieval and needs no retrieval pack. Lower values can preserve words better but may sound less like the target voice. The diagnostic voice defaults to 75%. Models without a matching index use zero.")
+                Text("Zero skips retrieval and needs no retrieval pack. Lower values can preserve words better but may sound less like the target voice. The diagnostic voice defaults to 75%. The VCTK evaluation voice defaults to zero even with its matching pack installed.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text(String(format:"Pitch · %+.0f semitones",preview.semitones))
                 Slider(value:$preview.semitones,in:-24...24,step:1)
@@ -53,7 +53,7 @@ struct RVCOnDeviceView:View {
                     .disabled(unavailable)
                 Text("Closer to the pitch reference in CPU tests, with mixed voice-quality results. Uses additional processing; phone performance is unverified.")
                     .font(.caption).foregroundStyle(.secondary)
-                Button("Reset conversion settings") {preview.indexRate=preview.retrievalSupported ? 0.75 : 0;preview.semitones=0;preview.refinePitch=false}
+                Button("Reset conversion settings") {preview.indexRate=preview.retrievalSupported ? preview.defaultIndexRate : 0;preview.semitones=0;preview.refinePitch=false}
                     .disabled(unavailable)
             }
             Section("3 · Create a diagnostic preview") {

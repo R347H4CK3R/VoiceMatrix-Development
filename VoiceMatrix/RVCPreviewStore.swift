@@ -55,13 +55,16 @@ enum RVCPreviewStore {
         defer{if scoped {source.stopAccessingSecurityScopedResource()}}
         let folder:URL
         if role == .retrieval {
+            let descriptor=try RVCRetrievalAssets.descriptor(at:source)
             folder=root.appendingPathComponent("rvc-"+UUID().uuidString,isDirectory:true)
-            try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:false)
+            try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
             do {
-                for (name,size) in [("centroids.f32",457728),("vectors.f32",17875968),("lists.json",28284)] {
-                    try copyBounded(source.appendingPathComponent(name),to:folder.appendingPathComponent(name),maximum:size,exact:size)
+                for file in descriptor.files {
+                    try copyBounded(source.appendingPathComponent(file.name),to:folder.appendingPathComponent(file.name),maximum:file.bytes,exact:file.bytes)
                 }
-                _=try RVCNativeRetrieval.loadVerifiedDiagnosticPack(at:folder)
+                let manifest=RVCRetrievalAssets.Manifest(schemaVersion:1,profile:descriptor.profile)
+                try JSONEncoder().encode(manifest).write(to:folder.appendingPathComponent("manifest.json"),options:.withoutOverwriting)
+                _=try RVCNativeRetrieval.loadVerifiedPack(at:folder,cache:cache,expectedProfile:descriptor.profile)
             } catch {try? FileManager.default.removeItem(at:folder);throw error}
         } else {
             let manifest=try RVCSynthesisAssets.manifest(at:source)

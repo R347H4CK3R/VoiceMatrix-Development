@@ -40,13 +40,15 @@ actor RVCNativeWindowConverter {
     private var fileJobActive=false
     private let hubert:RVCONNXHuBERT
     private let synthesizer:RVCONNXSynthesizer
-    private let index:RVCNativeRetrieval?
+    private var index:RVCNativeRetrieval?
     init(hubert:RVCONNXHuBERT,synthesizer:RVCONNXSynthesizer,index:RVCNativeRetrieval?) {
         self.hubert=hubert;self.synthesizer=synthesizer;self.index=index
     }
     static func open(hubertRoot:URL,synthesizerRoot:URL,retrievalRoot:URL?,cache:URL) async throws -> RVCNativeWindowConverter {
-        try RVCSynthesisAssets.validateRetrievalPair(RVCSynthesisAssets.manifest(at:synthesizerRoot),usesRetrieval:retrievalRoot != nil)
-        let index=try retrievalRoot.map {try RVCNativeRetrieval.loadVerifiedDiagnosticPack(at:$0)}
+        let profile=try retrievalRoot.map {try RVCRetrievalAssets.descriptor(at:$0).profile}
+        try RVCSynthesisAssets.validateRetrievalPair(RVCSynthesisAssets.manifest(at:synthesizerRoot),
+            usesRetrieval:retrievalRoot != nil,retrievalProfile:profile ?? RVCRetrievalAssets.diagnosticProfile)
+        let index=try retrievalRoot.map {try RVCNativeRetrieval.loadVerifiedPack(at:$0,cache:cache,expectedProfile:profile!)}
         let hubert=try RVCONNXHuBERT(assetRoot:hubertRoot,cacheDirectory:cache)
         do {
             let synthesizer=try RVCONNXSynthesizer(assetRoot:synthesizerRoot,cacheDirectory:cache)
@@ -91,6 +93,6 @@ actor RVCNativeWindowConverter {
             try await self.convertExperimentalAutocorrelation(window,noise:.init(latent:noise.latent,phase:noise.phase,excitation:noise.excitation),semitones:semitones,indexRate:indexRate,refinePitch:refinePitch)
         }
     }
-    func close() async {await hubert.close();await synthesizer.close()}
+    func close() async {index=nil;await hubert.close();await synthesizer.close()}
 }
 #endif

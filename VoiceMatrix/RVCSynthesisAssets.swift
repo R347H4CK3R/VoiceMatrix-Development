@@ -28,10 +28,16 @@ enum RVCSynthesisAssets {
         guard m.profile == "rvc-v2-922-cpu" else {throw RVCSynthesisFailure.invalidAsset}
         return m.sha256 == vctkP226SHA256 ? "VCTK p226 · evaluation" : "Synthetic diagnostic voice"
     }
-    static func validateRetrievalPair(_ m:Manifest,usesRetrieval:Bool) throws {
+    static func validateRetrievalPair(_ m:Manifest,usesRetrieval:Bool,retrievalProfile:String = "diagnostic-ivf149") throws {
         _=try voiceName(m)
-        // Only the synthetic diagnostic voice has an admitted matching index.
-        guard !usesRetrieval || m.sha256 == verifiedSHA256 else {throw RVCSynthesisFailure.incompatibleModel}
+        guard usesRetrieval else {return}
+        let matched=(m.sha256 == verifiedSHA256 && retrievalProfile == "diagnostic-ivf149") ||
+            (m.sha256 == vctkP226SHA256 && retrievalProfile == "vctk-p226-ivf1161")
+        guard matched else {throw RVCSynthesisFailure.incompatibleModel}
+    }
+    static func defaultRetrievalRate(_ m:Manifest) throws -> Float {
+        _=try voiceName(m)
+        return m.sha256 == vctkP226SHA256 ? 0 : 0.75
     }
     static func regularFile(_ url: URL) throws -> Int {
         guard url.isFileURL, url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).standardizedFileURL == url.resolvingSymlinksInPath().standardizedFileURL else {

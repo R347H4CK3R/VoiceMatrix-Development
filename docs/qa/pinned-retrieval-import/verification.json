@@ -1,0 +1,20 @@
+{
+  "existingPortableTestsPassed": 36,
+  "additionalManifestTestPassed": true,
+  "actualPackLoadPassed": true,
+  "realFeatureNeighborIDsMatched": 24,
+  "snapshotDescriptorReleased": true,
+  "swiftSyntaxPassed": true,
+  "appleSDKCompiled": false,
+  "physicalIPhoneVerified": false,
+  "humanListeningVerified": false,
+  "published": false,
+  "sourceSHA256": {
+    "RVCRetrievalAssets": "4df56c6bac91fd01379738011a754c058dcda5242497ba13beb8fcc7a2b039fb",
+    "RVCSynthesisAssets": "3b15ad2624a06f1e964f000919850a7467b77ebe4d48871526ef204b5e1dabe1",
+    "RVCPreviewStore": "e7fc0d737a599d7d4d991cb64aad9418d8aee37ac73d34729aa1f398ab48fa2d",
+    "RVCNativePreparation": "41fe960c556af42589815bd54d8a7758c8a012f9077d1a0eeb933a502256ca8a",
+    "RVCOnDeviceStudio": "773f745f44d6b450c7867a3ce67746ddff100220386795b21368d69399b4145b",
+    "RVCOnDeviceView": "c8c22accda4af590aabcaec0e3ade8b5b39bc2895dde28bff73a9ad55579f653"
+  }
+}

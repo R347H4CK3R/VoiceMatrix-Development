@@ -1,0 +1,23 @@
+{
+  "upstreamRevision": "005c2f948ee9dafd7e3aa7f261b4c3a24beebeef",
+  "indexSHA256": "7f556465f2e5a2ba67c05eb0a03b6b3b2a64f91218fd221a44ab8b8b801e7d50",
+  "files": {
+    "lists.json": {
+      "bytes": 263091,
+      "sha256": "68579a69b9cb75d7c84a8a956b6f6879e7c4b8e5d3e1554c0e4b2f72fde357eb"
+    },
+    "centroids.f32": {
+      "bytes": 3566592,
+      "sha256": "36358a8e879e3f7d15222ab4771ad1e168479ee3fc80e7359097b381a0763dd1"
+    },
+    "manifest.json": {
+      "bytes": 49,
+      "sha256": "365dbe11f5e825ecc2648a2dcf3a3a78b6c16a424d48580ff1e475666e99151f"
+    },
+    "vectors.f32": {
+      "bytes": 139201536,
+      "sha256": "2326a4ca21cedbea61532a5c5b9fcba752f6de2ba9ff9cee5ecb8abda3a6bb98"
+    }
+  },
+  "productionQualified": false
+}

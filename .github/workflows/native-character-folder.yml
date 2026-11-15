@@ -2,7 +2,7 @@ name: Native character folder checks
 on:
   push:
     branches-ignore: [codex/iphone-build4, codex/iphone-build5, codex/rvc-conversion-controls]
-    paths: ['.github/workflows/voicematrix-049-candidate.yml', 'VoiceMatrix/RemoteVoiceCatalog.swift', 'VoiceMatrix/VoiceCatalogConnection.swift', 'tests/native/SelectiveVoiceDownloadChecks.swift', 'tools/**', 'tests/test_*.py', 'VoiceMatrix/VoiceSyncLog.swift', 'VoiceMatrix/VoiceFolderSync.swift', 'tests/native/VoiceFolderSyncChecks.swift', 'VoiceMatrix/CharacterReviewStore.swift', 'tests/native/CharacterReviewChecks.swift', 'VoiceMatrix/ConversionAudio.swift', 'VoiceMatrix/OfflineVoiceConverter.swift', 'tests/native/CharacterReferenceAudioChecks.swift', 'VoiceMatrix/F5SpeechChunks.swift', 'tests/native/F5SpeechChunkChecks.swift', 'VoiceMatrix/StudioActivity.swift', 'tests/native/StudioActivityChecks.swift', 'VoiceMatrix/CharacterFolderStore.swift', 'VoiceMatrix/CharacterLibraryView.swift', 'tests/native/CharacterFolderChecks.swift', 'tests/test_character_folder.py', 'tools/voice_pack.py', '.github/workflows/native-character-folder.yml']
+    paths: ['.github/workflows/voicematrix-049-candidate.yml', 'VoiceMatrix/RemoteVoiceCatalog.swift', 'VoiceMatrix/VoiceCatalogConnection.swift', 'tests/native/SelectiveVoiceDownloadChecks.swift', 'tools/**', 'tests/test_*.py', 'tests/requirements-native.txt', 'VoiceMatrix/VoiceSyncLog.swift', 'VoiceMatrix/VoiceFolderSync.swift', 'tests/native/VoiceFolderSyncChecks.swift', 'VoiceMatrix/CharacterReviewStore.swift', 'tests/native/CharacterReviewChecks.swift', 'VoiceMatrix/ConversionAudio.swift', 'VoiceMatrix/OfflineVoiceConverter.swift', 'tests/native/CharacterReferenceAudioChecks.swift', 'VoiceMatrix/F5SpeechChunks.swift', 'tests/native/F5SpeechChunkChecks.swift', 'VoiceMatrix/StudioActivity.swift', 'tests/native/StudioActivityChecks.swift', 'VoiceMatrix/CharacterFolderStore.swift', 'VoiceMatrix/CharacterLibraryView.swift', 'tests/native/CharacterFolderChecks.swift', 'tests/test_character_folder.py', 'tools/voice_pack.py', '.github/workflows/native-character-folder.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,6 +14,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install native regression Python dependencies
+        run: python3 -m pip install -r tests/requirements-native.txt
       - name: Install media fixture dependency
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'

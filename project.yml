@@ -166,6 +166,7 @@ targets:
     - path: VoiceMatrix/LocalReferenceAttempt.swift
     - path: VoiceMatrix/LocalVoiceProfilePackage.swift
     - path: VoiceMatrix/LocalVideoStudio.swift
+    - path: VoiceMatrix/LocalMediaImportPolicy.swift
     - path: VoiceMatrix/LocalVisualEvidence.swift
     - path: VoiceMatrix/SpeakerSimilarityPolicy.swift
     - path: VoiceMatrix/SpeakerSimilarityService.swift

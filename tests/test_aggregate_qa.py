@@ -33,3 +33,32 @@ class AggregateQATests(unittest.TestCase):
  def test_old_unbound_evidence_is_rejected(self):
   p=self.root/'a/voice-synthesis-results.json';d=json.loads(p.read_text());del d['inferenceFingerprint'];p.write_text(json.dumps(d))
   with self.assertRaisesRegex(ValueError,'fingerprint'):combine(self.root,self.lock,self.root/'output')
+
+ def rename_profile_audio(self, shard, filename):
+  path=self.root/shard/'voice-synthesis-results.json';report=json.loads(path.read_text())
+  (self.root/shard/(shard+'.wav')).rename(self.root/shard/filename)
+  report['profiles'][0]['file']=filename;path.write_text(json.dumps(report))
+ def test_cross_shard_filename_collision_rejected_before_publication(self):
+  for shard in ['a','b']:self.rename_profile_audio(shard,'shared.wav')
+  output=self.root/'output'
+  with self.assertRaisesRegex(ValueError,'filename collision'):combine(self.root,self.lock,output)
+  self.assertFalse(list(output.glob('*.wav')))
+  self.assertFalse((output/'voice-synthesis-results.json').exists())
+ def test_case_and_unicode_equivalent_output_names_rejected(self):
+  for names in [('Shared.wav','shared.wav'),('caf\u00e9.wav','cafe\u0301.wav')]:
+   with self.subTest(names=names):
+    # Restore each baseline filename before assigning the next pair.
+    for shard,name in zip(['a','b'],names):
+     p=self.root/shard/'voice-synthesis-results.json';d=json.loads(p.read_text())
+     old=d['profiles'][0].get('file',shard+'.wav')
+     (self.root/shard/old).rename(self.root/shard/name)
+     d['profiles'][0]['file']=name;p.write_text(json.dumps(d))
+    output=self.root/'output'
+    with self.assertRaisesRegex(ValueError,'filename collision'):combine(self.root,self.lock,output)
+    self.assertFalse(list(output.glob('*.wav')))
+ def test_late_invalid_shard_does_not_publish_partial_audio(self):
+  last=list(self.root.rglob('voice-synthesis-results.json'))[-1]
+  (last.parent/(last.parent.name+'.wav')).write_bytes(b'wrong')
+  output=self.root/'output'
+  with self.assertRaises(ValueError):combine(self.root,self.lock,output)
+  self.assertFalse(list(output.glob('*.wav')))

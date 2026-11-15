@@ -4,7 +4,11 @@ import Foundation
   let source=URL(fileURLWithPath:CommandLine.arguments[1]),cache=URL(fileURLWithPath:CommandLine.arguments[2])
   let count=Int(CommandLine.arguments[3])!,digest=CommandLine.arguments[4]
   let hash=Process(),input=Pipe(),output=Pipe()
+  #if os(macOS)
+  hash.executableURL=URL(fileURLWithPath:"/usr/bin/shasum");hash.arguments=["-a","256","-"]
+  #else
   hash.executableURL=URL(fileURLWithPath:"/usr/bin/sha256sum");hash.arguments=["-"]
+  #endif
   hash.standardInput=input;hash.standardOutput=output;try hash.run()
   let bank=try RVCDiskVectorBank.snapshot(source:source,cache:cache,count:count,expectedSHA256:digest,update:{data in
    try input.fileHandleForWriting.write(contentsOf:data)

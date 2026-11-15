@@ -175,7 +175,12 @@ struct LocalVideoStudioView: View {
         .onChange(of: sourceURL) { _, _ in authorized = false }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.movie, .audio]) { result in
             switch result {
-            case .success(let url): selected = url; authorized = false; selectionError = nil
+            case .success(let url):
+                authorized = false
+                do {
+                    _ = try LocalMediaImportPolicy.fileExtension(url)
+                    selected = url; selectionError = nil
+                } catch { selected = nil; selectionError = error.localizedDescription }
             case .failure: selectionError = "The selected file could not be opened. No job was started."
             }
         }

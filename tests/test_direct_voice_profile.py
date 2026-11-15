@@ -25,20 +25,25 @@ class DirectVoiceProfileTests(unittest.TestCase):
     self.assertEqual(profile['seconds'],audio.getnframes()/audio.getframerate())
 
  def test_actual_library_import_preserves_prior_profiles(self):
-  import os
+  import os,sys
   with tempfile.TemporaryDirectory() as temporary:
    root=pathlib.Path(temporary)
    with wave.open(str(root/'input.wav'),'wb') as audio:
     audio.setparams((1,2,24000,0,'NONE','not compressed'))
     audio.writeframes(b''.join(struct.pack('<h',int(4000*math.sin(i*2*math.pi*220/24000))) for i in range(24000)))
-   subprocess.run(['swiftc','-emit-library','-emit-module','-module-name','CryptoKit',
-    str(ROOT/'tests/native/ProfileTestCryptoKit.swift'),'-o',str(root/'libCryptoKit.so'),
-    '-emit-module-path',str(root/'CryptoKit.swiftmodule')],check=True,timeout=60)
+   link=[]
+   env=dict(os.environ)
+   if sys.platform != 'darwin':
+    # Apple uses the real system CryptoKit; only Linux needs the test bridge.
+    subprocess.run(['swiftc','-emit-library','-emit-module','-module-name','CryptoKit',
+     str(ROOT/'tests/native/ProfileTestCryptoKit.swift'),'-o',str(root/'libCryptoKit.so'),
+     '-emit-module-path',str(root/'CryptoKit.swiftmodule')],check=True,timeout=60)
+    link=['-I',str(root),'-L',str(root),'-lCryptoKit']
+    env['LD_LIBRARY_PATH']=str(root)
    binary=root/'library-checks'
-   subprocess.run(['swiftc','-I',str(root),'-L',str(root),'-lCryptoKit',
+   subprocess.run(['swiftc',*link,
     str(ROOT/'VoiceMatrix/F5SpeechChunks.swift'),str(ROOT/'VoiceMatrix/LocalVoiceProfilePackage.swift'),str(ROOT/'VoiceMatrix/CharacterFolderStore.swift'),
     str(ROOT/'tests/native/LocalVoiceLibraryChecks.swift'),'-o',str(binary)],check=True,timeout=60)
-   env=dict(os.environ);env['LD_LIBRARY_PATH']=str(root)
    subprocess.run([str(binary),str(root)],env=env,check=True,timeout=60)
    index=json.loads((root/'library/index.json').read_text())
    self.assertEqual(len(index),2)

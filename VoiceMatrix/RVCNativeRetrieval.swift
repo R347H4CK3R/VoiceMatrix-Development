@@ -20,6 +20,8 @@ struct RVCNativeRetrieval {
     }
     let centroids: [Float]
     let vectors: [Float]
+    private let bank:RVCDiskVectorBank?
+    private var vectorCount:Int {bank?.count ?? vectors.count/768}
     let lists: [[Int]]
     init(centroids: [Float], vectors: [Float], lists: [[Int]]) throws {
         guard (1...1024).contains(lists.count), centroids.count == lists.count * 768,
@@ -27,7 +29,15 @@ struct RVCNativeRetrieval {
               lists.reduce(0, { $0 + $1.count }) == vectors.count / 768 else { throw Failure.shape }
         guard lists.flatMap({$0}).sorted() == Array(0..<(vectors.count / 768)),
               centroids.allSatisfy({$0.isFinite}), vectors.allSatisfy({$0.isFinite}) else { throw Failure.value }
-        self.centroids=centroids;self.vectors=vectors;self.lists=lists
+        self.centroids=centroids;self.vectors=vectors;self.lists=lists;self.bank=nil
+    }
+    /// Explicit file-backed path; callers still enforce the admitted model/index pair.
+    init(centroids:[Float],bank:RVCDiskVectorBank,lists:[[Int]]) throws {
+        guard (1...2048).contains(lists.count),centroids.count==lists.count*768,
+              lists.reduce(0,{$0+$1.count})==bank.count else {throw Failure.shape}
+        guard centroids.allSatisfy({$0.isFinite}),
+              lists.flatMap({$0}).sorted()==Array(0..<bank.count) else {throw Failure.value}
+        self.centroids=centroids;self.vectors=[];self.lists=lists;self.bank=bank
     }
     func search(_ features: [Float]) throws -> Found {
         guard features.count % 768 == 0, (1...461).contains(features.count / 768),
@@ -50,18 +60,24 @@ struct RVCNativeRetrieval {
             var nearest=NearestEight()
             func visit(_ id:Int,_ offset:Int) throws {
                 if offset % 64 == 0 {try Task.checkCancellation()}
-                nearest.consider(id:id,distance:distance(row,vectors,id))
+                if let bank {
+                    let values=try bank.row(id)
+                    var total:Double=0
+                    for d in 0..<768 {let delta=Double(features[row*768+d])-Double(values[d]);total += delta*delta}
+                    nearest.consider(id:id,distance:total)
+                } else {nearest.consider(id:id,distance:distance(row,vectors,id))}
             }
             if lists[cluster].count >= 8 {
                 for (offset,id) in lists[cluster].enumerated() {try visit(id,offset)}
             } else {
-                for id in 0..<(vectors.count/768) {try visit(id,id)}
+                for id in 0..<vectorCount {try visit(id,id)}
             }
             for (id,d) in nearest.items {
                 let value=Float(d)
                 guard value.isFinite && value > 0 else {throw Failure.value}
                 ids.append(id);distances.append(value)
-                found.append(contentsOf:vectors[(id*768)..<((id+1)*768)])
+                if let bank {found.append(contentsOf:try bank.row(id))}
+                else {found.append(contentsOf:vectors[(id*768)..<((id+1)*768)])}
             }
         }
         return Found(ids:ids,distances:distances,vectors:found)

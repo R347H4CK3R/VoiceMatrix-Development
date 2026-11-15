@@ -6,6 +6,6 @@ class RetrievalMemoryTests(unittest.TestCase):
   self.assertIsNotNone(shutil.which('swiftc'),'Swift is required')
   with tempfile.TemporaryDirectory() as folder:
    binary=pathlib.Path(folder)/'checks'
-   subprocess.run(['swiftc','-O',str(ROOT/'VoiceMatrix/RVCNativeRetrieval.swift'),str(ROOT/'tests/native/RVCRetrievalMemoryChecks.swift'),'-o',str(binary)],check=True,timeout=60)
+   subprocess.run(['swiftc','-O',str(ROOT/'VoiceMatrix/RVCDiskVectorBank.swift'),str(ROOT/'VoiceMatrix/RVCNativeRetrieval.swift'),str(ROOT/'tests/native/RVCRetrievalMemoryChecks.swift'),'-o',str(binary)],check=True,timeout=60)
    result=subprocess.run([str(binary)],capture_output=True,text=True,check=True,timeout=30)
    self.assertIn('passed',result.stdout)

@@ -1,0 +1,75 @@
+{
+  "nativeExportProvenance": {
+    "dataset": "openslr/librispeech_asr",
+    "datasetRevision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+    "config": "clean",
+    "split": "test",
+    "row": 2600,
+    "id": "121-127105-0022",
+    "speakerID": 121,
+    "chapterID": 127105,
+    "referenceText": "WELL IF I DON'T KNOW WHO SHE WAS IN LOVE WITH I KNOW WHO HE WAS",
+    "license": "CC-BY-4.0",
+    "sourcePage": "https://www.openslr.org/12",
+    "rowAPI": "https://datasets-server.huggingface.co/rows?dataset=openslr/librispeech_asr&config=clean&split=test&offset=2600&length=1",
+    "audioAssetPath": "https://datasets-server.huggingface.co/cached-assets/openslr/librispeech_asr/--/71cacbfb7e2354c4226d01e70d77d5fca3d04ba1/--/clean/test/2600/audio/audio.flac",
+    "sourceSHA256": "fb25d5d8b07290d6d072475eaddac1ba51fc33c58f07ab475d2dd176dab6414e",
+    "pcmSHA256": "a537add88533a2c071d6b80700064569e96b62f95ee81afd54ef13be04f15e22",
+    "input16kSamples": 81200,
+    "inputSeconds": 5.075,
+    "selection": "Rows 2500 and 2600 preselected before scoring; rates 0 and 0.125",
+    "files": {
+      "prepared.f32": "f14b09e4f3316fc6d3ec4ffe5c9b43450e7cfd086a44971dcd53fd632dd7adcb",
+      "pitch.json": "c0d04ed71aa4ff9b7b791b8423f3b5a257a41079ca7ce5a7063df9f5676a242a"
+    },
+    "windowSHA256": [
+      "d103dd48150b22798fec2e9fc38ee451be36dcdd59e0225ec8ce0fc48741d72f"
+    ],
+    "nativeBinarySHA256": "748360c66bb9df02655754aef7f7b67947ec80a251e864a4d53aea36d190feda",
+    "inputSHA256": "fb25d5d8b07290d6d072475eaddac1ba51fc33c58f07ab475d2dd176dab6414e"
+  },
+  "retrievalAblation": {
+    "retrievalRate": 0,
+    "pitch": "Fixed default native pitch; rates 0 and .125 selected before scoring",
+    "perceptualQualityClaim": false
+  },
+  "sparseRetrievalPolicy": "Matching VCTK index nprobe=1; exact bounded fallback only for missing neighbors; isolated CPU evaluation above production cap",
+  "status": "passed",
+  "cases": [
+    {
+      "pitchMode": "native",
+      "repetitions": 1,
+      "fixtureAssembly": "Preselected LibriSpeech test-clean full reference-transcribed utterance 121-127105-0022; native prepared audio and default pitch",
+      "input16kSamples": 81200,
+      "chunks": 1,
+      "outputSamples": 203000,
+      "outputSeconds": 5.075,
+      "tailCovered": true,
+      "perChunkParity": [
+        {
+          "maxAbs": 0.000014781951904296875,
+          "rms": 1.3104073270569636e-7
+        }
+      ],
+      "reconstructionMaxAbs": 0.000014781951904296875,
+      "outputRMS": 0.08746028806471991,
+      "largestAdjacentSampleJump": 0.13260053098201752,
+      "overlapStartJumps": [],
+      "outputSHA256": "809ee995e26679f786a0f0799ff0262f049fded4178772751c5d04aa21bab053"
+    }
+  ],
+  "modelSHA256": "3c4c2e8ea977d7c08793126aace4baa47028b4c1bf7cd46ae5a9c359b0216693",
+  "indexSHA256": null,
+  "inputSHA256": "fb25d5d8b07290d6d072475eaddac1ba51fc33c58f07ab475d2dd176dab6414e",
+  "pitchMethod": "Default native pitch; fixed model, input and random inputs",
+  "humanSpeechQualityVerified": false,
+  "profileFrames": 922,
+  "coreSeconds": 6,
+  "overlapSeconds": 0.2,
+  "maximumAdmittedHours": 2,
+  "physicalIPhoneVerified": false,
+  "qualityReviewed": false,
+  "identityVerified": false,
+  "published": false,
+  "seconds": 47.39100000000326
+}

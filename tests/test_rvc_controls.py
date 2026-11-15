@@ -4,7 +4,7 @@ class Controls(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
   cls.tmp=tempfile.TemporaryDirectory();cls.binary=str(pathlib.Path(cls.tmp.name)/'controls')
-  names=['RVCNativeRetrieval','RVCNativePitch','RVCFeaturePreparation','RVCSynthesisInputs','RVCNativePreparation']
+  names=['RVCDiskVectorBank','RVCNativeRetrieval','RVCNativePitch','RVCFeaturePreparation','RVCSynthesisInputs','RVCNativePreparation']
   subprocess.run(['swiftc','-O',*[str(ROOT/'VoiceMatrix'/f'{n}.swift') for n in names],str(ROOT/'tests/native/RVCControlChecks.swift'),'-o',cls.binary],check=True,timeout=90)
  @classmethod
  def tearDownClass(cls):cls.tmp.cleanup()

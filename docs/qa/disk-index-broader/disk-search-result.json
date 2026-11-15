@@ -1,0 +1,12 @@
+{
+  "actualIndexVectors": 45313,
+  "clusters": 1161,
+  "queryRows": 3,
+  "neighbors": 24,
+  "exactIDsMatch": true,
+  "distanceTolerance": 0.001,
+  "fixtureSHA256": "2cc8844ecfb408fbee29f6a169bf30c581c69cfd7b06413af9dee969c5712b1c",
+  "nativeTest": "Full-index native search matched FAISS IDs and distances\nVerified actual vector rows, block boundaries, bounds and snapshot isolation",
+  "seconds": 2.3237909020026564,
+  "phoneVerified": false
+}

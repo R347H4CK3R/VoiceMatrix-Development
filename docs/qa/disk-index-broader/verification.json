@@ -1,0 +1,15 @@
+{
+  "portableTestsPassed": 36,
+  "swiftSyntaxPassed": true,
+  "additionalDiskFallbackTestPassed": true,
+  "sourceSHA256": {
+    "VoiceMatrix/RVCDiskVectorBank.swift": "296cf0866b50f3c60932179f4d91eafae3222646d6fcd6c932f72cc2c70e07a8",
+    "VoiceMatrix/RVCNativeRetrieval.swift": "45358e84f0048d4e3c6dbc0d7cb7b59f9d30e8f8199818edb1d40e5c5de891ea",
+    "tests/native/RVCDiskVectorChecks.swift": "efa51eb96164f19293889ed92d032e30be13a8828e899be35fa2d43a9630ffec",
+    "tests/native/RVCDiskVectorRejectChecks.swift": "5af840c0283ec9dd15733cdbfba4642da511a6f74ceef6bb5e34665b48cf14f4"
+  },
+  "appleSDKBuildRun": false,
+  "physicalIPhoneVerified": false,
+  "humanListeningVerified": false,
+  "published": false
+}

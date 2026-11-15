@@ -26,21 +26,25 @@ def fires(text,event,branch,paths=()):
  if any(matches(pattern,branch) for pattern in push_filter(text,'branches-ignore')):return False
  return any(matches(pattern,path) for pattern in push_filter(text,'paths') for path in paths)
 class DiagnosticTriggerDedupTests(unittest.TestCase):
- def test_only_explicit_candidate_and_packaging_branches_are_suppressed(self):
+ def test_only_explicit_candidate_packaging_and_controls_branches_are_suppressed(self):
   for name in FILES:
    text=source(name)
-   ignored=['codex/iphone-build4','codex/iphone-build5',CANDIDATE]
+   ignored=['codex/iphone-build4','codex/iphone-build5']
+   if name=='bundled-asr-diagnostic.yml':ignored.append('codex/rvc-conversion-controls')
+   ignored.append(CANDIDATE)
    self.assertEqual(push_filter(text,'branches-ignore'),ignored)
    for path in ['VoiceMatrix/OnDeviceTranscription.swift','project.yml']:
     for excluded in ignored:self.assertFalse(fires(text,'push',excluded,[path]),(name,excluded))
-    for branch in ['main','work/standalone',CANDIDATE+'-fix','candidate/voicematrix-1.0.0','codex/iphone-build4-fix','codex/iphone-build5-fix']:
+    for branch in ['main','work/standalone',CANDIDATE+'-fix','candidate/voicematrix-1.0.0','codex/iphone-build4-fix','codex/iphone-build5-fix','codex/rvc-conversion-controls-fix','integration/standalone-reviewed-fixes']:
      self.assertTrue(fires(text,'push',branch,[path]),(name,branch,path))
+   self.assertEqual(fires(text,'push','codex/rvc-conversion-controls',['project.yml']),name=='local-pipeline-diagnostic.yml')
    self.assertFalse(fires(text,'push','main',['README.md']),name)
    self.assertFalse(fires(text,'push','main',['VoiceMatrix/unrelated/OnDeviceTranscription.swift']),name)
  def test_manual_and_reusable_calls_remain_available_on_candidate(self):
   for name in FILES:
    for event in ['workflow_call','workflow_dispatch']:
-    self.assertTrue(fires(source(name),event,CANDIDATE))
+    for branch in [CANDIDATE,'codex/rvc-conversion-controls']:
+     self.assertTrue(fires(source(name),event,branch))
  def test_specific_non_candidate_paths_still_dispatch(self):
   self.assertTrue(fires(source(FILES[0]),'push','work/test',['probes/native-asr/Diagnostic.swift']))
   self.assertTrue(fires(source(FILES[1]),'push','work/test',['probes/native-local-studio/Diagnostic.swift']))

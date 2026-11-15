@@ -51,6 +51,7 @@ actor RVCNativeWindowConverter {
         let index=try retrievalRoot.map {try RVCNativeRetrieval.loadVerifiedPack(at:$0,cache:cache,expectedProfile:profile!)}
         let hubert=try RVCONNXHuBERT(assetRoot:hubertRoot,cacheDirectory:cache)
         do {
+            try Task.checkCancellation()
             let synthesizer=try RVCONNXSynthesizer(assetRoot:synthesizerRoot,cacheDirectory:cache)
             return RVCNativeWindowConverter(hubert:hubert,synthesizer:synthesizer,index:index)
         } catch {await hubert.close();throw error}

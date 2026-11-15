@@ -16,12 +16,14 @@ actor RVCONNXSynthesizer {
             update: { digest.update(data: $0) },
             finish: { digest.finalize().map { String(format: "%02x", $0) }.joined() })
         do {
+            try Task.checkCancellation()
             let env = try ORTEnv(loggingLevel: .warning)
             let options = try ORTSessionOptions()
             try options.setIntraOpNumThreads(2)
             try options.setGraphOptimizationLevel(.all)
             // No CoreML/XNNPACK provider: the verified phase sum uses float64.
             let loaded = try ORTSession(env: env, modelPath: model.path, sessionOptions: options)
+            try Task.checkCancellation()
             let names: Set<String> = ["phone","lengths","pitch","pitchf","speaker","latent_noise","phase_noise","excitation_noise"]
             guard Set(try loaded.inputNames()) == names, try loaded.outputNames() == ["audio"] else {
                 throw RVCSynthesisFailure.incompatibleModel

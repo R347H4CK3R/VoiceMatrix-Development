@@ -12,11 +12,13 @@ actor RVCONNXHuBERT {
         let model=try RVCSynthesisAssets.snapshot(root:assetRoot,cache:cacheDirectory,profile:"hubert-147680-cpu",
             update:{digest.update(data:$0)},finish:{digest.finalize().map{String(format:"%02x",$0)}.joined()})
         do {
+            try Task.checkCancellation()
             let env=try ORTEnv(loggingLevel:.warning)
             let options=try ORTSessionOptions()
             try options.setIntraOpNumThreads(2)
             try options.setGraphOptimizationLevel(.all)
             let loaded=try ORTSession(env:env,modelPath:model.path,sessionOptions:options)
+            try Task.checkCancellation()
             guard try loaded.inputNames() == ["audio"], try loaded.outputNames() == ["features"] else {throw RVCSynthesisFailure.incompatibleModel}
             environment=env;session=loaded;snapshot=model
         } catch {try? FileManager.default.removeItem(at:model.deletingLastPathComponent());throw error}

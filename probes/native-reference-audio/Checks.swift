@@ -9,11 +9,12 @@ import AVFoundation
         let short = root.appendingPathComponent("short-audio.mp4")
         let offset = root.appendingPathComponent("offset-audio.mov")
         let originals = try [Data(contentsOf: complete), Data(contentsOf: short), Data(contentsOf: offset)]
-        for (start, seconds) in [(0.0, 0.5), (0.2, 1.0), (1.5, 0.5)] {
+        for (start, seconds) in [(0.0, 0.5), (0.0, 0.501), (0.2, 1.0), (1.5, 0.5)] {
             log("CASE complete start=\(start) seconds=\(seconds)")
             let reference = try await LocalVideoAudio.extract(source: complete, start: start, seconds: seconds, diagnostic: log)
             guard abs(reference.seconds - seconds) <= 0.05,
-                  reference.wave.count > 44, reference.rms > 0.001 else {
+                  reference.wave.count > 44, reference.rms > 0.001,
+                  reference.seconds == Double((reference.wave.count - 44) / 2) / 24000 else {
                 fatalError("Complete reference lost duration or audible content")
             }
         }

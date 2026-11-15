@@ -38,10 +38,23 @@ jobs:
             case.fixture()
             movie=case.root/'fixture.mp4';output=case.root/'probe.wav'
             metadata=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(movie)]))
-            subprocess.run(['ffmpeg','-v','error','-ss','0','-i',str(movie),'-t','0.5','-vn','-ac','1','-ar','24000','-c:a','pcm_s16le',str(output)],check=True)
-            with wave.open(str(output),'rb') as audio:
-              frames=audio.getnframes();payload=audio.readframes(frames)
-              print(json.dumps(dict(metadata=metadata,frames=frames,rate=audio.getframerate(),payloadBytes=len(payload),requestedSeconds=0.5)))
+            variants={
+              'input_seek': ['-ss','0','-i',str(movie),'-t','0.5'],
+              'output_seek': ['-i',str(movie),'-ss','0','-t','0.5'],
+              'no_seek': ['-i',str(movie),'-t','0.5'],
+              'filter_trim': ['-i',str(movie),'-af','atrim=start=0:end=0.5,asetpts=PTS-STARTPTS'],
+              'native_aac': ['-c:a','aac','-ss','0','-i',str(movie),'-t','0.5'],
+            }
+            results={}
+            for name,args in variants.items():
+              output=case.root/(name+'.wav')
+              result=subprocess.run(['ffmpeg','-v','error',*args,'-vn','-ac','1','-ar','24000','-c:a','pcm_s16le',str(output)],capture_output=True,text=True)
+              if result.returncode:
+                results[name]=dict(error=result.stderr);continue
+              with wave.open(str(output),'rb') as audio:
+                frames=audio.getnframes();payload=audio.readframes(frames)
+                results[name]=dict(frames=frames,rate=audio.getframerate(),payloadBytes=len(payload),requestedSeconds=0.5)
+            print(json.dumps(dict(metadata=metadata,variants=results)))
           finally:case.doCleanups()
           PYTHON
       - name: Execute unchanged regression assertions

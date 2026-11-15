@@ -1,0 +1,168 @@
+name: VoiceMatrix build 7 package and publish preview
+'on':
+  push:
+    branches:
+    - codex/iphone-build7
+  workflow_dispatch: null
+permissions:
+  contents: write
+  actions: read
+jobs:
+  ipa:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Create real media fixtures
+      run: 'command -v ffmpeg >/dev/null || brew install ffmpeg
+
+        mkdir reference-audio-fixtures
+
+        ffmpeg -v error -f lavfi -i ''sine=frequency=440:duration=2'' -ac 2 -ar 44100
+        reference-audio-fixtures/complete.wav
+
+        ffmpeg -v error -f lavfi -i ''color=c=purple:s=160x90:d=3'' -f lavfi -i ''sine=frequency=440:duration=1''
+        -c:v mpeg4 -c:a aac reference-audio-fixtures/short-audio.mp4
+
+        ffmpeg -v error -f lavfi -i ''color=c=purple:s=160x90:d=3'' -itsoffset 0.2
+        -f lavfi -i ''sine=frequency=440:duration=2'' -c:v mpeg4 -c:a pcm_s16le reference-audio-fixtures/offset-audio.mov
+
+        ffprobe -v error -select_streams a:0 -show_entries stream=start_time,duration
+        -of json reference-audio-fixtures/offset-audio.mov > reference-offset-metadata.json
+
+        '
+    - name: Compile production extraction and run real AVFoundation checks
+      run: 'set -o pipefail
+
+        swiftc -parse-as-library VoiceMatrix/LocalStudioEvidence.swift VoiceMatrix/LocalVideoAudio.swift
+        probes/native-reference-audio/Checks.swift -o reference-audio-checks
+
+        ./reference-audio-checks reference-audio-fixtures 2>&1 | tee reference-audio-results.log
+
+        '
+    - uses: actions/download-artifact@v4
+      with:
+        name: Character-frozen-dependencies
+        path: frozen
+        github-token: ${{ github.token }}
+        run-id: 43649541927
+    - uses: actions/cache@v4
+      with:
+        path: character-cache
+        key: character-assets-685e8816-716d2f41
+    - name: Stage pinned shared engines with zero bundled profiles
+      run: "python3 tools/bundle_diarization.py\npython3 tools/bundle_asr.py\npython3\
+        \ tools/character_package.py prepare --cache character-cache --resources character-resources\
+        \  > assets.json\npython3 - <<'PYCODE'\nfrom pathlib import Path\nimport shutil\n\
+        for name in ('Phonon','OpenVoice','F5TTS'):\n    target=Path('VoiceMatrix/Resources')/name\n\
+        \    if target.is_symlink():raise SystemExit('Unexpected resource symlink')\n\
+        \    if target.exists():shutil.rmtree(target)\n    shutil.copytree(Path('character-resources')/name,target)\n\
+        PYCODE"
+    - name: Resolve frozen graph
+      run: 'brew install xcodegen
+
+        mkdir -p VoiceMatrix/Resources/{Phonon,OpenVoice,F5TTS}
+
+        python3 tools/create_diagnostic_collection.py
+
+        xcodegen generate
+
+        mkdir -p VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+
+        cp frozen/Package.resolved VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+        xcodebuild -resolvePackageDependencies -disableAutomaticPackageResolution
+        -onlyUsePackageVersionsFromResolvedFile -project VoiceMatrix.xcodeproj -scheme
+        VoiceMatrix -derivedDataPath native-build > resolve.log 2>&1 || { tail -100
+        resolve.log; exit 1; }
+
+        python3 -m tools.character_evidence source VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+        source-proof.json'
+    - name: Collect dependency licenses and compile unsigned ARM64 app
+      run: 'python3 tools/character_package.py notices --checkouts native-build/SourcePackages/checkouts
+        --resolved VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+        --resources VoiceMatrix/Resources > dependency-notices.json
+
+        xcodebuild -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile
+        -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix
+        -configuration Release -sdk iphoneos -destination ''generic/platform=iOS''
+        -derivedDataPath native-build CODE_SIGNING_ALLOWED=NO build > character-build.log
+        2>&1 || { tail -160 character-build.log; exit 1; }
+
+        mkdir Payload
+
+        cp -R native-build/Build/Products/Release-iphoneos/VoiceMatrix.app Payload/
+
+        cp source-proof.json Payload/VoiceMatrix.app/VoiceMatrix-Source-Proof.json
+
+        python3 tools/package_ipa.py Payload VoiceMatrix-0.4.9-build7.ipa
+
+        python3 tools/character_package.py inspect VoiceMatrix-0.4.9-build7.ipa --expected-version
+        0.4.9 --expected-build 7 --dependency-proof dependency-notices.json > character-inspection.json
+
+        python3 tools/bundle_diarization.py --inspect-ipa VoiceMatrix-0.4.9-build7.ipa
+
+        python3 tools/bundle_asr.py --inspect-ipa VoiceMatrix-0.4.9-build7.ipa
+
+        shasum -a 256 VoiceMatrix-0.4.9-build7.ipa > character-ipa.sha256'
+    - name: Record packaging-only verification boundary
+      run: 'python3 - <<''PYCODE''
+
+        import json,os,pathlib
+
+        pathlib.Path(''packaging-status.json'').write_text(json.dumps(dict(sourceCommit=os.environ[''GITHUB_SHA''],version=''0.4.9'',build=''7'',nativeTestsRun=False,hostExtractionTestsPassed=True,physicalDeviceVerified=False,likenessVerified=False,offlineRVC=False,diagnosticRVCPackImport=True,musicSeparation=False,purpose=''Unsigned
+        iPhone preview; packaging and asset inspection only''),indent=2)+''\n'')
+
+        PYCODE'
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Character-test-IPA
+        path: 'VoiceMatrix-0.4.9-build7.ipa
+
+          character-inspection.json
+
+          character-ipa.sha256
+
+          source-proof.json
+
+          dependency-notices.json
+
+          assets.json
+
+          packaging-status.json'
+        if-no-files-found: error
+        retention-days: 14
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Character-test-build-log
+        path: character-build.log
+        if-no-files-found: error
+        retention-days: 14
+      if: always()
+    - name: Publish inspected unfinished preview
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: "python3 - <<'PYCODE'\nimport json,pathlib,hashlib,os\np=pathlib.Path('VoiceMatrix-0.4.9-build7.ipa')\n\
+        d=json.loads(pathlib.Path('source-proof.json').read_text())\nassert d['sourceCommit']==os.environ['GITHUB_SHA']\n\
+        h=hashlib.file_digest(p.open('rb'),'sha256').hexdigest()\nassert pathlib.Path('character-ipa.sha256').read_text().split()[0]==h\n\
+        pathlib.Path('release-metadata.json').write_text(json.dumps(dict(version='0.4.9',buildVersion='7',size=p.stat().st_size,sha256=h,sourceCommit=os.environ['GITHUB_SHA'],packagingRun=int(os.environ['GITHUB_RUN_ID']),nativeTestsRun=False,hostExtractionTestsPassed=True,physicalDeviceVerified=False,productionVoiceQualityVerified=False),indent=2)+'\\\
+        n')\nPYCODE\ncat > release-notes.md <<'NOTES'\nUnsigned VoiceMatrix 0.4.9\
+        \ build 7 unfinished preview. Requires iOS 26 and signing through your sideloading\
+        \ setup.\n\nAdds recording/import to reference profiles, video-to-voice processing\
+        \ improvements, bounded file-backed RVC retrieval, cancellation and asset\
+        \ integrity checks, and extraction fixes. Existing user voice assets are preserved.\
+        \ No stock celebrity voices or trained RVC profiles are bundled. Experimental\
+        \ RVC still requires a compatible imported pack. Music separation and reliable\
+        \ overlapping-speaker extraction remain incomplete.\n\nThe production CoreML\
+        \ speaker adapter separated two real source speakers on a macOS host (run\
+        \ 43676371848). The packaging workflow also runs actual AVFoundation extraction\
+        \ checks. These checks do not verify physical-iPhone operation, full voice\
+        \ generation, memory performance, listening quality or likeness. This is not\
+        \ a completed 1.0.0 release.\n\nNOTES\ngh release create voicematrix-v0.4.9-build7\
+        \ VoiceMatrix-0.4.9-build7.ipa release-metadata.json character-inspection.json\
+        \ source-proof.json packaging-status.json --repo \"$GITHUB_REPOSITORY\" --target\
+        \ \"$GITHUB_SHA\" --title \"VoiceMatrix 0.4.9 build 7 \u2014 unfinished preview\"\
+        \ --notes-file release-notes.md --prerelease\n"

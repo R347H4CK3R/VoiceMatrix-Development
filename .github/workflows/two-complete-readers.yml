@@ -75,7 +75,7 @@ jobs:
         # Only the diagnostic test host is replaced; actual app/coordinator/vendor
         unchanged.
 
-        test "$(git diff --name-only)" = probes/native-local-studio/Diagnostic.swift
+        python3 probes/two-complete-readers/staged_changes.py
 
         git diff -- probes/native-local-studio/Diagnostic.swift > local-evidence/diagnostic-only.diff
 

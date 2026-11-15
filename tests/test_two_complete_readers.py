@@ -3,6 +3,13 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 def module(name):
  s=importlib.util.spec_from_file_location(name,ROOT/'probes/two-complete-readers'/f'{name}.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
 class TwoReaderTests(unittest.TestCase):
+ def test_staged_changes_allow_only_exact_placeholder_deletion_and_host_edit(self):
+  m=module('staged_changes')
+  valid=b'D\0VoiceMatrix/Resources/F5TTS/BUILD-INPUTS.txt\0M\0probes/native-local-studio/Diagnostic.swift\0'
+  m.verify(valid)
+  for bad in [valid+b'M\0VoiceMatrix/LocalVideoStudio.swift\0',valid.replace(b'D\0',b'M\0',1),valid.replace(b'M\0probes',b'D\0probes'),b'',valid+valid]:
+   with self.assertRaises(AssertionError):m.verify(bad)
+
  def test_compose_preserves_each_pcm_and_exact_silence(self):
   m=module('prepare')
   def wav(value,frames):

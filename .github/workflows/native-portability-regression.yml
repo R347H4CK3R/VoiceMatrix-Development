@@ -1,0 +1,64 @@
+name: Native portability base comparison
+on:
+  push:
+    branches: ['fix/portable-native-regression']
+    paths: ['tests/**', '.github/workflows/native-portability-regression.yml', '.github/workflows/native-character-folder.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: macos-26
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: ['962c04e3a5ab58b890fb00d398aac0eea71a81c6', 'candidate']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.revision == 'candidate' && github.sha || matrix.revision }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install identical fixture tools on both revisions
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: |
+          command -v ffmpeg || brew install ffmpeg
+          python3 -m pip install numpy==2.3.5 PyYAML==6.0.3
+      - name: Record original source-inspection fixture duration
+        run: |
+          mkdir -p evidence
+          PYTHONPATH=tests python3 - <<'PYTHON' > evidence/inspection-fixture.json
+          import json,pathlib,subprocess,wave
+          from test_source_inspection import InspectionTests
+          case=InspectionTests();case.setUp()
+          try:
+            case.fixture()
+            movie=case.root/'fixture.mp4';output=case.root/'probe.wav'
+            metadata=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(movie)]))
+            subprocess.run(['ffmpeg','-v','error','-ss','0','-i',str(movie),'-t','0.5','-vn','-ac','1','-ar','24000','-c:a','pcm_s16le',str(output)],check=True)
+            with wave.open(str(output),'rb') as audio:
+              frames=audio.getnframes();payload=audio.readframes(frames)
+              print(json.dumps(dict(metadata=metadata,frames=frames,rate=audio.getframerate(),payloadBytes=len(payload),requestedSeconds=0.5)))
+          finally:case.doCleanups()
+          PYTHON
+      - name: Execute unchanged regression assertions
+        if: always()
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD | tee evidence/source.txt
+          swiftc --version | tee evidence/compiler.txt
+          ffmpeg -version > evidence/ffmpeg.txt
+          status=0
+          for test in test_direct_voice_profile.py test_rvc_disk_vectors.py test_source_inspection.py; do
+            python3 -m unittest discover -s tests -p "$test" -v > "evidence/$test.log" 2>&1 || status=1
+            cat "evidence/$test.log"
+          done
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Native-portability-${{ matrix.revision }}
+          path: evidence/

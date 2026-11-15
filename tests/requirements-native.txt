@@ -1,0 +1,3 @@
+# Mandatory imports in the broad native regression suite.
+numpy==2.3.5
+PyYAML==6.0.3

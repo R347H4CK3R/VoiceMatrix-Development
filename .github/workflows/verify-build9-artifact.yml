@@ -1,0 +1,109 @@
+name: Verify exact build9 archive without publishing
+'on':
+  push:
+    branches:
+    - verify/preview9-artifact
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: 9c3407118de70e8e0b7352c1d590beb6525de464
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Retrieve exact successful packaging artifact
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/runs/43738877778
+        > run.json
+
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/jobs/132888281415
+        > packaging-job.json
+
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14172383471
+        > artifact.json
+
+        python3 - <<''PYCODE''
+
+        import json
+
+        r=json.load(open(''run.json''));a=json.load(open(''artifact.json''))
+
+        assert r[''head_sha'']==''9c3407118de70e8e0b7352c1d590beb6525de464''
+
+        j=json.load(open(''packaging-job.json''))
+
+        assert j[''id'']==132888281415 and j[''run_id'']==43738877778 and j[''head_sha'']==r[''head_sha'']
+
+        assert j[''name'']==''ipa'' and j[''status'']==''completed'' and j[''conclusion'']==''success''
+
+        assert a[''size_in_bytes'']==1314548306
+
+        assert r[''path'']==''.github/workflows/iphone-build9.yml''
+
+        assert a[''workflow_run''][''id'']==43738877778 and a[''name'']==''Character-test-IPA''
+
+        assert a[''digest'']==''sha256:74a90cf8ca52fc8377fbb492e8ca338ee50d92d0bb26a6dc323a898f8a7eec26''
+
+        assert not a[''expired'']
+
+        PYCODE
+
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14172383471/zip
+        > artifact.zip
+
+        echo ''74a90cf8ca52fc8377fbb492e8ca338ee50d92d0bb26a6dc323a898f8a7eec26  artifact.zip''
+        | sha256sum -c -
+
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14171746105/zip
+        > frozen.zip
+
+        echo "42472557ab8e854fcfd8e3f858da8a7fe06f1fa5d2e8a4962d7e34cd8ed446d5  frozen.zip"
+        | sha256sum -c -
+
+        '
+    - name: Reinspect archive, metadata, embedded exact source and all pinned assets
+      run: "python3 - <<'PYCODE'\nfrom pathlib import Path\nimport json,zipfile,hashlib,os\n\
+        from tools.character_evidence import source_proof\nfrom tools.character_package\
+        \ import inspect_ipa,PREFIX\nroot=Path('evidence');root.mkdir()\nexpected={'VoiceMatrix-0.4.9-build9.ipa','character-inspection.json','character-ipa.sha256','source-proof.json','dependency-notices.json','assets.json','packaging-status.json','vendor-before.json','vendor-after.json'}\n\
+        with zipfile.ZipFile('artifact.zip') as z:\n assert set(z.namelist())==expected\
+        \ and len(z.namelist())==len(expected)\n assert z.testzip() is None\n z.extractall(root)\n\
+        p=root/'VoiceMatrix-0.4.9-build9.ipa'\nwith p.open('rb') as f:h=hashlib.file_digest(f,'sha256').hexdigest()\n\
+        assert (root/'character-ipa.sha256').read_text().split()==[h,p.name]\nproof=json.loads((root/'source-proof.json').read_text())\n\
+        assert proof['sourceCommit']=='9c3407118de70e8e0b7352c1d590beb6525de464'\n\
+        with zipfile.ZipFile(p) as z:\n assert json.loads(z.read(PREFIX+'VoiceMatrix-Source-Proof.json'))==proof\n\
+        with zipfile.ZipFile('frozen.zip') as z:\n assert z.namelist()==['Package.resolved']\n\
+        \ (root/'Package.resolved').write_bytes(z.read('Package.resolved'))\nos.environ['GITHUB_SHA']=proof['sourceCommit']\n\
+        assert source_proof(root/'Package.resolved')==proof\nfrom tools.vendored_fluid\
+        \ import verify\nvendor=verify(Path.cwd())\nassert vendor==json.loads((root/'vendor-before.json').read_text())==json.loads((root/'vendor-after.json').read_text())\n\
+        assert all(pin['identity']!='fluidaudio' for pin in json.loads((root/'Package.resolved').read_text())['pins'])\n\
+        notices=json.loads((root/'dependency-notices.json').read_text())\ni=inspect_ipa(p,dependency_proof=notices['proof'],expected_version='0.4.9',expected_build='9')\n\
+        assert i==json.loads((root/'character-inspection.json').read_text())\ns=json.loads((root/'packaging-status.json').read_text())\n\
+        assert s['sourceCommit']==proof['sourceCommit'] and s['version']=='0.4.9'\
+        \ and s['build']=='9'\nassert s['physicalDeviceVerified'] is False and s['likenessVerified']\
+        \ is False\nreport=dict(scope='Package integrity only; runtime and simulator\
+        \ gates are separate',packagingJob=132888281415,sourceCommit=proof['sourceCommit'],packagingRun=43738877778,artifactID=14172383471,artifactSHA256='74a90cf8ca52fc8377fbb492e8ca338ee50d92d0bb26a6dc323a898f8a7eec26',ipaSHA256=h,ipaBytes=p.stat().st_size,inspection=i)\n\
+        (root/'independent-verification.json').write_text(json.dumps(report,indent=2)+'\\\
+        n')\nprint(json.dumps(report,indent=2))\nPYCODE\npython3 tools/bundle_asr.py\
+        \ --inspect-ipa evidence/VoiceMatrix-0.4.9-build9.ipa\npython3 tools/bundle_diarization.py\
+        \ --inspect-ipa evidence/VoiceMatrix-0.4.9-build9.ipa\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Build9-small-verification
+        path: 'evidence/*.json
+
+          evidence/*.sha256
+
+          run.json
+
+          artifact.json
+
+          packaging-job.json'
+        if-no-files-found: error
+        retention-days: 14

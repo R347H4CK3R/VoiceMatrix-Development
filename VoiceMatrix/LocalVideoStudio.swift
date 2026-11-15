@@ -417,10 +417,18 @@ import CryptoKit
                     for (index, window) in speaker.windows.enumerated() {
                         try check()
                         try update("Selecting reference", "Speaker \(speaker.speaker): checking candidate \(index + 1) of \(speaker.windows.count). Detected overlap was excluded; this is not music separation.")
+                        var candidate=try LocalReferenceAttempt(sourceSHA256:expectedHash,speaker:speaker.speaker,start:window.start,end:window.end)
+                        try candidate.record(.selected,reason:"Non-overlapping speaker window selected",directory:jobFolder)
+                        let attempt=candidate.id
                         let clip: LocalVideoAudio.Reference
                         do { clip = try await LocalVideoAudio.extract(source: retained, start: window.start, seconds: window.seconds) }
-                        catch LocalVideoAudio.Failure.unusableAudio { continue }
-                        let attempt = UUID().uuidString.lowercased()
+                        catch LocalVideoAudio.Failure.unusableAudio {
+                            try candidate.record(.extractionRejected,reason:"Clip failed single-track, audibility or clipping checks",directory:jobFolder)
+                            try update("Candidate rejected", "Speaker reference audio was unusable. Source and attempt evidence were retained.")
+                            continue
+                        }
+                        let referenceDigest=Self.hash(clip.wave)
+                        try candidate.record(.extracted,reason:"Bounded reference audio extracted",referenceSHA256:referenceDigest,directory:jobFolder)
                         let reference = jobFolder.appendingPathComponent("reference-" + attempt + ".wav")
                         try clip.wave.write(to: reference, options: .atomic)
                         current?.selectReference(reference.lastPathComponent)
@@ -441,6 +449,7 @@ import CryptoKit
                         guard quality.sourceSHA256 == Self.hash(clip.wave) else { throw LocalError.source }
                         try JSONEncoder().encode(quality).write(to:jobFolder.appendingPathComponent("quality-" + attempt + ".json"),options:.atomic)
                         guard quality.decision.admitted else {
+                            try candidate.record(.screeningRejected,reason:quality.decision.reason,referenceSHA256:referenceDigest,directory:jobFolder)
                             try update("Candidate needs review", quality.decision.reason)
                             continue
                         }
@@ -451,17 +460,24 @@ import CryptoKit
                             guard let self, self.runToken == run, self.busy, self.current?.stage == "Transcribing reference", self.current?.referenceFile == reference.lastPathComponent else { return }
                             try? self.update("Transcribing reference", "On-device recognition is producing results.", log: false)
                         } }
-                        catch OnDeviceTranscription.Failure.noSpeech { continue }
+                        catch OnDeviceTranscription.Failure.noSpeech {
+                            try candidate.record(.referenceNoSpeech,reason:"No speech recognized in reference",referenceSHA256:referenceDigest,directory:jobFolder)
+                            try update("Candidate rejected", "No reference speech was recognized. Audio and attempt evidence were retained.")
+                            continue
+                        }
                         guard let transcriptionEvidence = transcriber.lastEvidence,
                               transcriptionEvidence.inputSHA256 == Self.hash(clip.wave) else { throw LocalError.candidate }
                         try JSONEncoder().encode(transcriptionEvidence).write(to: jobFolder.appendingPathComponent("transcription-evidence-" + attempt + ".json"), options: .atomic)
                         try Data(transcript.utf8).write(to: jobFolder.appendingPathComponent("transcript-" + attempt + ".txt"), options: .atomic)
+                        try candidate.record(.transcribed,reason:"Transcript evidence retained",referenceSHA256:referenceDigest,directory:jobFolder)
                         do {try F5SpeechChunks.validateReference(text:transcript,seconds:clip.seconds)}
                         catch is F5ChunkError {
+                            try candidate.record(.referenceIncompatible,reason:"Transcript or duration exceeds speech engine limits",referenceSHA256:referenceDigest,directory:jobFolder)
                             try update("Candidate needs review", "The recognized reference does not fit the speech engine. Transcript evidence was kept; trying another candidate.")
                             continue
                         }
                         try check(); previews += 1
+                        try candidate.record(.generating,reason:"Generating bounded preview",referenceSHA256:referenceDigest,directory:jobFolder)
                         try update("Generating preview", "Loading the bundled F5 engine and generating preview \(previews) of at most 3 for speaker \(speaker.speaker). No laptop or server is used.")
                         let preview = jobFolder.appendingPathComponent("preview-" + attempt + ".wav")
                         try await engine.load(localBundle: bundle)
@@ -469,13 +485,19 @@ import CryptoKit
                             Task { @MainActor in guard let self, self.runToken == run, self.busy, self.current?.stage == "Generating preview", self.current?.referenceFile == reference.lastPathComponent else { return }; try? self.update("Generating preview", "Generating speech part \(part) of \(total).", log: false) }
                         }
                         await engine.finishRequest(keepWarm: false)
+                        try candidate.record(.verifying,reason:"Generated preview pending word check",referenceSHA256:referenceDigest,directory:jobFolder)
                         try update("Verifying preview", "Checking the generated words locally. This does not verify likeness.")
                         let recognized: String
                         do { recognized = try await transcriber.transcribe(preview) }
-                        catch OnDeviceTranscription.Failure.noSpeech { if previews >= 3 { break }; continue }
+                        catch OnDeviceTranscription.Failure.noSpeech {
+                            try candidate.record(.previewNoSpeech,reason:"No speech recognized in generated preview",referenceSHA256:referenceDigest,directory:jobFolder)
+                            try update("Preview rejected", "No preview speech was recognized. Preview and reference were retained.")
+                            if previews >= 3 { break }; continue
+                        }
                         guard let previewEvidence = transcriber.lastEvidence else { throw LocalError.preview }
                         try JSONEncoder().encode(previewEvidence).write(to: jobFolder.appendingPathComponent("preview-asr-evidence-" + attempt + ".json"), options: .atomic)
                         guard LocalStudioEvidence.wordErrorRate(expected: previewText, actual: recognized) <= 0.1 else {
+                            try candidate.record(.previewWordsRejected,reason:"Preview exceeded the unchanged spoken-word error gate",referenceSHA256:referenceDigest,previewSHA256:previewEvidence.inputSHA256,directory:jobFolder)
                             try update("Preview rejected", "Spoken words did not pass. This preview is retained but will not be imported.")
                             if previews >= 3 { break }; continue
                         }
@@ -522,6 +544,7 @@ import CryptoKit
                             library.selectedID = existing.id
                             current?.voiceID = existing.id
                             current?.speakerVoiceIDs?[speaker.speaker] = existing.id
+                            try candidate.record(.reused,reason:"Existing reference reused; likeness unverified",referenceSHA256:referenceDigest,previewSHA256:previewEvidence.inputSHA256,voiceID:existing.id,directory:jobFolder)
                             try recordSpeakerAssets(speaker.speaker, voiceID: existing.id, referenceSHA256: Self.hash(clip.wave), previewSHA256: previewEvidence.inputSHA256)
                             current?.qualityPolicyVersions?[speaker.speaker] = LocalSoundQualityPolicy.version
                             current?.speakerOutcomes?[speaker.speaker] = "Saved reference; word check passed; likeness unverified"
@@ -540,6 +563,7 @@ import CryptoKit
                         try update("Importing", "Atomically validating and registering the preview-only reference on this iPhone.")
                         try await library.importLocalGeneratedCollection(collection, owner: libraryOwner!)
                         guard let savedProfile = library.profiles.first(where: { $0.id == id }) else { throw LocalError.candidate }
+                        try candidate.record(.saved,reason:"Reference imported; likeness unverified",referenceSHA256:referenceDigest,previewSHA256:previewEvidence.inputSHA256,voiceID:id,directory:jobFolder)
                         current?.voiceID = id
                         current?.speakerVoiceIDs?[speaker.speaker] = id
                         try recordSpeakerAssets(speaker.speaker, voiceID: id, referenceSHA256: Self.hash(clip.wave), previewSHA256: previewEvidence.inputSHA256)

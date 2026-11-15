@@ -6,7 +6,7 @@ import CryptoKit
     @MainActor static func main() async throws {
         guard CommandLine.arguments.count == 3 else { throw Failure.assertion }
         let resources = URL(fileURLWithPath: CommandLine.arguments[1])
-        let base = URL(fileURLWithPath: CommandLine.arguments[2])
+        let base = URL(fileURLWithPath: CommandLine.arguments[2]).standardizedFileURL
         let storeRoot = base.appendingPathComponent("history", isDirectory: true)
         let quality = CatalogSpeechQuality(root: storeRoot, asrBundle: resources.appendingPathComponent("ParakeetASR"))
         let text = "Please close the window and bring the notebook."

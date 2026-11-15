@@ -1,0 +1,36 @@
+name: Production CoreML real speech grouping
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  coreml-speakers:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stage pinned models and real speech
+        run: |
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          python3 tools/bundle_diarization.py --destination "$RUNNER_TEMP/diarization-models"
+          python3 probes/coreml-real-speakers/prepare.py "$RUNNER_TEMP/real-speakers"
+      - name: Compile and run actual production adapter
+        run: |
+          set -o pipefail
+          cp VoiceMatrix/LocalSpeakerDiarization.swift VoiceMatrix/LocalSpeakerPolicy.swift probes/coreml-real-speakers/Sources/Probe/
+          swift build --package-path probes/coreml-real-speakers -c release
+          probes/coreml-real-speakers/.build/release/Probe "$RUNNER_TEMP/diarization-models" "$RUNNER_TEMP/real-speakers/assembledABA.wav" "$RUNNER_TEMP/real-speakers/fixture.json" "$RUNNER_TEMP/real-speakers/analysis.json" | tee coreml-real-speakers.log
+          python3 probes/coreml-real-speakers/check.py "$RUNNER_TEMP/real-speakers/analysis.json" "$RUNNER_TEMP/real-speakers/fixture.json" | tee coreml-group-check.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-coreml-real-speakers
+          path: |
+            coreml-real-speakers.log
+            coreml-group-check.json
+            ${{ runner.temp }}/real-speakers/analysis.json
+            ${{ runner.temp }}/real-speakers/fixture.json
+          if-no-files-found: warn

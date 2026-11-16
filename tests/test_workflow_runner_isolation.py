@@ -1,3 +1,4 @@
+from tools.test_shell import check_bash_syntax
 import pathlib,unittest,yaml,subprocess
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 class IsolationTests(unittest.TestCase):
@@ -5,7 +6,7 @@ class IsolationTests(unittest.TestCase):
   d=yaml.safe_load((ROOT/'.github/workflows/character-ui-smoke.yml').read_text())
   steps=d['jobs']['ui']['steps']
   for step in steps:
-   if 'run' in step:subprocess.run(['bash','-n'],input=step['run'],text=True,check=True)
+   if 'run' in step:check_bash_syntax(step['run'])
   imports=next(s for s in steps if s.get('name','').startswith('Import a synthetic'))
   names=next(s for s in steps if s.get('name','').startswith('Assign a voice'))
   for s,method,result in [(imports,'testImportSelectListenAndKeepVoicesAfterRelaunch','character-workflow'),(names,'testUserAssignedNamePersistsAndCanBeReset','character-naming')]:

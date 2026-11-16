@@ -1,3 +1,4 @@
+from tools.test_shell import check_bash_syntax
 import pathlib,subprocess,unittest,yaml
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 class RetainedSpeechDiagnosticTests(unittest.TestCase):
@@ -16,4 +17,4 @@ class RetainedSpeechDiagnosticTests(unittest.TestCase):
         self.assertIn('(deny network*)',s)
         self.assertIn('b3623b6847223e0c0704aa60a896b746d733b141152478534200fcfeb19e6779',s)
         for step in w['jobs']['diagnose']['steps']:
-            if 'run' in step: subprocess.run(['bash','-n'],input=step['run'],text=True,check=True)
+            if 'run' in step: check_bash_syntax(step['run'])

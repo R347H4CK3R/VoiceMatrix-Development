@@ -1,3 +1,4 @@
+from tools.test_shell import check_bash_syntax
 import pathlib,tempfile,unittest,runpy,os,sys,contextlib,shutil,subprocess,yaml,wave,array
 from unittest.mock import patch
 ROOT=pathlib.Path(__file__).resolve().parents[1]
@@ -28,7 +29,7 @@ class HistoryUITests(unittest.TestCase):
   d=yaml.safe_load((ROOT/'.github/workflows/catalog-history-ui.yml').read_text())
   self.assertEqual(d['permissions'],{'contents':'read'})
   for step in d['jobs']['ui']['steps']:
-   if 'run' in step:subprocess.run(['bash','-n'],input=step['run'],text=True,check=True)
+   if 'run' in step:check_bash_syntax(step['run'])
   s=(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift').read_text()
   for text in ['stop.waitForExistence','stop.waitForNonExistence','count == 0','save.label,"Saved"','PopoverDismissRegion','confirm.waitForNonExistence','confirm.tap()','select-character-diagnostic-neutral','Save to Files']:
    self.assertIn(text,s)

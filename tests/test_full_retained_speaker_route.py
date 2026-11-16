@@ -1,3 +1,4 @@
+from tools.test_shell import check_bash_syntax
 import pathlib,unittest,yaml,subprocess
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 class FullRouteTests(unittest.TestCase):
@@ -8,6 +9,6 @@ class FullRouteTests(unittest.TestCase):
   w=yaml.safe_load((ROOT/'.github/workflows/full-retained-speaker-route.yml').read_text());self.assertEqual(w['permissions'],dict(contents='read',actions='read'))
   for step in w['jobs']['actual-local-pipeline']['steps']:
    if 'run' in step:
-    subprocess.run(['bash','-n'],input=step['run'],text=True,check=True)
+    check_bash_syntax(step['run'])
     self.assertNotIn('original.write_bytes',step['run'])
   s='\n'.join(x.get('run','') for x in w['jobs']['actual-local-pipeline']['steps']);self.assertIn('audio local-evidence/transcript.txt',s);self.assertIn('(deny network*)',s)

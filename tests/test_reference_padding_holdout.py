@@ -1,3 +1,4 @@
+from tools.test_shell import check_bash_syntax
 import pathlib,unittest,yaml,subprocess
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 class HoldoutTests(unittest.TestCase):
@@ -7,5 +8,5 @@ class HoldoutTests(unittest.TestCase):
  def test_workflow_preserves_references_and_distinct_outputs(self):
   w=yaml.safe_load((ROOT/'.github/workflows/reference-padding-holdout.yml').read_text());self.assertEqual(w['permissions'],dict(contents='read',actions='read'))
   scripts=[s['run'] for s in w['jobs']['actual-local-pipeline']['steps'] if 'run' in s]
-  for s in scripts:subprocess.run(['bash','-n'],input=s,text=True,check=True)
+  for s in scripts:check_bash_syntax(s)
   self.assertIn('[(c,t) for c in range(3) for t in [0,50]]','\n'.join(scripts))

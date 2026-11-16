@@ -1,3 +1,4 @@
+from tools.test_shell import check_bash_syntax
 import pathlib,unittest,yaml,subprocess
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 class BoundaryTests(unittest.TestCase):
@@ -8,4 +9,4 @@ class BoundaryTests(unittest.TestCase):
  def test_readonly_and_shell(self):
   w=yaml.safe_load((ROOT/'.github/workflows/reference-boundary-selection.yml').read_text());self.assertEqual(w['permissions'],dict(contents='read',actions='read'))
   for step in w['jobs']['actual-local-pipeline']['steps']:
-   if 'run' in step:subprocess.run(['bash','-n'],input=step['run'],text=True,check=True)
+   if 'run' in step:check_bash_syntax(step['run'])

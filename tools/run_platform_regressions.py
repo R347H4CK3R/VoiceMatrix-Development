@@ -1,4 +1,4 @@
-"""Keep Windows worker coverage separate from POSIX Swift harnesses.
+"""Keep Windows worker coverage separate from POSIX Swift/package harnesses.
 
 No native check is waived: the full Linux lane must execute every delegated ID
 successfully (not skip it). Both matrix jobs remain required workflow gates.
@@ -31,7 +31,7 @@ def main():
  p=argparse.ArgumentParser();p.add_argument('--mode',choices=['full','windows-worker'],required=True);a=p.parse_args()
  if (a.mode=='windows-worker') != (sys.platform=='win32'):raise RuntimeError('Platform/mode mismatch')
  if os.environ.get('GITHUB_ACTIONS')=='true' and not re.fullmatch('[0-9a-f]{40}',os.environ.get('GITHUB_SHA','')):raise RuntimeError('Missing CI source identity')
- manifest=json.loads(MANIFEST.read_text(encoding='utf-8'));delegated=manifest['posixSwiftTestIDs']
+ manifest=json.loads(MANIFEST.read_text(encoding='utf-8'));delegated=manifest['posixTestIDs']
  if len(delegated)!=len(set(delegated)):raise ValueError('Duplicate delegated identity')
  suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'))
  selected=select(suite,a.mode,delegated)

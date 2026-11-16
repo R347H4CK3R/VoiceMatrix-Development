@@ -1,3 +1,4 @@
+from tools.test_shell import check_bash_syntax
 import pathlib,unittest,yaml,subprocess,importlib.util,tempfile
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 class IndependentTests(unittest.TestCase):
@@ -7,7 +8,7 @@ class IndependentTests(unittest.TestCase):
  def test_workflow_readonly_bound_and_shell(self):
   w=yaml.safe_load((ROOT/'.github/workflows/reference-padding-independent.yml').read_text());self.assertEqual(w['permissions'],dict(contents='read',actions='read'));self.assertEqual(w['jobs']['actual-local-pipeline']['timeout-minutes'],50)
   for step in w['jobs']['actual-local-pipeline']['steps']:
-   if 'run' in step:subprocess.run(['bash','-n'],input=step['run'],text=True,check=True)
+   if 'run' in step:check_bash_syntax(step['run'])
  def test_bad_archive_preserved_rejected(self):
   spec=importlib.util.spec_from_file_location('prep',ROOT/'probes/reference-padding-independent/prepare.py');p=importlib.util.module_from_spec(spec);spec.loader.exec_module(p)
   with tempfile.TemporaryDirectory() as d:

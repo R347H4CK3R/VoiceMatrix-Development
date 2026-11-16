@@ -1,6 +1,6 @@
 {
-  "reason": "These exact native Swift checks use POSIX compiler, executable and CryptoKit bridge conventions. Full Linux CI must execute every ID successfully; Windows retains all other worker/source tests and reports its existing platform skips. This does not claim native iOS verification on Windows.",
-  "posixSwiftTestIDs": [
+  "reason": "These exact checks require POSIX Swift compiler/executable/CryptoKit bridge conventions or POSIX executable-mode bits in pinned vendor/package fixtures. Full Linux CI must execute every ID successfully, without skips. Windows retains all other worker/source tests and reports its existing platform skips. This does not claim native iOS or POSIX package verification on Windows.",
+  "posixTestIDs": [
     "test_diarizer_eof_patch.EOFDiagnosticTests.test_actual_app_boundary_guard_still_rejects_invalid_evidence",
     "test_direct_voice_profile.DirectVoiceProfileTests.test_actual_library_import_preserves_prior_profiles",
     "test_direct_voice_profile.DirectVoiceProfileTests.test_package_roundtrip_bounds_cancellation_and_preservation",
@@ -21,6 +21,32 @@
     "test_rvc_native_features.RVCFeatureTests.test_pitch_interpolation_shift_and_bins",
     "test_rvc_native_synthesis.NativeSynthesisTests.test_tensor_bytes_and_reject_malformed_assets_before_inference",
     "test_rvc_retrieval_memory.RetrievalMemoryTests.test_bounded_selection_and_exact_sparse_fallback",
-    "test_rvc_retrieval_pack.RetrievalPackAdmission.test_profile_manifest_cannot_override_file_identity"
+    "test_rvc_retrieval_pack.RetrievalPackAdmission.test_profile_manifest_cannot_override_file_identity",
+    "test_character_package.CharacterPackageTests.test_complete_no_stock_artifact_passes_with_explicit_unverified_device_status",
+    "test_character_package.CharacterPackageTests.test_explicit_build_identity_rejects_reused_package",
+    "test_character_package.CharacterPackageTests.test_missing_or_tampered_f5_asset_fails",
+    "test_character_package.CharacterPackageTests.test_self_signed_forged_proof_does_not_override_pinned_hash",
+    "test_character_package.CharacterPackageTests.test_stock_or_private_reference_payload_is_rejected",
+    "test_character_package.CharacterPackageTests.test_bundled_private_pairing_token_is_rejected",
+    "test_character_package.CharacterPackageTests.test_missing_or_modified_license_is_rejected",
+    "test_character_package.CharacterPackageTests.test_duplicate_and_traversal_archive_names_are_rejected",
+    "test_character_package.CharacterPackageTests.test_missing_dependency_notice_or_resolved_proof_fails",
+    "test_character_package.CharacterPackageTests.test_wrong_architecture_or_placeholder_fails",
+    "test_character_package.CharacterPackageTests.test_rewritten_baseline_manifest_cannot_hide_missing_engine",
+    "test_character_package.CharacterPackageTests.test_private_or_case_variant_resource_outside_f5_is_rejected",
+    "test_character_package.CharacterPackageTests.test_download_rejects_bad_hash_and_does_not_replace_existing_file",
+    "test_character_package.CharacterPackageTests.test_prepare_stages_exact_resources_and_refuses_existing_destination",
+    "test_character_package.CharacterPackageTests.test_conversion_only_staging_does_not_fetch_or_install_f5_weights",
+    "test_character_package.CharacterPackageTests.test_dependency_collection_records_actual_revision_and_nested_notices",
+    "test_character_package.CharacterPackageTests.test_rewritten_dependency_inventory_cannot_override_external_evidence",
+    "test_character_package.CharacterPackageTests.test_missing_external_dependency_evidence_is_not_accepted",
+    "test_character_package.CharacterPackageTests.test_symlink_and_case_collisions_fail",
+    "test_character_package.CharacterPackageTests.test_download_accepts_exact_bytes",
+    "test_character_package.CharacterPackageTests.test_missing_compiled_speech_shader_is_rejected",
+    "test_character_package.CharacterPackageTests.test_invalid_compiled_speech_shader_is_rejected",
+    "test_character_package.CharacterPackageTests.test_matching_external_inventory_cannot_override_vendored_license",
+    "test_character_package.CharacterPackageTests.test_matching_external_inventory_cannot_reintroduce_remote_fluid",
+    "test_vendored_fluid.VendoredFluidTests.test_all_third_party_licenses_captured",
+    "test_vendored_fluid.VendoredFluidTests.test_exact_inventory_and_upstream_tree"
   ]
 }

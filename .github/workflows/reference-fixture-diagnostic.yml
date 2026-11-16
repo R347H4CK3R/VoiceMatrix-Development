@@ -11,6 +11,8 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 1e8d02fe98eb136e43ea7a6c1efe8c7e0727d9b7
       - name: Extract exact checked out fixture and production functions
         run: python3 probes/diagnose-reference-fixture.py . fixture-diagnostic
       - name: Compile standalone native AVFoundation diagnostic
@@ -19,6 +21,8 @@ jobs:
         run: |
           set -o pipefail
           fixture-diagnostic/diagnose fixture-diagnostic/results | tee fixture-diagnostic/diagnostic.log
+      - name: Run actual native reference-buffer XCTest class against exact production helpers
+        run: set -o pipefail; swift test --package-path fixture-diagnostic/NativeTests 2>&1 | tee fixture-diagnostic/native-tests.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -25,7 +25,7 @@ jobs:
       - name: Compile and run actual production adapter
         run: |
           set -o pipefail
-          cp VoiceMatrix/LocalSpeakerDiarization.swift VoiceMatrix/LocalSpeakerPolicy.swift probes/coreml-real-speakers/Sources/Probe/
+          cp VoiceMatrix/LocalSpeakerDiarization.swift VoiceMatrix/LocalSpeakerPolicy.swift VoiceMatrix/LocalOverlapPolicy.swift probes/coreml-real-speakers/Sources/Probe/
           swift build --package-path probes/coreml-real-speakers -c release
           probes/coreml-real-speakers/.build/release/Probe "$RUNNER_TEMP/diarization-models" "$RUNNER_TEMP/real-speakers/assembledABA.wav" "$RUNNER_TEMP/real-speakers/fixture.json" "$RUNNER_TEMP/real-speakers/analysis.json" | tee coreml-real-speakers.log
           python3 probes/coreml-real-speakers/check.py "$RUNNER_TEMP/real-speakers/analysis.json" "$RUNNER_TEMP/real-speakers/fixture.json" | tee coreml-group-check.json

@@ -338,6 +338,7 @@ import CryptoKit
                 await speech.releaseModelsForCharacter()
                 await engine.finishRequest(keepWarm: false)
                 let analysis: LocalSpeakerDiarization.Analysis
+                var retainedAnalysis: LocalSpeakerDiarization.Analysis?
                 if let name = current?.analysisFile, let digest = current?.analysisSHA256 {
                     let url = jobFolder.appendingPathComponent(name)
                     let v = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
@@ -345,15 +346,17 @@ import CryptoKit
                     let data = try Data(contentsOf: url)
                     guard Self.hash(data) == digest else { throw LocalError.source }
                     let storedAnalysis = try JSONDecoder().decode(LocalSpeakerDiarization.Analysis.self, from: data)
-                    analysis = try LocalSpeakerDiarization.validatedForCurrentPolicy(storedAnalysis)
-                    if storedAnalysis.selectionPolicyVersion != 2 {
-                        let upgraded = try JSONEncoder().encode(analysis)
-                        let upgradedName = "diarization-" + UUID().uuidString.lowercased() + ".json"
-                        try upgraded.write(to: jobFolder.appendingPathComponent(upgradedName), options: .atomic)
-                        current?.analysisFile = upgradedName; current?.analysisSHA256 = Self.hash(upgraded)
-                        try update("Reference selection upgraded", "Validated older speaker evidence and added bounded alternate crops. Original analysis and media are retained.")
+                    let validated=try LocalSpeakerDiarization.validatedForCurrentPolicy(storedAnalysis)
+                    if validated.selectionPolicyVersion == 5 {
+                        guard validated.rawOverlap?.sourceSHA256 == expectedHash else {throw LocalError.source}
+                        retainedAnalysis=validated
+                    } else {
+                        try update("Overlap analysis upgrade", "Older speaker evidence has no independent overlap coverage. Reanalyzing retained media before creating new references; existing voices remain available.")
                     }
-                    try update("Speaker analysis retained", "Reusing the verified retained analysis so speaker groups stay consistent across Resume.")
+                }
+                if let retainedAnalysis {
+                    analysis=retainedAnalysis
+                    try update("Speaker analysis retained", "Reusing source-bound speaker and independent overlap evidence.")
                 } else {
                     try update("Analyzing speakers", "Loading bundled speaker analysis. Speaker groups are not character identities.")
                     analysis = try await LocalSpeakerDiarization.analyze(source: retained, bundle: speakerBundle) { [weak self] message in
@@ -363,6 +366,14 @@ import CryptoKit
                         }
                     }
                     try check()
+                    guard analysis.selectionPolicyVersion == 5,analysis.rawOverlap?.sourceSHA256 == expectedHash else {throw LocalError.source}
+                    // Fresh analysis invalidates every job association, including missing old analysis metadata.
+                    // Existing library profiles and retained files are not deleted.
+                    do {
+                        current?.speakerVoiceIDs=nil;current?.speakerAssets=nil;current?.speakerOutcomes=nil
+                        current?.qualityPolicyVersions=nil;current?.visualEvidence=nil
+                        current?.referenceFile=nil;current?.previewFile=nil;current?.similarity=nil;current?.voiceID=nil
+                    }
                     let data = try JSONEncoder().encode(analysis)
                     let name = "diarization-" + UUID().uuidString.lowercased() + ".json"
                     try data.write(to: jobFolder.appendingPathComponent(name), options: .atomic)

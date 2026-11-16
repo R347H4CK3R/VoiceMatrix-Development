@@ -9,3 +9,7 @@ exclude model padding beyond the actual source sample count during offline
 speaker timeline reconstruction. EOFTimelineTests.swift adds boundary tests.
 No ASR, model weights, voice identity, or app acceptance thresholds are changed.
 This source integration is under validation and is not in published build 8.
+
+PreparedDiarization.swift adds a read-only segmentationEvidence accessor so the
+app can retain raw model overlap evidence independently of speaker clustering.
+It does not change inference, clustering, model weights or original count rules.

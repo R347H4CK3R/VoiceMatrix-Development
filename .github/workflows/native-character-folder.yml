@@ -1,73 +1,85 @@
 name: Native character folder checks
-on:
-  push:
-    branches-ignore: [codex/iphone-build4, codex/iphone-build5, codex/rvc-conversion-controls]
-    paths: ['.github/workflows/voicematrix-049-candidate.yml', 'VoiceMatrix/RemoteVoiceCatalog.swift', 'VoiceMatrix/VoiceCatalogConnection.swift', 'tests/native/SelectiveVoiceDownloadChecks.swift', 'tools/**', 'tests/test_*.py', 'tests/requirements-native.txt', 'VoiceMatrix/VoiceSyncLog.swift', 'VoiceMatrix/VoiceFolderSync.swift', 'tests/native/VoiceFolderSyncChecks.swift', 'VoiceMatrix/CharacterReviewStore.swift', 'tests/native/CharacterReviewChecks.swift', 'VoiceMatrix/ConversionAudio.swift', 'VoiceMatrix/OfflineVoiceConverter.swift', 'tests/native/CharacterReferenceAudioChecks.swift', 'VoiceMatrix/F5SpeechChunks.swift', 'tests/native/F5SpeechChunkChecks.swift', 'VoiceMatrix/StudioActivity.swift', 'tests/native/StudioActivityChecks.swift', 'VoiceMatrix/CharacterFolderStore.swift', 'VoiceMatrix/CharacterLibraryView.swift', 'tests/native/CharacterFolderChecks.swift', 'tests/test_character_folder.py', 'tools/voice_pack.py', '.github/workflows/native-character-folder.yml']
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   import-checks:
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install native regression Python dependencies
-        run: python3 -m pip install -r tests/requirements-native.txt
-      - name: Install media fixture dependency
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: '1'
-        run: brew install ffmpeg
-      - name: Prepare synthetic reference collection
-        run: |
-          python3 - <<'PY'
-          import pathlib,wave
-          from tools.voice_pack import export_reference_pack,export_collection_folder
-          root=pathlib.Path('folder-check-fixture');root.mkdir()
-          with wave.open(str(root/'original.wav'),'wb') as w:
-            w.setparams((1,2,24000,0,'NONE','not compressed'));w.writeframes(b'\x00\x10'*24000)
-          m=dict(id='original-test',name='Original Test',categories=['Animation','Fantasy'],source='Synthetic test fixture',permission='Original synthetic fixture',referenceText='A test reference.')
-          pack=export_reference_pack(root/'original.wav',m,root/'test.vmpack')
-          export_collection_folder([pack],root/'Voices')
-          PY
-      - name: Compile and execute native private-import checks
-        run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift tests/native/CharacterFolderChecks.swift -o character-folder-checks
-          ./character-folder-checks folder-check-fixture/Voices
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install native regression Python dependencies
+      run: python3 -m pip install -r tests/requirements-native.txt
+    - name: Install media fixture dependency
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+      run: brew install ffmpeg
+    - name: Prepare synthetic reference collection
+      run: "python3 - <<'PY'\nimport pathlib,wave\nfrom tools.voice_pack import export_reference_pack,export_collection_folder\n\
+        root=pathlib.Path('folder-check-fixture');root.mkdir()\nwith wave.open(str(root/'original.wav'),'wb')\
+        \ as w:\n  w.setparams((1,2,24000,0,'NONE','not compressed'));w.writeframes(b'\\\
+        x00\\x10'*24000)\nm=dict(id='original-test',name='Original Test',categories=['Animation','Fantasy'],source='Synthetic\
+        \ test fixture',permission='Original synthetic fixture',referenceText='A test\
+        \ reference.')\npack=export_reference_pack(root/'original.wav',m,root/'test.vmpack')\n\
+        export_collection_folder([pack],root/'Voices')\nPY\n"
+    - name: Compile and execute native private-import checks
+      run: 'xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift
+        tests/native/CharacterFolderChecks.swift -o character-folder-checks
 
-      - name: Check shared audio-work ownership
-        run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/StudioActivity.swift tests/native/StudioActivityChecks.swift -o studio-activity-checks
-          ./studio-activity-checks
+        ./character-folder-checks folder-check-fixture/Voices
 
-      - name: Check explicit listening decisions and changed-reference invalidation
-        run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/CharacterReviewStore.swift tests/native/CharacterReviewChecks.swift -o character-review-checks
-          ./character-review-checks
+        '
+    - name: Check shared audio-work ownership
+      run: 'xcrun swiftc -parse-as-library VoiceMatrix/StudioActivity.swift tests/native/StudioActivityChecks.swift
+        -o studio-activity-checks
 
-      - name: Check long conditioning reference boundaries without weakening source limits
-        run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/ConversionAudio.swift tests/native/CharacterReferenceAudioChecks.swift -o character-reference-audio-checks
-          ./character-reference-audio-checks
+        ./studio-activity-checks
 
-      - name: Check bounded speech chunks and preservation of every word
-        if: always()
-        run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/F5SpeechChunks.swift tests/native/F5SpeechChunkChecks.swift -o f5-speech-chunk-checks
-          ./f5-speech-chunk-checks
+        '
+    - name: Check explicit listening decisions and changed-reference invalidation
+      run: 'xcrun swiftc -parse-as-library VoiceMatrix/CharacterReviewStore.swift
+        tests/native/CharacterReviewChecks.swift -o character-review-checks
 
-      - name: Run collection export and source regression tests
-        if: always()
-        run: python3 -m unittest discover -s tests -v
+        ./character-review-checks
 
-      - name: Check request-correlated, private sync log events
-        run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/VoiceSyncLog.swift tests/native/VoiceSyncLogChecks.swift -o sync-log-checks
-          ./sync-log-checks
+        '
+    - name: Check long conditioning reference boundaries without weakening source
+        limits
+      run: 'xcrun swiftc -parse-as-library VoiceMatrix/ConversionAudio.swift tests/native/CharacterReferenceAudioChecks.swift
+        -o character-reference-audio-checks
 
-      - name: Check bounded private transfer and native folder staging
-        run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift VoiceMatrix/VoiceFolderSync.swift VoiceMatrix/VoiceSyncLog.swift tests/native/VoiceFolderSyncChecks.swift -o private-transfer-checks
-          ./private-transfer-checks folder-check-fixture/Voices
+        ./character-reference-audio-checks
+
+        '
+    - name: Check bounded speech chunks and preservation of every word
+      if: always()
+      run: 'xcrun swiftc -parse-as-library VoiceMatrix/F5SpeechChunks.swift tests/native/F5SpeechChunkChecks.swift
+        -o f5-speech-chunk-checks
+
+        ./f5-speech-chunk-checks
+
+        '
+    - name: Run collection export and source regression tests
+      if: always()
+      run: python3 -m unittest discover -s tests -v
+    - name: Check request-correlated, private sync log events
+      run: 'xcrun swiftc -parse-as-library VoiceMatrix/VoiceSyncLog.swift tests/native/VoiceSyncLogChecks.swift
+        -o sync-log-checks
+
+        ./sync-log-checks
+
+        '
+    - name: Check bounded private transfer and native folder staging
+      run: 'xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift
+        VoiceMatrix/VoiceFolderSync.swift VoiceMatrix/VoiceSyncLog.swift tests/native/VoiceFolderSyncChecks.swift
+        -o private-transfer-checks
+
+        ./private-transfer-checks folder-check-fixture/Voices
+
+        '
+'on':
+  push:
+    branches:
+    - preview/voicematrix-build12
+  workflow_dispatch: null

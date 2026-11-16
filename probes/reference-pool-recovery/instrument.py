@@ -1,7 +1,7 @@
 """Trace-only copy: never change model output, selection policy or release source."""
 import hashlib,json,pathlib,sys
 source=pathlib.Path('VoiceMatrix/LocalSpeakerDiarization.swift');target=pathlib.Path(sys.argv[1]);out=pathlib.Path(sys.argv[2]);out.mkdir(exist_ok=True)
-s=source.read_text();anchor='            let windows = try LocalSpeakerPolicy.speakerWindows(segments,duration:duration,candidateLimit:6)'
+s=source.read_text();anchor='            let candidates = try LocalSpeakerPolicy.speakerWindows(segments,duration:duration,candidateLimit:6)'
 assert s.count(anchor)==1
 trace='''            let diagnosticSegments = try JSONEncoder().encode(segments)
             try FileHandle.standardError.write(contentsOf:Data(("TRACE decodedDuration=\\(duration) rawSegments=" + String(decoding:diagnosticSegments,as:UTF8.self) + "\\n").utf8))

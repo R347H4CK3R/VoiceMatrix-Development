@@ -18,7 +18,7 @@ settings:
     TARGETED_DEVICE_FAMILY: 1,2
     GENERATE_INFOPLIST_FILE: true
     MARKETING_VERSION: 0.4.9
-    CURRENT_PROJECT_VERSION: '11'
+    CURRENT_PROJECT_VERSION: '12'
     CODE_SIGNING_ALLOWED: false
 targets:
   VoiceMatrix:
@@ -177,6 +177,7 @@ targets:
     - path: VoiceMatrix/LocalMediaURLPolicy.swift
     - path: VoiceMatrix/LocalVideoAudio.swift
     - path: VoiceMatrix/LocalSpeakerDiarization.swift
+    - path: VoiceMatrix/LocalOverlapPolicy.swift
     - path: VoiceMatrix/LocalSpeakerPolicy.swift
     - path: VoiceMatrix/LocalSoundQuality.swift
     - path: VoiceMatrix/LocalSoundQualityPolicy.swift

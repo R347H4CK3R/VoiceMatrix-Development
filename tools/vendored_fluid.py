@@ -3,6 +3,7 @@ import hashlib,json,pathlib,re,stat
 REVISION='ee78635d23d52379117554ba72358b65a0612447'
 TREE='2234ed3bb9af2f02d187dbd4c35e51f9eef18f44'
 MODIFIED={
+ 'Sources/FluidAudio/Diarizer/Offline/Core/PreparedDiarization.swift':'b43f90398c405a47754b77d799e9af7af9941f0450b1c895c35335e2cbf7d91f',
  'Sources/FluidAudio/Diarizer/Offline/Utils/OfflineReconstruction.swift':'d5b9f2532ecb3c5d40cb621f83ea2768a5cab56d6817c9123dc987b67b6d2c54',
  'Sources/FluidAudio/Diarizer/Offline/Core/OfflineDiarizerManager.swift':'db5cbe9fa368dce0524c50f9610bf848fc253e108ce99eaf702a66755f4000f7'}
 ADDED={'Tests/FluidAudioTests/Diarizer/Offline/EOFTimelineTests.swift','NOTICE-VoiceMatrix.txt'}

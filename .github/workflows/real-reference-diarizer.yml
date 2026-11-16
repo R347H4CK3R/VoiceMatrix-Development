@@ -33,7 +33,7 @@ jobs:
         python3 tools/bundle_diarization.py --destination "$RUNNER_TEMP/models"
     - name: Build trace-only production adapter copy
       run: |
-        cp VoiceMatrix/LocalSpeakerPolicy.swift probes/coreml-real-speakers/Sources/Probe/
+        cp VoiceMatrix/LocalSpeakerPolicy.swift VoiceMatrix/LocalOverlapPolicy.swift probes/coreml-real-speakers/Sources/Probe/
         python3 probes/reference-pool-recovery/instrument.py probes/coreml-real-speakers/Sources/Probe/LocalSpeakerDiarization.swift diagnostic-evidence
         swift build --package-path probes/coreml-real-speakers -c release > diagnostic-evidence/build.log 2>&1 || { tail -100 diagnostic-evidence/build.log; exit 1; }
     - name: Diagnose without networking or altered acceptance gates

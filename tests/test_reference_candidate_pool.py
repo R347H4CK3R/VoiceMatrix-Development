@@ -51,7 +51,7 @@ class CandidatePoolTests(unittest.TestCase):
 '''
   with tempfile.TemporaryDirectory() as t:
    p=pathlib.Path(t);(p/'Analysis.swift').write_text(declaration);(p/'Check.swift').write_text(check)
-   subprocess.run(['swiftc',str(ROOT/'VoiceMatrix/LocalSpeakerPolicy.swift'),str(p/'Analysis.swift'),str(p/'Check.swift'),'-o',str(p/'check')],check=True)
+   subprocess.run(['swiftc',str(ROOT/'VoiceMatrix/LocalSpeakerPolicy.swift'),str(ROOT/'VoiceMatrix/LocalOverlapPolicy.swift'),str(p/'Analysis.swift'),str(p/'Check.swift'),'-o',str(p/'check')],check=True)
    subprocess.run([str(p/'check')],check=True)
  def test_studio_keeps_three_generations_and_legacy_analysis_validation(self):
   t=(ROOT/'VoiceMatrix/LocalVideoStudio.swift').read_text()

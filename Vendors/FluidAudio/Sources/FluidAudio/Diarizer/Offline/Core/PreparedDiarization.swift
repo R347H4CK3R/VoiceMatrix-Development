@@ -21,6 +21,10 @@ public struct PreparedDiarization: Sendable {
 
     let prepareWallSeconds: TimeInterval
 
+    /// VoiceMatrix: read-only pre-clustering activity for conservative overlap screening.
+    /// This exposes existing model output without changing inference or clustering.
+    public var segmentationEvidence: SegmentationOutput { segmentation }
+
     public var embeddingCount: Int { timedEmbeddings.count }
 
     public var segmentationChunkCount: Int { segmentation.numChunks }

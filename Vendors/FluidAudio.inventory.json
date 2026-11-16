@@ -842,7 +842,7 @@
     },
     "NOTICE-VoiceMatrix.txt": {
       "mode": "100644",
-      "sha256": "83f076e4b4a14c00230e441454d786709d15c87c0fb41492ff1109e22892ff55",
+      "sha256": "144936a13aba1e037e3b145a765be654a673d012476389fed7778c5f40cd9445",
       "upstreamBlob": null
     },
     "Package.swift": {
@@ -1682,7 +1682,7 @@
     },
     "Sources/FluidAudio/Diarizer/Offline/Core/PreparedDiarization.swift": {
       "mode": "100644",
-      "sha256": "e48fa0856f40a63ebc14824a715a4933fe799dd184be539d9c288df506a36157",
+      "sha256": "b43f90398c405a47754b77d799e9af7af9941f0450b1c895c35335e2cbf7d91f",
       "upstreamBlob": "28f7c6468242d09b6d755cac95e0f9cd52773998"
     },
     "Sources/FluidAudio/Diarizer/Offline/Extraction/OfflineEmbeddingExtractor.swift": {

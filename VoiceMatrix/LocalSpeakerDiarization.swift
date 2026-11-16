@@ -13,6 +13,7 @@ enum LocalSpeakerDiarization {
         let segments: [LocalSpeakerPolicy.Segment]
         let speakerWindows: [LocalSpeakerPolicy.Speaker]
         var selectionPolicyVersion: Int? = nil
+        var rawOverlap: LocalOverlapPolicy.Evidence? = nil
     }
     enum Failure: LocalizedError {
         case bundleUnavailable, invalidBundle, invalidAudio, invalidTimeline, resourceBound
@@ -33,11 +34,28 @@ enum LocalSpeakerDiarization {
     /// Raw segments/model revision must validate; arbitrary stored crops are never trusted.
     static func validatedForCurrentPolicy(_ analysis: Analysis) throws -> Analysis {
         guard analysis.modelRevision == revision else { throw Failure.invalidBundle }
+        if analysis.selectionPolicyVersion == 5 {
+            guard let evidence=analysis.rawOverlap else {throw Failure.invalidAudio}
+            try LocalOverlapPolicy.validate(evidence)
+            guard evidence.modelRevision==revision,evidence.duration==analysis.seconds else {throw Failure.invalidAudio}
+            let candidates=try LocalSpeakerPolicy.speakerWindows(analysis.segments,duration:analysis.seconds,candidateLimit:6)
+            let expected=try excludingRawOverlap(candidates,evidence:evidence)
+            guard expected==analysis.speakerWindows else {throw Failure.invalidAudio}
+            return analysis
+        }
+        guard analysis.rawOverlap == nil else {throw Failure.invalidAudio}
         guard analysis.selectionPolicyVersion == nil || analysis.selectionPolicyVersion == 1 || analysis.selectionPolicyVersion == 2 || analysis.selectionPolicyVersion == 3 || analysis.selectionPolicyVersion == 4 else { throw Failure.invalidBundle }
         let expected = try LocalSpeakerPolicy.speakerWindows(analysis.segments,duration:analysis.seconds,includeFallbacks:(analysis.selectionPolicyVersion ?? 1) >= 2,joinSameSpeakerPauses:(analysis.selectionPolicyVersion ?? 1) >= 3,candidateLimit:analysis.selectionPolicyVersion == 4 ? 6 : 3)
         guard expected == analysis.speakerWindows else { throw Failure.invalidAudio }
         let windows = try LocalSpeakerPolicy.speakerWindows(analysis.segments,duration:analysis.seconds,candidateLimit:6)
         return Analysis(modelRevision:analysis.modelRevision,seconds:analysis.seconds,segments:analysis.segments,speakerWindows:windows,selectionPolicyVersion:4)
+    }
+    static func excludingRawOverlap(_ speakers:[LocalSpeakerPolicy.Speaker],evidence:LocalOverlapPolicy.Evidence) throws -> [LocalSpeakerPolicy.Speaker] {
+        try LocalOverlapPolicy.validate(evidence)
+        return try speakers.map { speaker in
+            let safe=try speaker.windows.filter {try LocalOverlapPolicy.allows(start:$0.start,end:$0.end,evidence:evidence)}
+            return LocalSpeakerPolicy.Speaker(speaker:speaker.speaker,windows:safe)
+        }
     }
     static func analyze(source: URL, bundle: URL? = Bundle.main.url(forResource:"Diarization",withExtension:nil), progress: @escaping @Sendable (String) -> Void) async throws -> Analysis {
         guard let bundle else { throw Failure.bundleUnavailable }
@@ -46,6 +64,7 @@ enum LocalSpeakerDiarization {
             progress("Checking bundled speaker-analysis hashes.")
             try verify(bundle)
             progress("Decoding local audio for speaker analysis.")
+            let sourceHash=try sourceDigest(source)
             let samples = try await decode(source,progress:progress)
             try Task.checkCancellation()
             progress("Loading bundled speaker-analysis models. No network is used.")
@@ -72,14 +91,33 @@ enum LocalSpeakerDiarization {
             manager.initialize(models:models)
             try Task.checkCancellation()
             progress("Analyzing speaker turns locally; model activity updates follow completed chunks.")
-            let result = try await manager.process(audio:samples) { done,total in progress("Speaker analysis processed \(done) of \(total) chunks.") }
+            let prepared = try await manager.prepare(audio:samples) { done,total in progress("Speaker analysis processed \(done) of \(total) chunks.") }
             try Task.checkCancellation()
+            let result=try manager.cluster(prepared)
             let duration = Double(samples.count)/16_000
+            let activity=prepared.segmentationEvidence
+            guard activity.numChunks==activity.speakerWeights.count,activity.numChunks==activity.chunkOffsets.count,
+                  activity.numSpeakers>=1,activity.speakerWeights.allSatisfy({$0.count==activity.numFrames && $0.allSatisfy({$0.count==activity.numSpeakers})}) else {throw Failure.invalidAudio}
+            let rawOverlap=try LocalOverlapPolicy.build(weights:activity.speakerWeights,offsets:activity.chunkOffsets,
+                frameDuration:activity.frameDuration,duration:duration,sourceSHA256:sourceHash,modelRevision:revision)
+            guard try sourceDigest(source)==sourceHash else {throw Failure.invalidAudio}
             let segments = result.segments.map { LocalSpeakerPolicy.Segment(speaker:$0.speakerId,start:Double($0.startTimeSeconds),end:Double($0.endTimeSeconds)) }
-            let windows = try LocalSpeakerPolicy.speakerWindows(segments,duration:duration,candidateLimit:6)
-            return Analysis(modelRevision:revision,seconds:duration,segments:segments,speakerWindows:windows,selectionPolicyVersion:4)
+            let candidates = try LocalSpeakerPolicy.speakerWindows(segments,duration:duration,candidateLimit:6)
+            let windows=try excludingRawOverlap(candidates,evidence:rawOverlap)
+            return Analysis(modelRevision:revision,seconds:duration,segments:segments,speakerWindows:windows,selectionPolicyVersion:5,rawOverlap:rawOverlap)
         }
         return try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+    }
+    private static func sourceDigest(_ source:URL) throws -> String {
+        let v=try source.resourceValues(forKeys:[.isRegularFileKey,.isSymbolicLinkKey,.fileSizeKey])
+        guard source.isFileURL,v.isRegularFile==true,v.isSymbolicLink != true,let size=v.fileSize,(1...536_870_912).contains(size) else {throw Failure.invalidAudio}
+        let handle=try FileHandle(forReadingFrom:source);defer {try? handle.close()}
+        var hash=SHA256(),read=0
+        while let data=try handle.read(upToCount:1_048_576),!data.isEmpty {
+            try Task.checkCancellation();read+=data.count;guard read<=size else {throw Failure.invalidAudio};hash.update(data:data)
+        }
+        guard read==size else {throw Failure.invalidAudio}
+        return hash.finalize().map{String(format:"%02x",$0)}.joined()
     }
     static func verify(_ root: URL) throws {
         let lockURL = root.appendingPathComponent("resource-lock.json")

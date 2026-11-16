@@ -17,6 +17,7 @@ targets:
     - path: ../../VoiceMatrix/SpeakerSimilarityService.swift
     - path: ../../VoiceMatrix/SpeakerSimilarityPolicy.swift
     - path: ../../VoiceMatrix/LocalSpeakerDiarization.swift
+    - path: ../../VoiceMatrix/LocalOverlapPolicy.swift
     - path: ../../VoiceMatrix/LocalSpeakerPolicy.swift
     dependencies:
     - package: FluidAudio

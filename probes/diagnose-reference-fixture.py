@@ -118,7 +118,7 @@ for name in ['BundledASRPolicy.swift','BundledASRAssets.swift']:
 (tests/'ReferenceLeadingContextTests.swift').write_bytes((root/'VoiceMatrixTests/ReferenceLeadingContextTests.swift').read_bytes())
 (package/'Package.swift').write_text('''// swift-tools-version: 5.10
 import PackageDescription
-let package = Package(name: "ReferenceBufferNativeTests", platforms: [.macOS(.v15)], targets: [
+let package = Package(name: "ReferenceBufferNativeTests", platforms: [.macOS("15.0")], targets: [
     .target(name: "VoiceMatrix"),
     .testTarget(name: "VoiceMatrixTests", dependencies: ["VoiceMatrix"])
 ])

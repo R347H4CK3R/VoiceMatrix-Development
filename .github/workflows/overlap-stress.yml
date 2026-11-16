@@ -1,0 +1,63 @@
+name: Diagnostic unchanged build11 overlap crop stress
+'on':
+  push:
+    branches: [diagnostic/build11-overlap-stress]
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify deterministic ground-truth transforms
+        run: |
+          python3 -m unittest discover -s tests -p test_overlap_stress.py -v
+          python3 tools/vendored_fluid.py > vendor-before.json
+      - name: Stage exact licensed recordings and pinned native models
+        run: |
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          python3 probes/overlap-stress/prepare.py overlap-evidence
+          python3 tools/bundle_diarization.py --destination "$RUNNER_TEMP/diarization-models"
+      - name: Build exact unchanged production adapter
+        run: |
+          for file in LocalSpeakerDiarization LocalSpeakerPolicy; do
+            git show 3b976fe84b6f34b2fd7668baf45533e5b7a377a5:VoiceMatrix/$file.swift | cmp - VoiceMatrix/$file.swift
+            cp VoiceMatrix/$file.swift probes/overlap-stress/Sources/Probe/
+          done
+          python3 - <<'PY'
+          import hashlib,json,pathlib,os
+          names=['LocalSpeakerDiarization','LocalSpeakerPolicy']
+          pathlib.Path('overlap-evidence/source-proof.json').write_text(json.dumps({'candidate':'3b976fe84b6f34b2fd7668baf45533e5b7a377a5','diagnosticCommit':os.environ['GITHUB_SHA'],'sources':{n:hashlib.sha256(pathlib.Path('VoiceMatrix',n+'.swift').read_bytes()).hexdigest() for n in names},'productionChanged':False},indent=2))
+          PY
+          swift build --package-path probes/overlap-stress -c release > overlap-evidence/build.log 2>&1 || { tail -100 overlap-evidence/build.log; exit 1; }
+          python3 tools/vendored_fluid.py > vendor-after.json
+          cmp vendor-before.json vendor-after.json
+          cp vendor-before.json vendor-after.json overlap-evidence/
+      - name: Measure every predeclared mixture without network
+        run: |
+          python3 - <<'PY'
+          import json,pathlib,subprocess,os
+          root=pathlib.Path('overlap-evidence');cases=json.loads((root/'manifest.json').read_text())['cases'];runs=[]
+          for c in cases:
+            with (root/(c['id']+'.log')).open('w') as log:
+              try:
+                r=subprocess.run(['sandbox-exec','-p','(version 1)(allow default)(deny network*)','probes/overlap-stress/.build/release/Probe',os.environ['RUNNER_TEMP']+'/diarization-models',str(root/c['file']),c['sha256'],str(root/(c['id']+'-analysis.json'))],stdout=log,stderr=subprocess.STDOUT,timeout=240)
+                runs.append({'case':c['id'],'exitCode':r.returncode})
+              except subprocess.TimeoutExpired:runs.append({'case':c['id'],'timeout':True})
+            (root/'execution.json').write_text(json.dumps(runs,indent=2))
+          subprocess.run(['python3','probes/overlap-stress/measure.py',str(root)],check=True)
+          assert len(runs)==5 and all(r.get('exitCode')==0 for r in runs),'Incomplete diagnostic; preserve all outcomes'
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Build11-overlap-stress-diagnostic
+          path: overlap-evidence
+          if-no-files-found: error
+          retention-days: 14

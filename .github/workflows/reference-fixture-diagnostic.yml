@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 1e8d02fe98eb136e43ea7a6c1efe8c7e0727d9b7
+          ref: 3b976fe84b6f34b2fd7668baf45533e5b7a377a5
       - name: Extract exact checked out fixture and production functions
         run: python3 probes/diagnose-reference-fixture.py . fixture-diagnostic
       - name: Compile standalone native AVFoundation diagnostic

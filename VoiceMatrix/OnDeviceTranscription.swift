@@ -24,6 +24,7 @@ import FluidAudio
         let modelRevision = BundledASRAssets.revision
         let inputSHA256, transcriptSHA256: String
         let recoveryTailSeconds: Double?
+        let referenceLeadingSeconds: Double?
         let tokenCount: Int
         let meanTokenConfidence: Float
         let confidenceMeaning = "Uncalibrated mean token softmax, not transcript accuracy"
@@ -44,11 +45,18 @@ import FluidAudio
         catch { throw BundledASRAssets.Failure.invalid }
     }
     func transcribe(_ file: URL, activity: @escaping @MainActor () -> Void = {}) async throws -> String {
+        try await transcribe(file, referenceContext: false, activity: activity)
+    }
+    /// Reference conditioning recognition only. Generated-output verification stays unchanged.
+    func transcribeReference(_ file: URL, activity: @escaping @MainActor () -> Void = {}) async throws -> String {
+        try await transcribe(file, referenceContext: true, activity: activity)
+    }
+    private func transcribe(_ file: URL, referenceContext: Bool, activity: @escaping @MainActor () -> Void) async throws -> String {
         try Task.checkCancellation()
         guard token == nil else { throw Failure.busy }
         guard let bundle else { throw BundledASRAssets.Failure.missing }
         let run = UUID(); token = run; deadlineExpired = false; lastEvidence = nil
-        let worker = Task.detached(priority: .userInitiated) { try await Self.recognize(file, bundle: bundle) }
+        let worker = Task.detached(priority: .userInitiated) { try await Self.recognize(file, bundle: bundle, referenceContext: referenceContext) }
         let deadline = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(45)) } catch { return }
             guard let self, self.token == run else { return }
@@ -69,7 +77,7 @@ import FluidAudio
             throw Failure.unavailable
         }
     }
-    private nonisolated static func recognize(_ file: URL, bundle: URL) async throws -> (String, Evidence) {
+    private nonisolated static func recognize(_ file: URL, bundle: URL, referenceContext: Bool) async throws -> (String, Evidence) {
         try Task.checkCancellation()
         guard file.isFileURL, file.pathExtension.lowercased() == "wav" else { throw Failure.invalidAudio }
         let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
@@ -80,6 +88,11 @@ import FluidAudio
         let seconds = Double(audio.length) / rate
         guard rate.isFinite, (16_000...48_000).contains(rate), audio.processingFormat.channelCount == 1,
               seconds.isFinite, (0.2...30).contains(seconds) else { throw Failure.invalidAudio }
+        var referenceLeadingSeconds: Double?
+        if referenceContext {
+            guard let leadingFrames = BundledASRPolicy.referenceLeadingFrameCount(frames: Int(audio.length), sampleRate: rate) else { throw Failure.invalidAudio }
+            referenceLeadingSeconds = Double(leadingFrames) / rate
+        }
         let inputSHA256 = try inputDigest(file, byteCount: size)
         try BundledASRAssets.verify(bundle)
         try Task.checkCancellation()
@@ -92,11 +105,16 @@ import FluidAudio
         do {
             try Task.checkCancellation()
             var decoder = try TdtDecoderState(decoderLayers: 2)
-            var result = try await manager.transcribe(file, decoderState: &decoder)
+            var result: ASRResult
+            if referenceContext {
+                result = try await manager.transcribe(try referenceLeadingBuffer(file), decoderState: &decoder)
+            } else {
+                result = try await manager.transcribe(file, decoderState: &decoder)
+            }
             try Task.checkCancellation()
             var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             var recoveryTailSeconds: Double?
-            if !LocalStudioEvidence.usableTranscript(text) {
+            if !referenceContext && !LocalStudioEvidence.usableTranscript(text) {
                 _ = try inputDigest(file, byteCount: size, matching: inputSHA256)
                 if let (buffer, tail) = try recoveryBuffer(file, text:text) {
                     try Task.checkCancellation()
@@ -119,7 +137,7 @@ import FluidAudio
             _ = try inputDigest(file, byteCount: size, matching: inputSHA256)
             let evidence = Evidence(inputSHA256: inputSHA256,
                 transcriptSHA256: SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined(),
-                recoveryTailSeconds: recoveryTailSeconds, tokenCount: timings.count, meanTokenConfidence: mean)
+                recoveryTailSeconds: recoveryTailSeconds, referenceLeadingSeconds: referenceLeadingSeconds, tokenCount: timings.count, meanTokenConfidence: mean)
             await manager.cleanup()
             return (text, evidence)
         } catch {
@@ -127,6 +145,28 @@ import FluidAudio
             throw error
         }
     }
+    /// Bounded in-memory context. No temporary WAV, source mutation, prompt or retry padding.
+    nonisolated static func referenceLeadingBuffer(_ file: URL) throws -> AVAudioPCMBuffer {
+        try Task.checkCancellation()
+        let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+        guard file.isFileURL, file.pathExtension.lowercased() == "wav", values.isRegularFile == true,
+              values.isSymbolicLink != true, let size = values.fileSize, (44...8_388_608).contains(size) else { throw Failure.invalidAudio }
+        let audio = try AVAudioFile(forReading: file)
+        let rate = audio.processingFormat.sampleRate
+        guard audio.processingFormat.channelCount == 1, audio.length > 0, audio.length <= 1_440_000,
+              let lead = BundledASRPolicy.referenceLeadingFrameCount(frames: Int(audio.length), sampleRate: rate),
+              let original = AVAudioPCMBuffer(pcmFormat: audio.processingFormat, frameCapacity: AVAudioFrameCount(audio.length)) else { throw Failure.invalidAudio }
+        try audio.read(into: original)
+        guard original.frameLength == AVAudioFrameCount(audio.length), let input = original.floatChannelData?[0] else { throw Failure.invalidAudio }
+        let total = original.frameLength + AVAudioFrameCount(lead)
+        guard let padded = AVAudioPCMBuffer(pcmFormat: original.format, frameCapacity: total), let output = padded.floatChannelData?[0] else { throw Failure.invalidAudio }
+        padded.frameLength = total
+        output.initialize(repeating: 0, count: lead)
+        output.advanced(by: lead).update(from: input, count: Int(original.frameLength))
+        try Task.checkCancellation()
+        return padded
+    }
+
     private nonisolated static func recoveryBuffer(_ file:URL,text:String) throws -> (AVAudioPCMBuffer,Double)? {
         try Task.checkCancellation()
         let audio=try AVAudioFile(forReading:file)

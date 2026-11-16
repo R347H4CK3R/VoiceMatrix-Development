@@ -3,6 +3,16 @@ import Foundation
 /// Token softmax scores are not calibrated transcript correctness probabilities
 /// and are not comparable to Apple's speech-segment confidence values.
 enum BundledASRPolicy {
+    /// Fixed recognition context for references only; never edits source samples.
+    /// Inputs plus silence must remain within the existing 30-second ASR budget.
+    static func referenceLeadingFrameCount(frames: Int, sampleRate: Double) -> Int? {
+        guard sampleRate.isFinite, (16000...48000).contains(sampleRate),
+              (1...1440000).contains(frames), Double(frames) / sampleRate >= 0.2 else { return nil }
+        let lead = Int((sampleRate * 0.25).rounded())
+        guard Double(frames + lead) / sampleRate <= 30 else { return nil }
+        return lead
+    }
+
     /// One input-boundary recovery only for an empty/punctuation-only decode.
     /// Original samples are retained; a 160 ms silent tail changes analysis context.
     static func recoveryTailFrameCount(text:String,samples:[Float],sampleRate:Double)->Int? {

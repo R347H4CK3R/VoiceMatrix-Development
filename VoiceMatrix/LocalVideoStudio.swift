@@ -455,7 +455,7 @@ import CryptoKit
                         try check()
                         try update("Transcribing reference", "Recognizing this candidate locally. Model-detected overlaps were excluded. Music and character identity are not verified.")
                         let transcript: String
-                        do { transcript = try await transcriber.transcribe(reference) { [weak self] in
+                        do { transcript = try await transcriber.transcribeReference(reference) { [weak self] in
                             guard let self, self.runToken == run, self.busy, self.current?.stage == "Transcribing reference", self.current?.referenceFile == reference.lastPathComponent else { return }
                             try? self.update("Transcribing reference", "On-device recognition is producing results.", log: false)
                         } }

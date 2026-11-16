@@ -1,0 +1,193 @@
+name: Fixed leading padding full two-reader route diagnostic
+'on':
+  push:
+    branches:
+    - diagnostic/leading-padding-full-route
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnostic:
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install native fixture test dependencies
+      run: python3 -m pip install -r tests/requirements-native.txt
+    - name: Recover exact published-build frozen graph and retained licensed sources
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: "mkdir -p frozen local-evidence\n gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14171746105/zip\
+        \ > frozen.zip\n echo '42472557ab8e854fcfd8e3f858da8a7fe06f1fa5d2e8a4962d7e34cd8ed446d5\
+        \  frozen.zip' | shasum -a 256 -c -\n python3 - <<'PYCODE'\nimport zipfile,pathlib\n\
+        with zipfile.ZipFile('frozen.zip') as z:\n assert z.namelist()==['Package.resolved']\n\
+        \ pathlib.Path('frozen/Package.resolved').write_bytes(z.read('Package.resolved'))\n\
+        PYCODE\n gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14172844511/zip\
+        \ > retained.zip\n echo 'fc0a079d1d23e9a482acf277d7b6b8f987ec906ca1add642a53ad2fe29cdc924\
+        \  retained.zip' | shasum -a 256 -c -\n"
+    - uses: actions/cache@v4
+      with:
+        path: character-cache
+        key: character-assets-685e8816-716d2f41
+    - name: Validate source and prepare pinned shared assets
+      run: 'python3 -m unittest tests.test_real_reference_pool_diagnostic tests.test_local_pipeline_diagnostic
+        tests.test_local_video_studio -v
+
+        python3 tools/bundle_asr.py
+
+        python3 tools/bundle_diarization.py
+
+        python3 tools/character_package.py prepare --cache character-cache --resources
+        character-resources > assets.json
+
+        python3 - <<''PY''
+
+        from pathlib import Path
+
+        import shutil
+
+        target=Path(''VoiceMatrix/Resources/F5TTS'')
+
+        if target.is_symlink(): raise SystemExit(''Unexpected link'')
+
+        if target.exists(): shutil.rmtree(target)
+
+        shutil.copytree(''character-resources/F5TTS'',target)
+
+        PY
+
+        '
+    - name: Compose two full retained recordings without injected IDs
+      run: 'python3 -m unittest tests.test_two_complete_readers -v
+
+        python3 probes/two-complete-readers/prepare.py retained.zip local-evidence/mixed
+
+        python3 tools/create_diagnostic_collection.py
+
+        shasum -a 256 probes/native-local-studio/Diagnostic.swift probes/two-complete-readers/Diagnostic.swift
+        > local-evidence/harness-sha256.txt
+
+        cp probes/two-complete-readers/Diagnostic.swift probes/native-local-studio/Diagnostic.swift
+
+        # Only the diagnostic test host is replaced; actual app/coordinator/vendor
+        unchanged.
+
+        python3 probes/two-complete-readers/staged_changes.py
+
+        git diff -- probes/native-local-studio/Diagnostic.swift > local-evidence/diagnostic-only.diff
+
+
+        python3 -m unittest tests.test_leading_padding_full_route -v
+
+        python3 probes/leading-padding-full-route/stage.py
+
+        cp padding-staged/patch.diff padding-staged/staging-proof.json local-evidence/
+
+        '
+    - name: Build clean source-vendored dependency and validate native boundary tests
+      run: 'test "$(uname -m)" = arm64
+
+        brew install xcodegen
+
+        python3 tools/vendored_fluid.py > local-evidence/vendor-before.json
+
+        swift test --package-path Vendors/FluidAudio --scratch-path vendor-tests --filter
+        EOFTimelineTests > local-evidence/eof-tests.log 2>&1 || { tail -100 local-evidence/eof-tests.log;
+        exit 1; }
+
+        python3 tools/vendored_fluid.py > local-evidence/vendor-after-tests.json
+
+        cmp local-evidence/vendor-before.json local-evidence/vendor-after-tests.json
+
+        mkdir -p VoiceMatrix/Resources/{Phonon,OpenVoice,F5TTS}
+
+        xcodegen generate --spec diagnostic-leading.yml
+
+        graph=VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+        mkdir -p "$(dirname "$graph")"
+
+        cp frozen/Package.resolved "$graph"
+
+        xcodebuild -resolvePackageDependencies -disableAutomaticPackageResolution
+        -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation -project
+        VoiceMatrix.xcodeproj -scheme LocalStudioDiagnostic -derivedDataPath local-build
+        > local-evidence/resolve.log 2>&1 || { tail -100 local-evidence/resolve.log;
+        exit 1; }
+
+        cmp frozen/Package.resolved "$graph"
+
+        cp "$graph" local-evidence/Package.resolved
+
+        python3 tools/character_package.py notices --checkouts local-build/SourcePackages/checkouts
+        --resolved "$graph" --resources VoiceMatrix/Resources > local-evidence/dependency-notices.json
+
+        xcodebuild -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile
+        -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme LocalStudioDiagnostic
+        -configuration Release -derivedDataPath local-build CODE_SIGNING_ALLOWED=NO
+        ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build > local-evidence/build.log 2>&1 ||
+        { tail -100 local-evidence/build.log; exit 1; }
+
+        cmp local-evidence/Package.resolved "$graph"
+
+        python3 tools/vendored_fluid.py > local-evidence/vendor-after-build.json
+
+        cmp local-evidence/vendor-before.json local-evidence/vendor-after-build.json
+
+        python3 tools/character_evidence.py source "$graph" local-evidence/source-proof.json
+
+        '
+    - name: Run broad ASR-context two-profile experiment and retain outputs
+      run: 'sandbox-exec -p ''(version 1)(allow default)(deny network*)'' local-build/Build/Products/Release/LocalStudioDiagnostic
+        VoiceMatrix/Resources local-evidence/mixed/complete-source.wav tests/fixtures/DiagnosticVoices
+        local-evidence/mixed/work local-evidence/mixed/pipeline-evidence.json "$GITHUB_SHA"
+        audio local-evidence/mixed/transcript.txt
+
+        '
+    - name: Independently verify exact final WAVs with unchanged shipping ASR
+      run: 'python3 -m unittest tests.test_unpadded_final_verification -v
+
+        python3 probes/leading-padding-unpadded-verifier/stage.py local-evidence/mixed
+
+        python3 tools/vendored_fluid.py > local-evidence/unpadded-vendor-before.json
+
+        swift build --package-path probes/leading-padding-unpadded-verifier -c release
+        > local-evidence/unpadded-build.log 2>&1 || { tail -100 local-evidence/unpadded-build.log;
+        exit 1; }
+
+        python3 tools/vendored_fluid.py > local-evidence/unpadded-vendor-after.json
+
+        cmp local-evidence/unpadded-vendor-before.json local-evidence/unpadded-vendor-after.json
+
+        sandbox-exec -p ''(version 1)(allow default)(deny network*)'' probes/leading-padding-unpadded-verifier/.build/release/Probe
+        local-evidence/mixed VoiceMatrix/Resources/ParakeetASR
+
+        '
+    - name: Require original strict two-reader checks and zero word errors
+      run: 'python3 probes/two-complete-readers/check.py local-evidence/mixed
+
+
+        python3 - <<''PY''
+
+        import json,pathlib
+
+        r=json.loads(pathlib.Path("local-evidence/mixed/pipeline-evidence.json").read_text())
+
+        assert len(r["newSpeeches"])==2 and all(x["newSpeechWordErrorRate"]==0 for
+        x in r["newSpeeches"]), "Fresh speech WER must be zero"
+
+        PY
+
+        python3 probes/two-complete-readers/staged_changes.py
+
+        '
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Leading-padding-full-route-diagnostic-evidence
+        path: local-evidence/**
+        if-no-files-found: error
+        retention-days: 14

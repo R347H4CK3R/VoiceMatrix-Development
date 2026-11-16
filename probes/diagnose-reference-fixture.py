@@ -59,9 +59,42 @@ for variant in ["original", "explicitRelease", "autoreleasepool"] {
             item["format"] = String(describing:audio.processingFormat)
             item["leadFrames"] = BundledASRPolicy.referenceLeadingFrameCount(frames:Int(audio.length),sampleRate:audio.processingFormat.sampleRate) ?? -1
             if audio.length>0 && audio.length<=1440000,let buffer=AVAudioPCMBuffer(pcmFormat:audio.processingFormat,frameCapacity:AVAudioFrameCount(audio.length)) {
+                let firstPosition = audio.framePosition
                 try audio.read(into:buffer)
                 item["readFrames"] = buffer.frameLength
                 item["floatChannelPresent"] = buffer.floatChannelData != nil
+                var reads: [[String:Any]] = [["requested":Int(buffer.frameCapacity),"returned":Int(buffer.frameLength),"positionBefore":firstPosition,"positionAfter":audio.framePosition]]
+                var joined = [Float]()
+                if let p = buffer.floatChannelData?[0] {
+                    joined.append(contentsOf:UnsafeBufferPointer(start:p,count:Int(buffer.frameLength)))
+                }
+                // Diagnostic only: never alter original source or the production function.
+                // Bound follow-up reads and retain even zero-progress/error attempts.
+                for _ in 0..<8 {
+                    let remaining = Int(audio.length) - joined.count
+                    if remaining <= 0 { break }
+                    guard let next = AVAudioPCMBuffer(pcmFormat:audio.processingFormat,frameCapacity:AVAudioFrameCount(remaining)) else { break }
+                    let position = audio.framePosition
+                    do {
+                        try audio.read(into:next,frameCount:AVAudioFrameCount(remaining))
+                        reads.append(["requested":remaining,"returned":Int(next.frameLength),"positionBefore":position,"positionAfter":audio.framePosition])
+                        guard next.frameLength > 0, let p = next.floatChannelData?[0] else { break }
+                        joined.append(contentsOf:UnsafeBufferPointer(start:p,count:Int(next.frameLength)))
+                    } catch {
+                        reads.append(["requested":remaining,"error":String(describing:error),"positionBefore":position,"positionAfter":audio.framePosition]); break
+                    }
+                }
+                item["readAttempts"] = reads
+                item["joinedFrames"] = joined.count
+                item["joinedEverySampleExact"] = joined.count == 24000 && joined.enumerated().allSatisfy { $0.element == Float($0.offset % 101)/1000 }
+                if let eof = AVAudioPCMBuffer(pcmFormat:audio.processingFormat,frameCapacity:1024) {
+                    let position = audio.framePosition
+                    do {
+                        try audio.read(into:eof,frameCount:1024)
+                        item["eofProbe"] = ["returned":Int(eof.frameLength),"positionBefore":position,"positionAfter":audio.framePosition]
+                    } catch { item["eofError"] = String(describing:error) }
+                }
+                item["sourceUnchangedAfterRepeatedReads"] = try Data(contentsOf:file) == before
             }
         } catch { item["diagnosticError"] = String(describing:error) }
         results.append(item)

@@ -1,0 +1,26 @@
+name: Reference WAV fixture lifecycle diagnostic
+on:
+  push:
+    branches: [diagnostic/reference-wav-lifecycle]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: macos-26
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract exact checked out fixture and production functions
+        run: python3 probes/diagnose-reference-fixture.py . fixture-diagnostic
+      - name: Compile standalone native AVFoundation diagnostic
+        run: swiftc fixture-diagnostic/BundledASRPolicy.swift fixture-diagnostic/main.swift -o fixture-diagnostic/diagnose
+      - name: Compare original and finalized writer lifetimes without ASR models
+        run: |
+          set -o pipefail
+          fixture-diagnostic/diagnose fixture-diagnostic/results | tee fixture-diagnostic/diagnostic.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reference-fixture-lifecycle-diagnostic
+          path: fixture-diagnostic/

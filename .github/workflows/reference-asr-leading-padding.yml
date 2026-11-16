@@ -11,6 +11,11 @@ jobs:
     timeout-minutes: 25
     steps:
     - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install pinned test dependencies
+      run: python3 -m pip install -r tests/requirements-native.txt
     - name: Verify immutable vendor and PCM transform regressions
       run: |
         python3 tools/vendored_fluid.py > vendor-before.json

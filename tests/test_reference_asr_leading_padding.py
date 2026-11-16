@@ -52,6 +52,7 @@ class WorkflowContractTests(unittest.TestCase):
   import yaml,shlex
   workflow=yaml.safe_load((ROOT/'.github/workflows/reference-asr-leading-padding.yml').read_text())
   lines=[line.strip() for step in workflow['jobs']['diagnose']['steps'] for line in step.get('run','').splitlines()]
+  self.assertIn('python3 -m pip install -r tests/requirements-native.txt',lines)
   command=next(line for line in lines if line.startswith('python3 probes/reference-asr-leading-padding/prepare.py'))
   self.assertEqual(shlex.split(command),['python3','probes/reference-asr-leading-padding/prepare.py','retained.zip','padding-evidence'])
   probe=(ROOT/'probes/reference-asr-leading-padding/Sources/Probe/Probe.swift').read_text()

@@ -32,3 +32,28 @@ class PreviewBuildTests(unittest.TestCase):
   self.assertNotIn('diarizer-eof/apply.py',runs)
   self.assertIn('(deny network*)',runs)
   downloads=[s for s in steps if s.get('uses')=='actions/download-artifact@v4'];self.assertEqual(downloads[0]['with'],{'name':'Character-frozen-dependencies','path':'frozen'})
+
+class FrozenDependencyGraphTests(unittest.TestCase):
+ def test_package_and_full_route_share_the_exact_existing_frozen_graph(self):
+  import re
+  from tools.test_shell import check_bash_syntax
+  package=yaml.safe_load((ROOT/'.github/workflows/iphone-build12.yml').read_text())
+  route=yaml.safe_load((ROOT/'.github/workflows/reference-context-full-route.yml').read_text())
+  route_run=next(s['run'] for s in route['jobs']['diagnostic']['steps'] if s.get('name')=='Recover exact published-build frozen graph and retained licensed sources')
+  resolve=package['jobs']['resolve'];runs='\n'.join(s.get('run','') for s in resolve['steps'])
+  artifact=re.search(r'gh api (repos/\S+/actions/artifacts/\d+/zip)\s*> frozen.zip',route_run).group(1)
+  checksum=re.search(r"echo '([a-f0-9]{64})  frozen.zip'",route_run).group(1)
+  self.assertIn('gh api '+artifact+' > frozen.zip',runs)
+  self.assertIn("echo '"+checksum+"  frozen.zip' | shasum -a 256 -c -",runs)
+  self.assertIn("assert z.namelist()==['Package.resolved']",runs)
+  self.assertIn("pathlib.Path('frozen/Package.resolved').write_bytes(z.read('Package.resolved'))",runs)
+  self.assertIn('cp frozen/Package.resolved Package.resolved',runs)
+  self.assertNotIn('xcodebuild',runs,'Resolve must recover the already verified graph, not resolve newer transitive versions')
+  self.assertNotIn('xcodegen',runs)
+  fetch=next(s for s in resolve['steps'] if 'gh api '+artifact in s.get('run',''))
+  self.assertEqual(fetch['env']['GH_TOKEN'],'${{ github.token }}')
+  upload=next(s for s in resolve['steps'] if s.get('uses')=='actions/upload-artifact@v4')
+  self.assertEqual(upload['with']['name'],'Character-frozen-dependencies')
+  self.assertEqual(upload['with']['path'],'Package.resolved')
+  for step in resolve['steps']:
+   if 'run' in step:check_bash_syntax(step['run'])

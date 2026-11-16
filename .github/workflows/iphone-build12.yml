@@ -188,21 +188,10 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-    - name: Freeze exact shared package graph
-      run: 'brew install xcodegen
-
-        mkdir -p VoiceMatrix/Resources/{Phonon,OpenVoice,F5TTS}
-
-        python3 tools/create_diagnostic_collection.py
-
-        xcodegen generate
-
-        xcodebuild -resolvePackageDependencies -project VoiceMatrix.xcodeproj -scheme
-        VoiceMatrix -derivedDataPath native-build > resolve.log 2>&1 || { tail -100
-        resolve.log; exit 1; }
-
-        cp VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-        Package.resolved'
+    - name: Recover the same pinned frozen graph as full-route verification
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: "mkdir -p frozen\n gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14171746105/zip > frozen.zip\n echo '42472557ab8e854fcfd8e3f858da8a7fe06f1fa5d2e8a4962d7e34cd8ed446d5  frozen.zip' | shasum -a 256 -c -\n python3 - <<'PYCODE'\nimport zipfile,pathlib\nwith zipfile.ZipFile('frozen.zip') as z:\n assert z.namelist()==['Package.resolved']\n pathlib.Path('frozen/Package.resolved').write_bytes(z.read('Package.resolved'))\nPYCODE\ncp frozen/Package.resolved Package.resolved\n"
     - uses: actions/upload-artifact@v4
       with:
         name: Character-frozen-dependencies

@@ -1,4 +1,4 @@
-# Build12 final source and overlap coverage verification.
+# Build12 shared frozen graph verification.
 name: Actual standalone local pipeline diagnostic
 on:
   workflow_call:

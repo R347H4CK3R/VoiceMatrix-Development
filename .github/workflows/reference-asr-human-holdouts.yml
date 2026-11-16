@@ -1,0 +1,54 @@
+name: Independent human reference ASR holdouts
+'on':
+  push:
+    branches: [diagnostic/reference-asr-human-holdouts]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install pinned test dependencies
+      run: python3 -m pip install -r tests/requirements-native.txt
+    - name: Verify immutable vendor and PCM transform regressions
+      run: |
+        python3 tools/vendored_fluid.py > vendor-before.json
+        python3 -m unittest tests.test_reference_asr_human_holdouts -v
+    - name: Recover four preselected complete licensed human holdouts
+      run: |
+        brew install ffmpeg
+        python3 probes/reference-asr-human-holdouts/prepare.py padding-evidence
+        python3 tools/bundle_asr.py --destination "$RUNNER_TEMP/asr"
+    - name: Build unchanged recognizer against verified local vendor
+      run: |
+        for source in OnDeviceTranscription BundledASRPolicy BundledASRAssets LocalStudioEvidence; do
+          cp "VoiceMatrix/$source.swift" probes/reference-asr-human-holdouts/Sources/Probe/
+        done
+        python3 - <<'PY'
+        import hashlib,json,pathlib,os
+        p=pathlib.Path('VoiceMatrix')
+        names=['OnDeviceTranscription','BundledASRPolicy','BundledASRAssets','LocalStudioEvidence']
+        proof={'sourceCommit':os.environ['GITHUB_SHA'],'productionSources':{n:hashlib.sha256((p/(n+'.swift')).read_bytes()).hexdigest() for n in names},'physicalDeviceVerified':False,'productionFix':False}
+        pathlib.Path('padding-evidence/source-proof.json').write_text(json.dumps(proof,indent=2))
+        PY
+        swift build --package-path probes/reference-asr-human-holdouts -c release > padding-evidence/build.log 2>&1 || { tail -100 padding-evidence/build.log; exit 1; }
+        python3 tools/vendored_fluid.py > vendor-after.json
+        cmp vendor-before.json vendor-after.json
+        cp vendor-before.json vendor-after.json padding-evidence/
+    - name: Measure all fixed cases with networking denied
+      run: |
+        set -o pipefail
+        sandbox-exec -p '(version 1)(allow default)(deny network*)' probes/reference-asr-human-holdouts/.build/release/Probe padding-evidence "$RUNNER_TEMP/asr" padding-evidence/results.json "$GITHUB_SHA" 2>&1 | tee padding-evidence/recognition.log
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Independent-human-ASR-holdout-evidence
+        path: padding-evidence
+        if-no-files-found: error
+        retention-days: 14

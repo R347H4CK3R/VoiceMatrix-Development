@@ -1,0 +1,32 @@
+name: Cancel superseded build11 candidate checks
+'on':
+  push:
+    branches: ['maintenance/cancel-superseded-build11']
+permissions:
+  contents: read
+  actions: write
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cancel only two superseded candidates after verifying current head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo=R347H4CK3R/VoiceMatrix-Development
+          current=b19b3b58765c7e2774e2bfd64f3ea74424dd4d01
+          test "$(gh api repos/$repo/git/ref/heads/preview/voicematrix-build11 --jq .object.sha)" = "$current"
+          for old in b63e53f9ca111db066ca40b9e27569da2fb6916d 211f4fd0a3bd9cc7891207424fc612d44147d25c; do
+            gh api "repos/$repo/actions/runs?head_sha=$old&per_page=100" > "$old.json"
+            jq -r --arg old "$old" '.workflow_runs[] | select(.head_sha==$old and .head_branch=="preview/voicematrix-build11" and (.status=="queued" or .status=="in_progress" or .status=="waiting")) | .id' "$old.json" |
+            while read -r id; do
+              test "$(gh api repos/$repo/git/ref/heads/preview/voicematrix-build11 --jq .object.sha)" = "$current"
+              gh api "repos/$repo/actions/runs/$id" > candidate.json
+              jq -e --arg old "$old" '.head_sha==$old and .head_branch=="preview/voicematrix-build11"' candidate.json >/dev/null
+              if ! jq -e '.status=="queued" or .status=="in_progress" or .status=="waiting"' candidate.json >/dev/null; then continue; fi
+              gh api --method POST "repos/$repo/actions/runs/$id/cancel"
+              echo "Cancellation requested for superseded run $id at $old"
+            done
+          done

@@ -1,3 +1,4 @@
+# Build12 final source and overlap coverage verification.
 name: Actual standalone local pipeline diagnostic
 on:
   workflow_call:

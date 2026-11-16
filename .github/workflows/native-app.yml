@@ -1,3 +1,4 @@
+# Build12 final source and overlap coverage verification.
 name: Native app compile checks
 concurrency:
   group: native-app-${{ github.ref }}

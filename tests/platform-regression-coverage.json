@@ -1,0 +1,26 @@
+{
+  "reason": "These exact native Swift checks use POSIX compiler, executable and CryptoKit bridge conventions. Full Linux CI must execute every ID successfully; Windows retains all other worker/source tests and reports its existing platform skips. This does not claim native iOS verification on Windows.",
+  "posixSwiftTestIDs": [
+    "test_diarizer_eof_patch.EOFDiagnosticTests.test_actual_app_boundary_guard_still_rejects_invalid_evidence",
+    "test_direct_voice_profile.DirectVoiceProfileTests.test_actual_library_import_preserves_prior_profiles",
+    "test_direct_voice_profile.DirectVoiceProfileTests.test_package_roundtrip_bounds_cancellation_and_preservation",
+    "test_reference_attempt.ReferenceAttemptTests.test_native_candidate_evidence_and_asset_binding",
+    "test_reference_candidate_pool.CandidatePoolTests.test_later_clean_turn_is_reachable_without_expanding_preview_budget",
+    "test_reference_candidate_pool.CandidatePoolTests.test_real_migration_validates_legacy_windows_before_expanding",
+    "test_rvc_controls.Controls.test_default_strength_is_unchanged",
+    "test_rvc_controls.Controls.test_invalid_controls_and_missing_required_index_fail",
+    "test_rvc_controls.Controls.test_no_retrieval_preserves_features_and_allows_missing_index",
+    "test_rvc_controls.Controls.test_selected_strength_and_shift_reach_synthesizer",
+    "test_rvc_disk_vectors.DiskVectorTests.test_snapshot_integrity_isolation_and_rejections",
+    "test_rvc_model_admission.CandidateAdmission.test_exact_model_identity_and_retrieval_pairing",
+    "test_rvc_native_features.RVCFeatureTests.test_cancellation_before_allocation",
+    "test_rvc_native_features.RVCFeatureTests.test_disabled_retrieval_needs_no_index_and_preserves_frames",
+    "test_rvc_native_features.RVCFeatureTests.test_equal_neighbor_weights_have_hand_calculated_result",
+    "test_rvc_native_features.RVCFeatureTests.test_feature_retrieval_upsampling_and_protection",
+    "test_rvc_native_features.RVCFeatureTests.test_invalid_shapes_bounds_and_degenerate_neighbors_fail",
+    "test_rvc_native_features.RVCFeatureTests.test_pitch_interpolation_shift_and_bins",
+    "test_rvc_native_synthesis.NativeSynthesisTests.test_tensor_bytes_and_reject_malformed_assets_before_inference",
+    "test_rvc_retrieval_memory.RetrievalMemoryTests.test_bounded_selection_and_exact_sparse_fallback",
+    "test_rvc_retrieval_pack.RetrievalPackAdmission.test_profile_manifest_cannot_override_file_identity"
+  ]
+}

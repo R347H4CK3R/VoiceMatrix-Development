@@ -1,17 +1,17 @@
-name: Diagnostic unchanged build11 overlap crop stress
+name: Diagnostic unchanged build11 overlap crop screening
 'on':
   push:
-    branches: [diagnostic/build11-overlap-stress]
+    branches: [diagnostic/build11-overlap-screening]
 permissions:
   contents: read
 jobs:
   measure:
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 3
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -26,13 +26,13 @@ jobs:
           python3 tools/bundle_diarization.py --destination "$RUNNER_TEMP/diarization-models"
       - name: Build exact unchanged production adapter
         run: |
-          for file in LocalSpeakerDiarization LocalSpeakerPolicy; do
+          for file in LocalSpeakerDiarization LocalSpeakerPolicy LocalVideoAudio LocalStudioEvidence LocalSoundQuality LocalSoundQualityPolicy; do
             git show 3b976fe84b6f34b2fd7668baf45533e5b7a377a5:VoiceMatrix/$file.swift | cmp - VoiceMatrix/$file.swift
             cp VoiceMatrix/$file.swift probes/overlap-stress/Sources/Probe/
           done
           python3 - <<'PY'
           import hashlib,json,pathlib,os
-          names=['LocalSpeakerDiarization','LocalSpeakerPolicy']
+          names=['LocalSpeakerDiarization','LocalSpeakerPolicy','LocalVideoAudio','LocalStudioEvidence','LocalSoundQuality','LocalSoundQualityPolicy']
           pathlib.Path('overlap-evidence/source-proof.json').write_text(json.dumps({'candidate':'3b976fe84b6f34b2fd7668baf45533e5b7a377a5','diagnosticCommit':os.environ['GITHUB_SHA'],'sources':{n:hashlib.sha256(pathlib.Path('VoiceMatrix',n+'.swift').read_bytes()).hexdigest() for n in names},'productionChanged':False},indent=2))
           PY
           swift build --package-path probes/overlap-stress -c release > overlap-evidence/build.log 2>&1 || { tail -100 overlap-evidence/build.log; exit 1; }
@@ -47,7 +47,7 @@ jobs:
           for c in cases:
             with (root/(c['id']+'.log')).open('w') as log:
               try:
-                r=subprocess.run(['sandbox-exec','-p','(version 1)(allow default)(deny network*)','probes/overlap-stress/.build/release/Probe',os.environ['RUNNER_TEMP']+'/diarization-models',str(root/c['file']),c['sha256'],str(root/(c['id']+'-analysis.json'))],stdout=log,stderr=subprocess.STDOUT,timeout=240)
+                r=subprocess.run(['sandbox-exec','-p','(version 1)(allow default)(deny network*)','probes/overlap-stress/.build/release/Probe',os.environ['RUNNER_TEMP']+'/diarization-models',str(root/c['file']),c['sha256'],str(root/(c['id']+'-analysis.json'))],stdout=log,stderr=subprocess.STDOUT,timeout=480)
                 runs.append({'case':c['id'],'exitCode':r.returncode})
               except subprocess.TimeoutExpired:runs.append({'case':c['id'],'timeout':True})
             (root/'execution.json').write_text(json.dumps(runs,indent=2))
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Build11-overlap-stress-diagnostic
+          name: Build11-overlap-screening-diagnostic
           path: overlap-evidence
           if-no-files-found: error
           retention-days: 14

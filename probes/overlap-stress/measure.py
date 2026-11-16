@@ -23,8 +23,20 @@ def main(root):
    analysis=json.loads(path.read_text());report['status']='measured';report['modelGroups']=len(analysis['speakerWindows']);report['segments']=analysis['segments']
    for g in analysis['speakerWindows']:
     for w in g['windows']:report['windows'].append({'modelSpeaker':g['speaker'],**measure_window(*parts,w['start'],w['end'])})
+  screen=root/(c['id']+'-analysis.screening.json')
+  if screen.exists():
+   rows=json.loads(screen.read_text());assert len(rows)==len(report['windows'])
+   for w,r in zip(report['windows'],rows):
+    assert w['modelSpeaker']==r['speaker'] and w['start']==r['start'] and w['end']==r['end']
+    if r.get('referenceSHA256'):
+     name=r['referenceFile'];assert pathlib.Path(name).name==name
+     assert hashlib.sha256((root/name).read_bytes()).hexdigest()==r['referenceSHA256']
+     if r.get('evidence'):assert r['evidence']['sourceSHA256']==r['referenceSHA256']
+    w['screening']=r
+   report['screeningComplete']=True
+  else:report['screeningComplete']=False
   reports.append(report)
  result={'scope':'Diagnostic-only synthetic mixture, raw competing-source energy measures for diarizer candidate crops, not pipeline-accepted references. No acceptance thresholds relaxed; no speaker identity or separation claim. Full source intervals include natural silence. Nonzero-sample overlap includes low-level source noise.','cases':reports}
  (root/'measurements.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result,indent=2))
- if any(r['status']!='measured' for r in reports):raise SystemExit('Not all cases completed; retained partial observations')
+ if any(r['status']!='measured' or not r['screeningComplete'] for r in reports):raise SystemExit('Not all cases completed; retained partial observations')
 if __name__=='__main__':main(sys.argv[1])

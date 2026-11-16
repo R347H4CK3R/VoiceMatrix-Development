@@ -126,10 +126,6 @@ struct CharacterLibraryView: View {
                     }
                     Button("Refresh / show more history") { library.refreshSpeechHistory(more: true) }
                 }.disabled(library.busy)
-                .confirmationDialog("Delete this retained audio and its check receipt? Export it first if you need a copy. This does not delete the voice reference.", isPresented: Binding(get: { speechHistoryDeletion != nil }, set: { if !$0 { speechHistoryDeletion = nil } })) {
-                    Button("Delete retained result", role: .destructive) { if let id = speechHistoryDeletion { audio.stop(); library.deleteSpeechHistory(id) }; speechHistoryDeletion = nil }
-                    Button("Cancel", role: .cancel) { speechHistoryDeletion = nil }
-                }
                 if let pending = library.pendingSpeech, library.pendingSpeechMatchesSelection {
                     DisclosureGroup("Review unverified audio") {
                         Text(pending.reason).font(.caption)
@@ -202,6 +198,10 @@ struct CharacterLibraryView: View {
                 } else { Text("Create speech with the selected reference before reviewing it.").foregroundStyle(.secondary) }
                 if let voice = library.profiles.first(where: { $0.id == library.selectedID }) { Text(library.matchDescription(voice)).font(.caption) }
             }
+        }
+        .confirmationDialog("Delete this retained audio and its check receipt? Export it first if you need a copy. This does not delete the voice reference.", isPresented: Binding(get: { speechHistoryDeletion != nil }, set: { if !$0 { speechHistoryDeletion = nil } })) {
+            Button("Delete retained result", role: .destructive) { if let id = speechHistoryDeletion { audio.stop(); library.deleteSpeechHistory(id) }; speechHistoryDeletion = nil }
+            Button("Cancel", role: .cancel) { speechHistoryDeletion = nil }
         }
         .navigationTitle(mode == .speech ? "Make Speech" : "Change My Voice")
         .scrollContentBackground(.hidden)

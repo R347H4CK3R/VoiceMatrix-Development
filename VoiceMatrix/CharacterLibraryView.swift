@@ -120,8 +120,8 @@ struct CharacterLibraryView: View {
                             Text(item.identity.controls).font(.caption)
                             Text(item.reason).font(.caption).foregroundStyle(.secondary)
                         }
-                        if let retainedAudio = item.audio { AudioActions(url: retainedAudio) }
-                            Button("Delete this retained result", role: .destructive) { speechHistoryDeletion = item.id }
+                        if let retainedAudio = item.audio { AudioActions(url: retainedAudio, accessibilityPrefix: "history-" + item.id.uuidString) }
+                            Button("Delete this retained result", role: .destructive) { speechHistoryDeletion = item.id }.accessibilityIdentifier("history-" + item.id.uuidString + "-delete")
                         }.buttonStyle(.borderless)
                     }
                     Button("Refresh / show more history") { library.refreshSpeechHistory(more: true) }

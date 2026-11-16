@@ -16,26 +16,32 @@ import CoreGraphics
             XCTAssertFalse(app.staticTexts.matching(NSPredicate(format:"label BEGINSWITH %@","Last word-checked result")).firstMatch.exists)
         }
         openHistory()
-        let listen=app.buttons.matching(identifier:"Listen / Replay").element(boundBy:0);reveal(listen,in:app);listen.tap()
+        let firstID="history-A8D5A8AA-2864-4BB3-BF19-AEE5CF424A16"
+        let secondID="history-B8D5A8AA-2864-4BB3-BF19-AEE5CF424A16"
+        func assertStopped(_ id:String) {
+            let currentListen=app.buttons[id+"-listen"]
+            reveal(currentListen,in:app,missingDirection:120)
+            XCTAssertEqual(currentListen.value as? String,"Stopped","Visible audio state must confirm playback stopped")
+        }
+        let listen=app.buttons[firstID+"-listen"];reveal(listen,in:app);listen.tap()
         XCTAssertFalse(app.buttons["Delete retained result"].exists,"Playback must not trigger deletion")
-        let stops=app.buttons.matching(identifier:"Stop")
-        expectation(for:NSPredicate(format:"count == 2"),evaluatedWith:stops);waitForExpectations(timeout:10)
-        // AudioActions exposes the same global Stop in both retained rows.
-        // Select the first row, exactly as for Listen / Replay above.
-        let stop=stops.element(boundBy:0);reveal(stop,in:app);stop.tap()
+        let stops=app.buttons.matching(NSPredicate(format:"identifier ENDSWITH %@", "-stop"))
+        let stop=app.buttons[firstID+"-stop"]
+        XCTAssertTrue(stop.waitForExistence(timeout:10),"The selected history audio must actually start playback")
+        reveal(stop,in:app);stop.tap()
+        XCTAssertTrue(stop.waitForNonExistence(timeout:10))
         expectation(for:NSPredicate(format:"count == 0"),evaluatedWith:stops);waitForExpectations(timeout:10)
         XCTAssertFalse(app.buttons["Delete retained result"].exists,"Stopping playback must not trigger deletion")
-        let saves=app.buttons.matching(identifier:"save-recording");XCTAssertEqual(saves.count,2)
-        let save=saves.element(boundBy:0);reveal(save,in:app);save.tap()
+        let save=app.buttons[firstID+"-save"];reveal(save,in:app);save.tap()
         expectation(for:NSPredicate(format:"enabled == false"),evaluatedWith:save);waitForExpectations(timeout:10)
         XCTAssertEqual(save.label,"Saved")
         XCTAssertFalse(app.buttons["Delete retained result"].exists,"Saving first audio must not trigger deletion")
-        XCTAssertEqual(stops.count,0,"Saving first audio must not restart playback")
-        let secondSave=saves.element(boundBy:1);reveal(secondSave,in:app);XCTAssertTrue(secondSave.isEnabled,"Other attempt with same basename must remain independently saveable");secondSave.tap()
+        XCTAssertEqual(stops.count,0,"Saving first audio must not restart playback");assertStopped(firstID)
+        let secondSave=app.buttons[secondID+"-save"];reveal(secondSave,in:app);XCTAssertTrue(secondSave.isEnabled,"Other attempt with same basename must remain independently saveable");secondSave.tap()
         expectation(for:NSPredicate(format:"enabled == false"),evaluatedWith:secondSave);waitForExpectations(timeout:10);XCTAssertEqual(secondSave.label,"Saved")
         XCTAssertFalse(app.buttons["Delete retained result"].exists,"Saving second audio must not trigger deletion")
-        XCTAssertEqual(stops.count,0,"Saving second audio must not restart playback")
-        let share=app.buttons.matching(identifier:"Share Audio").element(boundBy:0);reveal(share,in:app);share.tap()
+        XCTAssertEqual(stops.count,0,"Saving second audio must not restart playback");assertStopped(secondID)
+        let share=app.buttons[firstID+"-share"];reveal(share,in:app,missingDirection:120);share.tap()
         XCTAssertFalse(app.buttons["Delete retained result"].exists,"Sharing must not trigger deletion")
         XCTAssertEqual(stops.count,0,"Sharing must not restart playback")
         let sharePresented=actionableShareSheet(in:app)
@@ -64,7 +70,7 @@ import CoreGraphics
         XCTAssertTrue(sharePresented,"System share sheet must expose a real export action; no external destination selected")
         let shot=XCTAttachment(screenshot:app.screenshot());shot.name="Retained unverified audio system sharing";shot.lifetime = .keepAlways;add(shot)
         app.terminate();app.launchArguments=["-tutorialSeen","YES"];app.launch();openHistory()
-        let remove=app.buttons.matching(identifier:"Delete this retained result").element(boundBy:0);reveal(remove,in:app);remove.tap()
+        let remove=app.buttons[firstID+"-delete"];reveal(remove,in:app);remove.tap()
         let confirm=app.buttons["Delete retained result"];XCTAssertTrue(confirm.waitForExistence(timeout:10))
         let cancel=app.buttons["Cancel"]
         if cancel.exists && cancel.isHittable { cancel.tap() }
@@ -80,8 +86,8 @@ import CoreGraphics
         let history=app.buttons["Retained speech history"];reveal(history,in:app);history.tap()
         XCTAssertFalse(app.staticTexts["Synthetic retained speech UI fixture"].exists)
         let remaining=app.staticTexts["Second retained speech UI fixture"];reveal(remaining,in:app);XCTAssertTrue(remaining.exists)
-        let secondDelete=app.buttons["Delete this retained result"];reveal(secondDelete,in:app);secondDelete.tap();XCTAssertTrue(confirm.waitForExistence(timeout:10));confirm.tap();XCTAssertTrue(remaining.waitForNonExistence(timeout:10))
-        let choose=app.buttons["choose-character"];reveal(choose,in:app);choose.tap()
+        let secondDelete=app.buttons[secondID+"-delete"];reveal(secondDelete,in:app);secondDelete.tap();XCTAssertTrue(confirm.waitForExistence(timeout:10));confirm.tap();XCTAssertTrue(remaining.waitForNonExistence(timeout:10))
+        let choose=app.buttons["choose-character"];reveal(choose,in:app,missingDirection:120);choose.tap()
         XCTAssertTrue(app.buttons["select-character-diagnostic-neutral"].waitForExistence(timeout:15),"Deleting output must retain imported voice")
     }
     private func actionableShareSheet(in app:XCUIApplication)->Bool {
@@ -94,11 +100,11 @@ import CoreGraphics
         }
         return false
     }
-    private func reveal(_ item:XCUIElement,in app:XCUIApplication) {
+    private func reveal(_ item:XCUIElement,in app:XCUIApplication,missingDirection:CGFloat = -120) {
         for _ in 0..<12 {
             let top=app.navigationBars.firstMatch.frame.maxY+16,bottom=app.tabBars.firstMatch.frame.minY-40
             if item.exists && item.isHittable && item.frame.minY>top && item.frame.maxY<bottom { return }
-            let dy:CGFloat = item.exists && item.frame.minY<=top ? 120 : -120
+            let dy:CGFloat = item.exists ? (item.frame.minY<=top ? 120 : -120) : missingDirection
             let start=app.coordinate(withNormalizedOffset:CGVector(dx:0.95,dy:0.55))
             start.press(forDuration:0.05,thenDragTo:start.withOffset(CGVector(dx:0,dy:dy)))
         }

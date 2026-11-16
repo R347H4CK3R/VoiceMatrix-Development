@@ -159,13 +159,17 @@ struct SpeechView: View {
 struct AudioActions: View {
     @EnvironmentObject var audio: AudioStore
     let url: URL
+    var accessibilityPrefix: String? = nil
+    private func actionID(_ action:String,fallback:String)->String {
+        accessibilityPrefix.map { $0 + "-" + action } ?? fallback
+    }
     var body: some View {
         Group {
-        Button { audio.play(url) } label: { Label("Listen / Replay", systemImage: "play.fill") }
-        if audio.playing != nil { Button("Stop") { audio.stop() } }
+        Button { audio.play(url) } label: { Label("Listen / Replay", systemImage: "play.fill") }.accessibilityIdentifier(actionID("listen",fallback:"Listen / Replay")).accessibilityValue(audio.playing == nil ? "Stopped" : "Playing")
+        if audio.playing != nil { Button("Stop") { audio.stop() }.accessibilityIdentifier(actionID("stop",fallback:"Stop")) }
         Button { audio.save(url) } label: { Label(audio.isSaved(url) ? "Saved" : "Save Recording", systemImage: "square.and.arrow.down") }
-            .disabled(audio.isSaved(url)).accessibilityIdentifier("save-recording")
-        ShareLink(item: url) { Label("Share Audio", systemImage: "square.and.arrow.up") }
+            .disabled(audio.isSaved(url)).accessibilityIdentifier(actionID("save",fallback:"save-recording"))
+        ShareLink(item: url) { Label("Share Audio", systemImage: "square.and.arrow.up") }.accessibilityIdentifier(actionID("share",fallback:"Share Audio"))
         if let error = audio.error { Text(error).foregroundStyle(.orange) }
         }.disabled(audio.microphoneInUse)
     }

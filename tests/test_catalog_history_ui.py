@@ -30,7 +30,7 @@ class HistoryUITests(unittest.TestCase):
   for step in d['jobs']['ui']['steps']:
    if 'run' in step:subprocess.run(['bash','-n'],input=step['run'],text=True,check=True)
   s=(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift').read_text()
-  for text in ['count == 2','stops.element(boundBy:0)','count == 0','save.label,"Saved"','PopoverDismissRegion','confirm.waitForNonExistence','confirm.tap()','select-character-diagnostic-neutral','Save to Files']:
+  for text in ['stop.waitForExistence','stop.waitForNonExistence','count == 0','save.label,"Saved"','PopoverDismissRegion','confirm.waitForNonExistence','confirm.tap()','select-character-diagnostic-neutral','Save to Files']:
    self.assertIn(text,s)
   swift=shutil.which('swiftc')
   if swift:subprocess.run([swift,'-frontend','-parse',str(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift')],check=True)
@@ -74,3 +74,20 @@ class HistoryUITests(unittest.TestCase):
   self.assertIn('app.otherElements["ActivityListView"]',s)
   self.assertIn('sheet.cells.matching(NSPredicate(format:"label == %@",label))',s)
   self.assertIn('action.isHittable',s)
+
+ def test_per_attempt_actions_keep_stable_identity(self):
+  s=(ROOT/'VoiceMatrix/App.swift').read_text()
+  self.assertIn('var accessibilityPrefix: String? = nil',s)
+  self.assertIn('actionID("save",fallback:"save-recording")',s)
+  v=(ROOT/'VoiceMatrix/CharacterLibraryView.swift').read_text()
+  self.assertIn('accessibilityPrefix: "history-" + item.id.uuidString',v)
+  self.assertIn('.accessibilityIdentifier("history-" + item.id.uuidString + "-delete")',v)
+
+ def test_stop_state_is_observed_not_inferred_from_lazy_absence(self):
+  s=(ROOT/'VoiceMatrix/App.swift').read_text()
+  self.assertIn('.accessibilityValue(audio.playing == nil ? "Stopped" : "Playing")',s)
+  ui=(ROOT/'VoiceMatrixUITests/CatalogHistoryUITests.swift').read_text()
+  self.assertIn('assertStopped(firstID)',ui);self.assertIn('assertStopped(secondID)',ui)
+  self.assertIn('currentListen.value as? String,"Stopped"',ui)
+  self.assertIn('reveal(share,in:app,missingDirection:120)',ui)
+  self.assertIn("reveal(choose,in:app,missingDirection:120)",ui)

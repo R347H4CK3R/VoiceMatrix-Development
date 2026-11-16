@@ -1,0 +1,51 @@
+name: Reference ASR leading padding investigation
+'on':
+  push:
+    branches: [diagnostic/reference-asr-leading-padding]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+    - uses: actions/checkout@v4
+    - name: Verify immutable vendor and PCM transform regressions
+      run: |
+        python3 tools/vendored_fluid.py > vendor-before.json
+        python3 -m unittest tests.test_reference_asr_leading_padding -v
+    - name: Recover exact retained reference and prepare fixed diagnostic matrix
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14177206631/zip > retained.zip
+        python3 probes/reference-asr-leading-padding/prepare.py retained.zip padding-evidence
+        python3 tools/bundle_asr.py --destination "$RUNNER_TEMP/asr"
+    - name: Build unchanged recognizer against verified local vendor
+      run: |
+        for source in OnDeviceTranscription BundledASRPolicy BundledASRAssets LocalStudioEvidence; do
+          cp "VoiceMatrix/$source.swift" probes/reference-asr-leading-padding/Sources/Probe/
+        done
+        python3 - <<'PY'
+        import hashlib,json,pathlib,os
+        p=pathlib.Path('VoiceMatrix')
+        names=['OnDeviceTranscription','BundledASRPolicy','BundledASRAssets','LocalStudioEvidence']
+        proof={'sourceCommit':os.environ['GITHUB_SHA'],'productionSources':{n:hashlib.sha256((p/(n+'.swift')).read_bytes()).hexdigest() for n in names},'physicalDeviceVerified':False,'productionFix':False}
+        pathlib.Path('padding-evidence/source-proof.json').write_text(json.dumps(proof,indent=2))
+        PY
+        swift build --package-path probes/reference-asr-leading-padding -c release > padding-evidence/build.log 2>&1 || { tail -100 padding-evidence/build.log; exit 1; }
+        python3 tools/vendored_fluid.py > vendor-after.json
+        cmp vendor-before.json vendor-after.json
+        cp vendor-before.json vendor-after.json padding-evidence/
+    - name: Measure all fixed cases with networking denied
+      run: |
+        set -o pipefail
+        sandbox-exec -p '(version 1)(allow default)(deny network*)' probes/reference-asr-leading-padding/.build/release/Probe padding-evidence "$RUNNER_TEMP/asr" padding-evidence/results.json "$GITHUB_SHA" 2>&1 | tee padding-evidence/recognition.log
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Reference-ASR-leading-padding-evidence
+        path: padding-evidence
+        if-no-files-found: error
+        retention-days: 14

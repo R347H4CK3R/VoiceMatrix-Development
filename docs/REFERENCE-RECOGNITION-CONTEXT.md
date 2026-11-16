@@ -13,3 +13,7 @@ The receipt binds the original input SHA-256, recognized transcript SHA-256 and 
 Those experiments altered diagnostic recognition context broadly, so they are NOT proof of this narrower product integration. The candidate must pass its own reference-only full-route receipt checks, four-human production-API checks, native PCM/cancellation/legacy-receipt checks, simulator suite and inspected IPA gates before publication. Original build 10 remains the fallback.
 
 This remains an unfinished 0.4.9 preview, not completed 1.0.0. Physical iPhone behavior, character identity and perceptual likeness are unverified; music separation, reliable overlapping-speaker extraction and full RVC training remain incomplete.
+
+## Native short-read repair
+
+A native float-WAV test exposed a valid AVAudioFile short read (23,552 of 24,000 frames); a second read supplied the remaining 448 samples exactly. Reference preparation now accumulates bounded reads into a complete buffer, rejecting zero progress, early EOF, oversized results and cancellation. The original fixture and every-sample preservation assertions remain unchanged. Generated-output ASR remains untouched. The repair requires its own native and complete release gates.

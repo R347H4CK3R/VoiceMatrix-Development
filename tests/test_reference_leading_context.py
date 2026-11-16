@@ -5,6 +5,15 @@ class ReferenceContextTests(unittest.TestCase):
   s=(ROOT/'VoiceMatrix/OnDeviceTranscription.swift').read_text();self.assertIn('func transcribeReference(',s)
   studio=(ROOT/'VoiceMatrix/LocalVideoStudio.swift').read_text();self.assertIn('transcriber.transcribeReference(reference)',studio);self.assertIn('transcriber.transcribe(preview)',studio)
   self.assertIn('referenceContext: false',s);self.assertIn('referenceContext: true',s);self.assertIn('if !referenceContext && !LocalStudioEvidence.usableTranscript(text)',s)
+ def test_reference_reads_are_bounded_and_complete(self):
+  s=(ROOT/'VoiceMatrix/OnDeviceTranscription.swift').read_text()
+  section=s[s.index('nonisolated static func referenceLeadingBuffer('):s.index('private nonisolated static func recoveryBuffer(')]
+  self.assertIn('readReferenceFrames(format:',section)
+  self.assertIn('while completed < frameCount',section)
+  self.assertIn('min(4096, frameCount - completed)',section)
+  self.assertIn('chunk.frameLength > 0, chunk.frameLength <= requested',section)
+  self.assertIn('try Task.checkCancellation()',section)
+  self.assertIn('guard completed == frameCount',section)
  def test_policy_bounds_executed(self):
   compiler=shutil.which('swiftc')
   if not compiler:self.skipTest('Swift unavailable')

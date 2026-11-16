@@ -39,6 +39,68 @@ import AVFoundation
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
         XCTAssertThrowsError(try OnDeviceTranscription.referenceLeadingBuffer(link))
     }
+    func testShortReadsRetainExactTotalAndEverySample() throws {
+        let format = AVAudioFormat(standardFormatWithSampleRate: 24000, channels: 1)!
+        var offset = 0
+        var calls = 0
+        let result = try OnDeviceTranscription.readReferenceFrames(format: format, frameCount: 4800) { buffer, requested in
+            let count = min(requested, calls == 1 ? 256 : requested)
+            buffer.frameLength = count
+            for i in 0..<Int(count) { buffer.floatChannelData![0][i] = Float((offset + i) % 101) / 1000 }
+            offset += Int(count); calls += 1
+        }
+        XCTAssertEqual(calls, 3)
+        XCTAssertEqual(result.frameLength, 4800)
+        for i in 0..<4800 { XCTAssertEqual(result.floatChannelData![0][i], Float(i % 101) / 1000) }
+    }
+    func testIncompleteOrFailedReadsNeverReturnPartialAudio() throws {
+        let format = AVAudioFormat(standardFormatWithSampleRate: 24000, channels: 1)!
+        var calls = 0
+        XCTAssertThrowsError(try OnDeviceTranscription.readReferenceFrames(format: format, frameCount: 4800) { buffer, _ in
+            buffer.frameLength = calls == 0 ? 100 : 0
+            if buffer.frameLength > 0 { buffer.floatChannelData![0].initialize(repeating: 0, count: Int(buffer.frameLength)) }
+            calls += 1
+        }) { XCTAssertTrue($0 is OnDeviceTranscription.Failure) }
+        XCTAssertEqual(calls, 2, "Zero progress must terminate, not spin")
+        var overreportedCalls = 0
+        XCTAssertThrowsError(try OnDeviceTranscription.readReferenceFrames(format: format, frameCount: 4800) { buffer, requested in
+            overreportedCalls += 1
+            // The second request is 704, but scratch capacity is still 4096.
+            // 705 safely fits the buffer while violating the requested-frame bound.
+            buffer.frameLength = overreportedCalls == 1 ? requested : requested + 1
+            buffer.floatChannelData![0].initialize(repeating: 0, count: Int(buffer.frameLength))
+        }) { XCTAssertTrue($0 is OnDeviceTranscription.Failure) }
+        XCTAssertEqual(overreportedCalls, 2)
+        enum ReadFailure: Error { case truncated }
+        XCTAssertThrowsError(try OnDeviceTranscription.readReferenceFrames(format: format, frameCount: 4800) { _, _ in
+            throw ReadFailure.truncated
+        }) { XCTAssertTrue($0 is ReadFailure) }
+        for count in [AVAudioFrameCount(0), AVAudioFrameCount(1_440_001)] {
+            XCTAssertThrowsError(try OnDeviceTranscription.readReferenceFrames(format: format, frameCount: count) { _, _ in
+                XCTFail("Invalid bounds must reject before reading")
+            })
+        }
+    }
+    func testCancellationBetweenShortReadsStopsWithoutPartialResult() async throws {
+        let started = expectation(description: "first short read")
+        let release = DispatchSemaphore(value: 0)
+        let task = Task.detached { () throws -> Int in
+            let format = AVAudioFormat(standardFormatWithSampleRate: 24000, channels: 1)!
+            var calls = 0
+            do {
+                _ = try OnDeviceTranscription.readReferenceFrames(format: format, frameCount: 4800) { buffer, _ in
+                    calls += 1; buffer.frameLength = 100
+                    started.fulfill()
+                    _ = release.wait(timeout: .now() + 5)
+                }
+                return -1
+            } catch is CancellationError { return calls }
+        }
+        await fulfillment(of: [started], timeout: 3)
+        task.cancel(); release.signal()
+        let calls = try await task.value
+        XCTAssertEqual(calls, 1)
+    }
     func testCancelledReferenceBufferNeverAllocatesOrReads() async throws {
         let cancelled = Task.detached { () async throws -> Bool in
             while !Task.isCancelled { await Task.yield() }

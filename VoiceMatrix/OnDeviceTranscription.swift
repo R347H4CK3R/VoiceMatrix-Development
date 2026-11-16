@@ -154,10 +154,11 @@ import FluidAudio
         let audio = try AVAudioFile(forReading: file)
         let rate = audio.processingFormat.sampleRate
         guard audio.processingFormat.channelCount == 1, audio.length > 0, audio.length <= 1_440_000,
-              let lead = BundledASRPolicy.referenceLeadingFrameCount(frames: Int(audio.length), sampleRate: rate),
-              let original = AVAudioPCMBuffer(pcmFormat: audio.processingFormat, frameCapacity: AVAudioFrameCount(audio.length)) else { throw Failure.invalidAudio }
-        try audio.read(into: original)
-        guard original.frameLength == AVAudioFrameCount(audio.length), let input = original.floatChannelData?[0] else { throw Failure.invalidAudio }
+              let lead = BundledASRPolicy.referenceLeadingFrameCount(frames: Int(audio.length), sampleRate: rate) else { throw Failure.invalidAudio }
+        let original = try readReferenceFrames(format: audio.processingFormat, frameCount: AVAudioFrameCount(audio.length)) { chunk, requested in
+            try audio.read(into: chunk, frameCount: requested)
+        }
+        guard let input = original.floatChannelData?[0] else { throw Failure.invalidAudio }
         let total = original.frameLength + AVAudioFrameCount(lead)
         guard let padded = AVAudioPCMBuffer(pcmFormat: original.format, frameCapacity: total), let output = padded.floatChannelData?[0] else { throw Failure.invalidAudio }
         padded.frameLength = total
@@ -165,6 +166,34 @@ import FluidAudio
         output.advanced(by: lead).update(from: input, count: Int(original.frameLength))
         try Task.checkCancellation()
         return padded
+    }
+
+    /// AVAudioFile may return a short read before EOF. Accept only a complete,
+    /// bounded PCM sequence; zero progress, early EOF and cancellation fail closed.
+    nonisolated static func readReferenceFrames(format: AVAudioFormat, frameCount: AVAudioFrameCount,
+                                                read: (AVAudioPCMBuffer, AVAudioFrameCount) throws -> Void) throws -> AVAudioPCMBuffer {
+        try Task.checkCancellation()
+        guard format.channelCount == 1, format.commonFormat == .pcmFormatFloat32,
+              (1...1_440_000).contains(frameCount),
+              let result = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
+              let chunk = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: min(4096, frameCount)),
+              let output = result.floatChannelData?[0] else { throw Failure.invalidAudio }
+        var completed: AVAudioFrameCount = 0
+        while completed < frameCount {
+            try Task.checkCancellation()
+            let requested = min(4096, frameCount - completed)
+            chunk.frameLength = 0
+            try read(chunk, requested)
+            try Task.checkCancellation()
+            guard chunk.frameLength > 0, chunk.frameLength <= requested,
+                  let input = chunk.floatChannelData?[0] else { throw Failure.invalidAudio }
+            output.advanced(by: Int(completed)).update(from: input, count: Int(chunk.frameLength))
+            completed += chunk.frameLength
+        }
+        guard completed == frameCount else { throw Failure.invalidAudio }
+        result.frameLength = completed
+        try Task.checkCancellation()
+        return result
     }
 
     private nonisolated static func recoveryBuffer(_ file:URL,text:String) throws -> (AVAudioPCMBuffer,Double)? {

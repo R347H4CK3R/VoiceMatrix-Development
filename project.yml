@@ -1,4 +1,4 @@
-# Build 11 reference-context gate repair: rerun all path-filtered checks on exact candidate.
+# Build 11 complete-reference PCM read repair: rerun all path-filtered checks on exact candidate.
 name: VoiceMatrix
 options:
   bundleIdPrefix: com.voicematrix

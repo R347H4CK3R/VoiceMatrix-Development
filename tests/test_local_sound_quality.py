@@ -11,7 +11,7 @@ class LocalSoundQualityTests(unittest.TestCase):
  def test_pipeline_retains_screening_before_any_transcription_or_f5(self):
   s=self.read('VoiceMatrix/LocalVideoStudio.swift')
   self.assertIn('LocalSoundQuality.analyze',s)
-  self.assertLess(s.index('LocalSoundQuality.analyze'),s.index('transcriber.transcribe(reference)'))
+  self.assertLess(s.index('LocalSoundQuality.analyze'),s.index('transcriber.transcribeReference(reference)'))
   self.assertLess(s.index('LocalSoundQuality.analyze'),s.index('engine.load(localBundle: bundle)'))
   for text in ['quality-','quality.decision.admitted','Candidate needs review','sourceSHA256']:self.assertIn(text,s)
  def test_resume_cannot_skip_new_quality_policy_and_actual_voice_names_are_logged(self):

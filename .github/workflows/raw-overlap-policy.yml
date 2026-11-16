@@ -1,0 +1,22 @@
+name: Raw overlap policy native boundary proof
+'on':
+  push:
+    branches: [diagnostic/raw-overlap-policy]
+permissions:
+  contents: read
+jobs:
+  policy:
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile actual policy and execute boundary/evidence checks
+        run: |
+          set -o pipefail
+          swiftc -parse-as-library VoiceMatrix/LocalOverlapPolicy.swift probes/raw-overlap-policy/Tests.swift -o "$RUNNER_TEMP/policy"
+          "$RUNNER_TEMP/policy" | tee raw-overlap-policy.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: raw-overlap-policy-proof
+          path: raw-overlap-policy.log

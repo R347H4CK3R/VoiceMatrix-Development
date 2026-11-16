@@ -8,4 +8,9 @@ class CharacterWorkflowBudgetTests(unittest.TestCase):
   self.assertIn('Reference must play from its private copy with the import source gone',source)
   self.assertIn('XCTAssertGreaterThan((editor.value as? String ?? "").count, 500)',source)
   workflow=(ROOT/'.github/workflows/character-ui-smoke.yml').read_text()
-  self.assertEqual(workflow.count('-test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300'),2)
+  runs=[line for line in workflow.splitlines() if 'xcodebuild test-without-building ' in line]
+  self.assertEqual(len(runs),3, 'unit/UI, import/relaunch and naming must each run')
+  for run in runs:
+   self.assertIn('-test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300',run)
+  self.assertIn('-only-testing:VoiceMatrixUITests/CharacterWorkflowUITests/testImportSelectListenAndKeepVoicesAfterRelaunch',runs[1])
+  self.assertIn('-only-testing:VoiceMatrixUITests/CharacterWorkflowUITests/testUserAssignedNamePersistsAndCanBeReset',runs[2])

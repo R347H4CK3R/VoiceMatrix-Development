@@ -140,8 +140,46 @@ jobs:
           -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS
           Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build -resultBundlePath
           character-workflow.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled
-          NO -only-testing:VoiceMatrixUITests/CharacterWorkflowUITests > character-workflow.log
-          2>&1 || { tail -160 character-workflow.log; exit 1; }
+          NO -only-testing:VoiceMatrixUITests/CharacterWorkflowUITests/testImportSelectListenAndKeepVoicesAfterRelaunch
+          > character-workflow.log 2>&1 || { tail -160 character-workflow.log; exit
+          1; }
+
+          '
+        no_output_timeout: 20m
+    - run:
+        name: Restart only the owned simulator between independent character workflow
+          methods
+        command: '# Isolate test-runner state only; both tests retain their own relaunch
+          assertions.
+
+          # No erase, uninstall or application-data reset.
+
+          python3 - \<<''PYCODE''
+
+          import os,subprocess
+
+          device=os.environ[''SIMULATOR_ID'']
+
+          subprocess.run([''xcrun'',''simctl'',''shutdown'',device],check=True,timeout=120)
+
+          subprocess.run([''xcrun'',''simctl'',''boot'',device],check=True,timeout=60)
+
+          subprocess.run([''xcrun'',''simctl'',''bootstatus'',device,''-b''],check=True,timeout=360)
+
+          PYCODE
+
+          '
+        no_output_timeout: 20m
+    - run:
+        name: Assign a voice name, relaunch and reset it
+        command: 'xcodebuild test-without-building -test-timeouts-enabled YES -default-test-execution-time-allowance
+          120 -maximum-test-execution-time-allowance 300 -skipPackagePluginValidation
+          -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS
+          Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build -resultBundlePath
+          character-naming.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled
+          NO -only-testing:VoiceMatrixUITests/CharacterWorkflowUITests/testUserAssignedNamePersistsAndCanBeReset
+          > character-naming.log 2>&1 || { tail -160 character-naming.log; exit 1;
+          }
 
           '
         no_output_timeout: 20m
@@ -153,6 +191,9 @@ jobs:
           if [ -d character-workflow.xcresult ]; then xcrun xcresulttool export attachments
           --path character-workflow.xcresult --output-path workflow-screenshots; fi
 
+          if [ -d character-naming.xcresult ]; then xcrun xcresulttool export attachments
+          --path character-naming.xcresult --output-path naming-screenshots; fi
+
           '
         no_output_timeout: 20m
         when: always
@@ -162,6 +203,12 @@ jobs:
         path: character-workflow.xcresult
     - store_artifacts:
         path: workflow-screenshots
+    - store_artifacts:
+        path: character-naming.log
+    - store_artifacts:
+        path: character-naming.xcresult
+    - store_artifacts:
+        path: naming-screenshots
     - store_artifacts:
         path: character-ui.log
     - store_artifacts:

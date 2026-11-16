@@ -22,7 +22,17 @@ class SelectiveVoiceWiringTests(unittest.TestCase):
   source=((ROOT/'VoiceMatrix/CharacterLibraryView.swift').read_text() + (ROOT/'VoiceMatrix/CharacterLibrary.swift').read_text())
   for text in ['Download for offline', 'Downloaded', 'Online required', 'storedVoiceBytes', 'library.availableProfiles']:
    self.assertIn(text,source)
-  self.assertNotIn('role: .destructive',source)
+  # Retained generated speech may be explicitly deleted; the voice picker may not delete references.
+  picker=(ROOT/'VoiceMatrix/CharacterLibraryView.swift').read_text().split('struct CharacterPickerView: View {',1)[1]
+  self.assertNotIn('role: .destructive',picker)
+  self.assertNotIn('delete',picker.lower())
+  self.assertNotIn('removeItem',picker)
+  destructive=[line.strip() for line in source.splitlines() if 'role: .destructive' in line]
+  self.assertEqual(len(destructive),2)
+  self.assertTrue(destructive[0].startswith('Button("Delete this retained result", role: .destructive) { speechHistoryDeletion = item.id }'))
+  self.assertTrue(destructive[1].startswith('Button("Delete retained result", role: .destructive) { if let id = speechHistoryDeletion { audio.stop(); library.deleteSpeechHistory(id) }'))
+  self.assertIn('library.deleteSpeechHistory(id)',source)
+  self.assertIn('.confirmationDialog("Delete this retained audio',source)
  def test_selective_transport_is_bounded_and_rejects_redirects(self):
   source=(ROOT/'VoiceMatrix/VoiceCatalogConnection.swift').read_text()
   for text in ['VoiceFolderSync.bounded', 'withTaskCancellationHandler', 'completionHandler(nil)', 'response.url == endpoint', 'data.count < limit', 'waitsForConnectivity = false', 'VoiceSyncRemoteSnapshot', 'snapshot.newer(than: sequence, for: syncID)', 'activity.cancel(); pollSession.invalidateAndCancel()']:

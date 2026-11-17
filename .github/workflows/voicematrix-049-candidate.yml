@@ -1,3 +1,4 @@
+# Build13 isolated queue destination harness: recheck all exact-source gates.
 # Build13 screenshot fixes: require all path-filtered exact-source checks.
 # Build 11 complete-reference PCM read repair: rerun all path-filtered checks on exact candidate.
 # Pinned ASR manifest checkout uses LF on every runner; runtime hash remains strict.

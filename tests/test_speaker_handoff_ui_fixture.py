@@ -31,16 +31,21 @@ class HandoffUIFixture(unittest.TestCase):
 
 class FixturePreservation(unittest.TestCase):
  def test_seed_never_overwrites_and_verification_rejects_changes(self):
-  import tempfile,sys,json
+  import tempfile,sys,json,uuid,importlib.util
+  from unittest.mock import patch
   with tempfile.TemporaryDirectory() as d:
-   root=pathlib.Path(d);container=root/'CoreSimulator/Devices/test/data/Containers/Data/Application/test';container.mkdir(parents=True)
+   root=pathlib.Path(d);sid=str(uuid.uuid4());container=root/'CoreSimulator/Devices'/sid/'data/Containers/Data/Application'/str(uuid.uuid4());container.mkdir(parents=True)
    fixture=root/'fixture/Application Support'
    for name in ['LocalVideoStudio','CharacterReferences']:(fixture/name).mkdir(parents=True)
    (fixture/'LocalVideoStudio/job.json').write_text('{}');(fixture/'LocalVideoStudio/reference.wav').write_bytes(b'synthetic')
    (fixture/'CharacterReferences/index.json').write_text('{}')
-   receipt=root/'receipt.json';cmd=[sys.executable,str(ROOT/'tools/speaker_handoff_fixture.py'),str(container),str(fixture.parent),str(receipt)]
-   subprocess.run(cmd,check=True,capture_output=True);subprocess.run(cmd+['--verify'],check=True,capture_output=True)
-   self.assertNotEqual(subprocess.run(cmd,capture_output=True).returncode,0)
+   receipt=root/'receipt.json'
+   spec=importlib.util.spec_from_file_location('seed_fixture',ROOT/'tools/speaker_handoff_fixture.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+   def invoke(verify=False):
+    args=['fixture',str(container),str(fixture.parent),str(receipt),'--simulator-id',sid]+(['--verify'] if verify else [])
+    with patch.object(sys,'argv',args),patch.object(module.subprocess,'check_output',return_value=str(container)+'\n'):module.main()
+   invoke();invoke(True)
+   with self.assertRaises(AssertionError):invoke()
    target=container/'Library/Application Support/LocalVideoStudio/reference.wav';target.write_bytes(b'changed')
-   self.assertNotEqual(subprocess.run(cmd+['--verify'],capture_output=True).returncode,0)
+   with self.assertRaises(AssertionError):invoke(True)
    self.assertEqual(target.read_bytes(),b'changed')

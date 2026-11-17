@@ -1,5 +1,10 @@
 name: Standalone Python runtime native verification (no release)
 on:
+  push:
+    branches: [feature/voicematrix-native-resolver-harness]
+    paths:
+      - experiments/python-runtime/**
+      - .github/workflows/python-runtime-native.yml
   workflow_dispatch:
 defaults:
   run:

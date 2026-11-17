@@ -57,7 +57,8 @@ final class OnDeviceYouTubeResolver {
             case "restricted", "authorization_required": throw LocalMediaURLPolicy.Failure.restricted
             case "no_supported_media": throw LocalMediaURLPolicy.Failure.noDirectStreams
             case "duration_limit", "response_limit", "request_limit", "redirect_limit", "timeout": throw LocalMediaURLPolicy.Failure.bounds
-            case "network_unavailable", "source_unavailable": throw LocalMediaURLPolicy.Failure.response
+            case "network_unavailable": throw LocalMediaURLPolicy.Failure.resolverNetwork
+            case "source_unavailable": throw LocalMediaURLPolicy.Failure.resolverSource
             default: throw LocalMediaURLPolicy.Failure.resolverUnavailable
             }
         }

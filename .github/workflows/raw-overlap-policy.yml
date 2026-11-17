@@ -10,6 +10,7 @@ name: Raw overlap policy native boundary proof
     - feature/voicematrix-ondevice-ytdlp
     - feature/voicematrix-fresh-acquisition
     - feature/voicematrix-speaker-handoff
+    - feature/voicematrix-download-diagnostics
 permissions:
   contents: read
 jobs:

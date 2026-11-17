@@ -26,6 +26,20 @@ final class OnDeviceMediaResolverTests: XCTestCase {
             XCTAssertThrowsError(try OnDeviceYouTubeResolver.decode(bad))
         }
     }
+    func testResolverDiagnosticsUseFixedAllowlistedMappings() throws {
+        for (code, expectedTag) in [("network_unavailable", "[resolver-network]"), ("source_unavailable", "[resolver-source]"), ("engine_unavailable", "[resolver-engine]"), ("PRIVATE_UPSTREAM_DETAIL", "[resolver-engine]")] {
+            let payload: [String: Any] = ["schemaVersion": 1, "status": "unavailable", "error_code": code,
+                                          "message": "PRIVATE_PROVIDER_BODY https://example.invalid/?token=PRIVATE_TEST_TOKEN"]
+            let text = String(decoding: try JSONSerialization.data(withJSONObject: payload), as: UTF8.self)
+            do { _ = try OnDeviceYouTubeResolver.decode(text); XCTFail("Failure response returned a plan") }
+            catch {
+                XCTAssertTrue(error.localizedDescription.contains(expectedTag))
+                XCTAssertFalse(error.localizedDescription.contains("PRIVATE_"))
+                XCTAssertFalse(error.localizedDescription.contains("example.invalid"))
+                XCTAssertFalse(error.localizedDescription.contains("token="))
+            }
+        }
+    }
     func testFailureMessagesNeverEchoUpstreamDetails() {
         do {
             _ = try OnDeviceYouTubeResolver.decode(#"{"schemaVersion":1,"status":"unavailable","error_code":"private-url-secret"}"#)

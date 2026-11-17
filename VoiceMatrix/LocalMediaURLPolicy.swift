@@ -7,11 +7,15 @@ enum LocalMediaURLPolicy {
     enum Kind: String, Codable { case combined, video, audio }
     struct Part: Codable { let url: URL; let kind: Kind; let ext: String }
     enum Failure: LocalizedError {
-        case url, restricted, unsupported, response, bounds, storage, changed, noDirectStreams, incomplete, resolverUnavailable
+        case url, restricted, unsupported, response, bounds, storage, changed, noDirectStreams, incomplete, resolverUnavailable, resolverNetwork, resolverSource, mediaHTML, mediaType
         case httpStatus(Int), network(Int)
         var errorDescription: String? {
             switch self {
-            case .resolverUnavailable: return "The bundled on-device media resolver is unavailable. Existing files were kept. Import an authorized local file, or restart the app and retry. No laptop fallback was used."
+            case .resolverNetwork: return "[resolver-network] The on-device resolver could not complete its connection to the source website. Check your internet connection, then retry or import an authorized local file. Existing files were kept."
+            case .resolverSource: return "[resolver-source] The on-device resolver could not read a usable source response. No download was confirmed. Try again later or import an authorized local file. Existing files were kept."
+            case .mediaHTML: return "[media-html] The media URL returned an HTML webpage response instead of audio or video. No media was accepted. Existing files were kept. Retry later or import an authorized local file."
+            case .mediaType: return "[media-type] The media URL returned an unsupported audio/video content type. No media was accepted. Existing files were kept. Import an authorized local file instead."
+            case .resolverUnavailable: return "[resolver-engine] The bundled on-device media resolver is unavailable. Existing files were kept. Import an authorized local file, or restart the app and retry. No laptop fallback was used."
             case .httpStatus(let code): return "The source website returned HTTP \(code); no complete media was acquired. Retained files were kept. Try again later, or import an authorized local file."
             case .network(let code): return "The connection to the source website failed (network code \(code)). Check your internet connection, then retry or import an authorized local file. Retained files were kept."
             case .incomplete: return "The source download ended empty or before its declared byte count. Partial files were kept, not appended. Retry or import an authorized local file."

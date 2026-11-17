@@ -24,6 +24,40 @@ final class LocalMediaAcquisitionTests: XCTestCase {
         catch { XCTFail("Wrong diagnostic: \(error)") }
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath:folder.path).count,1)
     }
+    func testHTMLMediaResponseRejectedWithSanitizedDiagnosticAndRetention() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let sentinel = folder.appendingPathComponent("existing-source.wav")
+        let original = Data(repeating: 7, count: 43)
+        try original.write(to: sentinel)
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [SyntheticMediaProtocol.self]
+        do {
+            _ = try await LocalMediaAcquisition.Transfer.download(URL(string: "https://archive.org/html.wav?token=PRIVATE_TEST_TOKEN")!, role: .direct, folder: folder, ext: "wav", maximumBytes: 128, configuration: config) { _ in }
+            XCTFail("HTML response must never be a successful media download")
+        } catch LocalMediaURLPolicy.Failure.mediaHTML {
+            let message = LocalMediaURLPolicy.Failure.mediaHTML.localizedDescription
+            XCTAssertTrue(message.contains("[media-html]"))
+            XCTAssertFalse(message.contains("PRIVATE_PROVIDER_BODY"))
+            XCTAssertFalse(message.contains("PRIVATE_TEST_TOKEN"))
+        } catch { XCTFail("Expected fixed HTML failure, not \(type(of: error))") }
+        XCTAssertEqual(try Data(contentsOf: sentinel), original)
+        let attempts = try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasPrefix("download-") }
+        XCTAssertEqual(attempts.count, 1, "The rejected acquisition attempt remains retained")
+    }
+    func testNonMediaTypeIsDistinctAndHTMLPageAdmissionIsUnchanged() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [SyntheticMediaProtocol.self]
+        do {
+            _ = try await LocalMediaAcquisition.Transfer.download(URL(string: "https://archive.org/json.wav")!, role: .direct, folder: folder, ext: "wav", maximumBytes: 128, configuration: config) { _ in }
+            XCTFail("JSON response accepted as media")
+        } catch LocalMediaURLPolicy.Failure.mediaType { }
+        catch { XCTFail("Expected fixed media-type failure") }
+        let page = try await LocalMediaAcquisition.Transfer.download(URL(string: "https://www.youtube.com/html.wav")!, role: .page, folder: folder, ext: "html", maximumBytes: 128, configuration: config) { _ in }
+        XCTAssertGreaterThan(page.bytes, 0, "HTML page requests must remain supported")
+    }
     func testRetentionScanCountsFilesAndRejectsMissingRootAndSymlinks() throws {
         let root=FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
         XCTAssertThrowsError(try LocalMediaAcquisition.retainedBytes(root:root))
@@ -194,8 +228,14 @@ private final class SyntheticMediaProtocol: URLProtocol {
             client?.urlProtocol(self,wasRedirectedTo:URLRequest(url:target),redirectResponse:redirect)
             return
         }
-        let response=HTTPURLResponse(url:url,statusCode:url.lastPathComponent == "denied.wav" ? 403 : 200,httpVersion:"HTTP/1.1",headerFields:["Content-Type":"audio/wav"])!
+        let mime = url.lastPathComponent == "html.wav" ? "text/html" : (url.lastPathComponent == "json.wav" ? "application/json" : "audio/wav")
+        let response=HTTPURLResponse(url:url,statusCode:url.lastPathComponent == "denied.wav" ? 403 : 200,httpVersion:"HTTP/1.1",headerFields:["Content-Type":mime])!
         client?.urlProtocol(self,didReceive:response,cacheStoragePolicy:.notAllowed)
+        if url.lastPathComponent == "html.wav" {
+            client?.urlProtocol(self,didLoad:Data("<html>PRIVATE_PROVIDER_BODY</html>".utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         client?.urlProtocol(self,didLoad:Data(repeating:42,count:16))
         if url.lastPathComponent == "wait.wav" { return }
         client?.urlProtocol(self,didLoad:Data(repeating:42,count:16))

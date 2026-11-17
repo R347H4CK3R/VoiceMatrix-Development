@@ -235,7 +235,13 @@ enum LocalMediaAcquisition {
             progress(role == .page ? "Received the website page response (HTTP 200). Reading its bounded player metadata." : "Received the media response (HTTP 200). Downloading retained source bytes.")
             let mime=response.mimeType?.lowercased() ?? ""
             let acceptable=role == .page ? mime=="text/html" : ["video/mp4","video/quicktime","audio/mp4","audio/x-m4a","audio/wav","audio/x-wav","audio/aac","audio/x-caf","application/octet-stream"].contains(mime)
-            guard acceptable else { completionHandler(.cancel);finish(.failure(LocalMediaURLPolicy.Failure.unsupported));return }
+            guard acceptable else {
+                let failure: LocalMediaURLPolicy.Failure
+                if role == .page { failure = .unsupported }
+                else if mime == "text/html" || mime == "application/xhtml+xml" { failure = LocalMediaURLPolicy.Failure.mediaHTML }
+                else { failure = LocalMediaURLPolicy.Failure.mediaType }
+                completionHandler(.cancel);finish(.failure(failure));return
+            }
             expected=response.expectedContentLength;completionHandler(.allow)
         }
         func urlSession(_ session:URLSession,dataTask:URLSessionDataTask,didReceive data: Data) {

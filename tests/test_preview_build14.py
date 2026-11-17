@@ -4,8 +4,8 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 class PreviewBuildTests(unittest.TestCase):
  def test_current_identity_after_historical_build12(self):
   project=yaml.safe_load((ROOT/'project.yml').read_text())
-  self.assertEqual(str(project['settings']['base']['CURRENT_PROJECT_VERSION']),'16')
-  self.assertEqual(str(project['settings']['base']['MARKETING_VERSION']),'0.4.13')
+  self.assertEqual(str(project['settings']['base']['CURRENT_PROJECT_VERSION']),'17')
+  self.assertEqual(str(project['settings']['base']['MARKETING_VERSION']),'0.4.14')
  def test_inspected_source_bound_package(self):
   w=yaml.safe_load((ROOT/'.github/workflows/iphone-build14.yml').read_text())
   self.assertEqual(w['permissions']['contents'],'read')
@@ -62,11 +62,11 @@ class FrozenDependencyGraphTests(unittest.TestCase):
 class CombinedReleaseIdentityTests(unittest.TestCase):
  def test_version_and_current_notes_include_actual_resolver(self):
   project=yaml.safe_load((ROOT/'project.yml').read_text())['settings']['base']
-  self.assertEqual(str(project['MARKETING_VERSION']),'0.4.13')
-  self.assertEqual(str(project['CURRENT_PROJECT_VERSION']),'16')
+  self.assertEqual(str(project['MARKETING_VERSION']),'0.4.14')
+  self.assertEqual(str(project['CURRENT_PROJECT_VERSION']),'17')
   self.assertGreater(tuple(map(int,str(project['MARKETING_VERSION']).split('.'))),(0,4,9))
   app=(ROOT/'VoiceMatrix/App.swift').read_text()
-  self.assertIn('What’s new · 0.4.13 (16)',app)
+  self.assertIn('What’s new · 0.4.14 (17)',app)
   self.assertIn('on-device yt-dlp resolver',app)
   self.assertIn('Some sources remain unsupported',app)
  def test_actual_python_bundle_is_checked_before_ipa_creation(self):

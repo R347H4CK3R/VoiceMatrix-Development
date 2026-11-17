@@ -1,7 +1,7 @@
 name: On-device resolver full-app integration (no release)
 on:
   push:
-    branches: [feature/voicematrix-ondevice-ytdlp, feature/voicematrix-fresh-acquisition, feature/voicematrix-speaker-handoff]
+    branches: [feature/voicematrix-ondevice-ytdlp, feature/voicematrix-fresh-acquisition, feature/voicematrix-speaker-handoff, feature/voicematrix-download-diagnostics]
     paths:
       - VoiceMatrix/**
       - VoiceMatrixTests/**
@@ -45,7 +45,7 @@ jobs:
         run: |
           set -o pipefail
           DEVICE=$(xcrun simctl list devices available -j | python3 tools/python-runtime/select_ios26_simulator.py)
-          xcodebuild -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath native-simulator-build -resultBundlePath native-app-resolver.xcresult -only-testing:VoiceMatrixTests/OnDeviceMediaResolverTests CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES test > native-app-resolver.log 2>&1 || { tail -160 native-app-resolver.log; exit 1; }
+          xcodebuild -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath native-simulator-build -resultBundlePath native-app-resolver.xcresult -only-testing:VoiceMatrixTests/OnDeviceMediaResolverTests -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES test > native-app-resolver.log 2>&1 || { tail -160 native-app-resolver.log; exit 1; }
           python3 tools/python-runtime/require_adapter_tests.py native-app-resolver.log
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()

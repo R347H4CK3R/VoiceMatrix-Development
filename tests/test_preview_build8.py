@@ -4,8 +4,8 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 class PreviewBuildTests(unittest.TestCase):
  def test_current_identity_after_historical_build8(self):
   project=yaml.safe_load((ROOT/'project.yml').read_text())
-  self.assertEqual(str(project['settings']['base']['CURRENT_PROJECT_VERSION']),'16')
-  self.assertEqual(str(project['settings']['base']['MARKETING_VERSION']),'0.4.13')
+  self.assertEqual(str(project['settings']['base']['CURRENT_PROJECT_VERSION']),'17')
+  self.assertEqual(str(project['settings']['base']['MARKETING_VERSION']),'0.4.14')
  def test_inspected_source_bound_package(self):
   w=yaml.safe_load((ROOT/'.github/workflows/iphone-build8.yml').read_text())
   self.assertEqual(w['permissions']['contents'],'read')

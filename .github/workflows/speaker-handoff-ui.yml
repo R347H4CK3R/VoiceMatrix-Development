@@ -1,7 +1,7 @@
 name: Synthetic saved-speaker actual UI handoff
 'on':
   push:
-    branches: [feature/voicematrix-speaker-handoff]
+    branches: [feature/voicematrix-speaker-handoff, feature/voicematrix-download-diagnostics]
   workflow_dispatch:
 permissions:
   contents: read

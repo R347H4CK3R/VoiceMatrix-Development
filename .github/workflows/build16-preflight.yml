@@ -1,0 +1,42 @@
+name: Read-only build16 IPA integrity preflight
+on:
+  push:
+    branches: [verify/voicematrix-build16-ipa]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: verifier
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: c6b140e036b144a57ec7f190865b40a11bd48175
+          path: package-source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Independently inspect hash-pinned actual IPA
+        working-directory: package-source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: .
+        run: |
+          cp ../verifier/tools/build16-preflight/{check.py,runtime_preflight.py} .
+          python3 check.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Build16-readonly-IPA-preflight
+          if-no-files-found: error
+          path: |
+            package-source/package/preflight.json
+            package-source/package/character-inspection.json
+            package-source/package/source-proof.json
+            package-source/package/python-runtime-reinspection.json
+            package-source/package/packaging-status.json

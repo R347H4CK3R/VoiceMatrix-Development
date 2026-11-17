@@ -4,6 +4,7 @@
 # Build 11 complete-reference PCM read repair: rerun all path-filtered checks on exact candidate.
 name: VoiceMatrix
 options:
+  preGenCommand: python3 tools/python-runtime/prepare_app_python.py
   bundleIdPrefix: com.voicematrix
 packages:
   ONNXRuntime:
@@ -20,8 +21,8 @@ settings:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: 1,2
     GENERATE_INFOPLIST_FILE: true
-    MARKETING_VERSION: 0.4.10
-    CURRENT_PROJECT_VERSION: '13'
+    MARKETING_VERSION: 0.4.11
+    CURRENT_PROJECT_VERSION: '14'
     CODE_SIGNING_ALLOWED: false
 targets:
   VoiceMatrix:
@@ -61,7 +62,20 @@ targets:
     - path: VoiceMatrix/Resources/F5TTS
       type: folder
       buildPhase: resources
+    - path: VoiceMatrix/Resources/PythonRuntimeNotices
+      type: folder
+      buildPhase: resources
+    - path: .python-runtime/app_packages
+      type: folder
+      buildPhase: resources
+    postBuildScripts:
+    - name: Install pinned on-device Python runtime
+      script: 'bash "$PROJECT_DIR/tools/python-runtime/install_python_runtime.sh"'
+      basedOnDependencyAnalysis: false
     dependencies:
+    - framework: Vendors/Python/Python.xcframework
+      embed: true
+      codeSign: false
     - package: ONNXRuntime
       product: onnxruntime
     - package: FluidAudio
@@ -69,6 +83,13 @@ targets:
       product: F5TTS
     settings:
       base:
+        SWIFT_OBJC_BRIDGING_HEADER: VoiceMatrix/PythonRuntime/VoiceMatrix-Bridging-Header.h
+        COPY_PHASE_STRIP: NO
+        STRIP_INSTALLED_PRODUCT: NO
+        CLANG_ENABLE_OBJC_ARC: YES
+        CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: NO
+        ONLY_ACTIVE_ARCH: YES
+        HEADER_SEARCH_PATHS: '$(inherited) $(BUILT_PRODUCTS_DIR)/Python.framework/Headers'
         PRODUCT_BUNDLE_IDENTIFIER: com.voicematrix.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: VoiceMatrix

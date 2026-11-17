@@ -3,12 +3,18 @@ import argparse,array,hashlib,json,math,os,pathlib,re,subprocess,wave
 MODEL_HASHES={'tiny.en.bin':'921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f','base.en.bin':'a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002'}
 def digest(path):
  with pathlib.Path(path).open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
+def embedded_source_paths(root=pathlib.Path('.')):
+ # Bind executable bridge/resolver code and all pinned staging inputs, not host caches.
+ roots=('VoiceMatrix/PythonRuntime','python-resolver','tools/python-runtime','VoiceMatrix/Resources/PythonRuntimeNotices')
+ return [p for name in roots for p in (root/name).rglob('*')
+         if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ('.pyc','.pyo')]
 def source_proof(resolved):
  try: from tools.vendored_fluid import verify,check_resolved
  except ModuleNotFoundError: from vendored_fluid import verify,check_resolved
  check_resolved(resolved)
  vendored=verify(pathlib.Path(__file__).resolve().parents[1])
  paths=[pathlib.Path('probes/native-conversion/RuntimeHost.swift')]+list(pathlib.Path('VoiceMatrix').glob('*.swift'))+list(pathlib.Path('Assets.xcassets').rglob('*'))+[pathlib.Path('project.yml'),pathlib.Path('VoiceMatrix/LaptopSettings.json'),pathlib.Path('tools/f5-listening-lock.json'),pathlib.Path('tools/no-stock-resource-lock.json')]
+ paths += embedded_source_paths()
  files={p.as_posix():digest(p) for p in sorted(set(paths)) if p.is_file()}
  record=dict(sourceCommit=os.environ['GITHUB_SHA'],files=files,dependencyResolvedSHA256=digest(resolved),vendoredDependencies={'FluidAudio':vendored})
  record['inferenceSourceFingerprint']=hashlib.sha256(json.dumps(record,sort_keys=True,separators=(',',':')).encode()).hexdigest();return record

@@ -277,11 +277,11 @@ struct SettingsView: View {
                 Text("Your collection and saved recordings stay on this iPhone. Speech and voice changing run locally.")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
-            Section("What’s new · 0.4.10 (13)") {
-                Text("Video download errors now explain HTTP, network and unsupported-stream failures, with an import-from-Files option. Some public YouTube pages still cannot be downloaded directly.")
+            Section("What’s new · 0.4.11 (14)") {
+                Text("Adds an on-device yt-dlp resolver for supported public YouTube sources. Processing stays on this iPhone; no laptop or external conversion service. Some sources remain unsupported, with Files import available.")
                 Text("Local speech and voice-changing routes are clearer. Laptop tools are optional; saved video lists send only when you tap Send List.")
                 Text("Create-a-voice permission now resets when its source recording changes. Existing voices, recordings and saved video lists are preserved.")
-                Text("Experimental preview: on-device RVC remains diagnostic, and physical-iPhone quality is not verified.").font(.caption)
+                Text("Experimental preview: this resolver does not bypass sign-in, age restrictions or protected media. On-device RVC remains diagnostic; physical-iPhone quality is not verified.").font(.caption)
             }
             Section("App updates") {
                 NavigationLink("Check for Updates") { AppUpdatesView() }.accessibilityIdentifier("app-updates")

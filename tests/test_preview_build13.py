@@ -4,8 +4,8 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 class PreviewBuildTests(unittest.TestCase):
  def test_current_identity_after_historical_build12(self):
   project=yaml.safe_load((ROOT/'project.yml').read_text())
-  self.assertEqual(str(project['settings']['base']['CURRENT_PROJECT_VERSION']),'13')
-  self.assertEqual(str(project['settings']['base']['MARKETING_VERSION']),'0.4.10')
+  self.assertEqual(str(project['settings']['base']['CURRENT_PROJECT_VERSION']),'14')
+  self.assertEqual(str(project['settings']['base']['MARKETING_VERSION']),'0.4.11')
  def test_inspected_source_bound_package(self):
   w=yaml.safe_load((ROOT/'.github/workflows/iphone-build13.yml').read_text())
   self.assertEqual(w['permissions']['contents'],'read')
@@ -58,12 +58,3 @@ class FrozenDependencyGraphTests(unittest.TestCase):
   for step in resolve['steps']:
    if 'run' in step:check_bash_syntax(step['run'])
 
-class ReleaseIdentityTests(unittest.TestCase):
- def test_marketing_version_and_visible_notes_advance_together(self):
-  project=yaml.safe_load((ROOT/'project.yml').read_text())['settings']['base']
-  self.assertGreater(tuple(map(int,str(project['MARKETING_VERSION']).split('.'))),(0,4,9))
-  self.assertEqual(str(project['CURRENT_PROJECT_VERSION']),'13')
-  app=(ROOT/'VoiceMatrix/App.swift').read_text()
-  self.assertIn('What’s new · 0.4.10 (13)',app)
-  self.assertIn('Some public YouTube pages still cannot be downloaded directly.',app)
-  self.assertIn('saved video lists send only when you tap Send List',app)

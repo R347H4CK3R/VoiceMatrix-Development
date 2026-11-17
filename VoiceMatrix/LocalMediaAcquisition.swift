@@ -31,7 +31,24 @@ enum LocalMediaAcquisition {
             if let id=try? LocalMediaURLPolicy.videoID(normalized) {
                 progress("Requesting the ordinary public YouTube page directly from this iPhone. No login or external converter.")
                 let page=try await Transfer.download(normalized,role:.page,folder:folder,ext:"html",maximumBytes:min(4_000_000, try remainingBudget(folder:folder, reserveForMerge:false)),progress:progress)
-                parts=try LocalMediaURLPolicy.youtubePlan(Data(contentsOf:folder.appendingPathComponent(page.file)),videoID:id)
+                do {
+                    parts=try LocalMediaURLPolicy.youtubePlan(Data(contentsOf:folder.appendingPathComponent(page.file)),videoID:id)
+                } catch let failure as LocalMediaURLPolicy.Failure {
+                    switch failure {
+                    case .unsupported, .noDirectStreams:
+                        try Task.checkCancellation()
+                        progress("Trying the bundled on-device resolver. No laptop, sign-in, access-check bypass or third-party conversion service is used.")
+                        #if os(iOS)
+                        parts = try await OnDeviceYouTubeResolver.shared.resolve(normalized, authorized: true)
+                        #else
+                        // Diagnostic hosts do not acquire through an iPhone-only runtime.
+                        throw failure
+                        #endif
+                        try Task.checkCancellation()
+                        progress("The on-device resolver returned a supported source plan. Native download and media checks still apply.")
+                    default: throw failure
+                    }
+                }
             } else { parts=[.init(url:normalized,kind:.combined,ext:normalized.pathExtension.lowercased())] }
             receipt=Receipt(input:normalized,parts:parts,files:[],merged:nil)
             try JSONEncoder().encode(receipt).write(to:receiptURL,options:.atomic)

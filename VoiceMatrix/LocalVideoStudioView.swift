@@ -40,7 +40,7 @@ struct LocalVideoStudioView: View {
                 }.buttonStyle(.bordered).disabled(local.busy)
                     .accessibilityLabel("Paste video URL from Clipboard")
                     .accessibilityIdentifier("local-video-paste")
-                Text("URL acquisition needs internet to contact the source website. YouTube link support is limited: many public pages provide no downloadable media URLs. Direct media on upload.wikimedia.org or archive.org are supported candidates. Sign-in, age checks, encrypted signatures and challenges are not bypassed; those sources need local-file import.").font(.footnote).foregroundStyle(.secondary)
+                Text("URL acquisition needs internet to contact the source website. YouTube link support is limited: many public pages provide no downloadable media URLs. Direct media on upload.wikimedia.org or archive.org are supported candidates. A bundled resolver can try standard public streams on this iPhone. Sign-in, age/access verification and DRM are not bypassed; those sources need authorized local-file import.").font(.footnote).foregroundStyle(.secondary)
                 Toggle("I am authorized to use this media and its voices", isOn: $authorized).disabled(local.busy)
                 Button("Generate speaker references") {
                     if let selected { local.start(selected, authorized: authorized, library: library, audio: audio, speech: speech) }

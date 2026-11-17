@@ -1,22 +1,24 @@
 import Foundation
 
-/// No authentication, JavaScript execution, challenge solving or alternate clients.
+/// Bounded direct-page parser and shared media policy. The separate on-device
+/// resolver may transform public player URLs; neither path bypasses access or DRM.
 enum LocalMediaURLPolicy {
     enum Role { case page, stream, direct }
     enum Kind: String, Codable { case combined, video, audio }
     struct Part: Codable { let url: URL; let kind: Kind; let ext: String }
     enum Failure: LocalizedError {
-        case url, restricted, unsupported, response, bounds, storage, changed, noDirectStreams, incomplete
+        case url, restricted, unsupported, response, bounds, storage, changed, noDirectStreams, incomplete, resolverUnavailable
         case httpStatus(Int), network(Int)
         var errorDescription: String? {
             switch self {
+            case .resolverUnavailable: return "The bundled on-device media resolver is unavailable. Existing files were kept. Import an authorized local file, or restart the app and retry. No laptop fallback was used."
             case .httpStatus(let code): return "The source website returned HTTP \(code); no complete media was acquired. Retained files were kept. Try again later, or import an authorized local file."
             case .network(let code): return "The connection to the source website failed (network code \(code)). Check your internet connection, then retry or import an authorized local file. Retained files were kept."
             case .incomplete: return "The source download ended empty or before its declared byte count. Partial files were kept, not appended. Retry or import an authorized local file."
-            case .noDirectStreams: return "YouTube returned a player page but no direct downloadable media URLs. This app cannot acquire this response; retrying may give the same result. Import an authorized video or audio file from Files instead. No laptop is needed for local analysis."
+            case .noDirectStreams: return "This YouTube response did not yield a supported downloadable media plan. Retrying may give the same result. Import an authorized video or audio file from Files instead. No laptop is needed for local analysis."
             case .url: return "Use an HTTPS YouTube link or a direct media link from upload.wikimedia.org or archive.org. Other hosts, credentials and redirects outside the approved hosts are not supported."
-            case .restricted: return "The website requires access, sign-in or verification, or this is a live/restricted video. No bypass or third-party downloader was used. Import an authorized local file instead."
-            case .unsupported: return "This page does not provide supported public MP4/AAC streams directly. Encrypted signatures, streaming manifests and website challenges are not supported. Import an authorized local file instead."
+            case .restricted: return "The website requires access, sign-in or verification, or this is a live/restricted video. No access-check bypass or external conversion service was used. Import an authorized local file instead."
+            case .unsupported: return "This source did not provide a supported downloadable MP4/AAC plan. Sign-in, age/access verification, DRM and unsupported streaming protocols are not bypassed. Import an authorized local file instead."
             case .response: return "The website did not return a complete supported media response. Partial files were retained; Retry starts a new download without appending unrelated bytes."
             case .bounds: return "This acquisition exceeded its byte, duration or time limit. Files were retained; use a shorter authorized local clip."
             case .storage: return "Not enough safe storage remains for this acquisition. Existing sources and voices were kept."

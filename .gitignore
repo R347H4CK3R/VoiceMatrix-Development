@@ -16,3 +16,7 @@ VoiceMatrix/Resources/Diarization/*
 
 VoiceMatrix/Resources/ParakeetASR/*
 !VoiceMatrix/Resources/ParakeetASR/.gitkeep
+
+# Pinned Python SDK/packages are staged at build time, not committed.
+Vendors/Python/
+.python-runtime/

@@ -12,11 +12,14 @@ def source_proof(resolved):
  try: from tools.vendored_fluid import verify,check_resolved
  except ModuleNotFoundError: from vendored_fluid import verify,check_resolved
  check_resolved(resolved)
+ try: from tools.vendored_onnx import verify as verify_onnx
+ except ModuleNotFoundError: from vendored_onnx import verify as verify_onnx
+ onnx=verify_onnx(pathlib.Path(__file__).resolve().parents[1])
  vendored=verify(pathlib.Path(__file__).resolve().parents[1])
  paths=[pathlib.Path('probes/native-conversion/RuntimeHost.swift')]+list(pathlib.Path('VoiceMatrix').glob('*.swift'))+list(pathlib.Path('Assets.xcassets').rglob('*'))+[pathlib.Path('project.yml'),pathlib.Path('VoiceMatrix/LaptopSettings.json'),pathlib.Path('tools/f5-listening-lock.json'),pathlib.Path('tools/no-stock-resource-lock.json')]
  paths += embedded_source_paths()
  files={p.as_posix():digest(p) for p in sorted(set(paths)) if p.is_file()}
- record=dict(sourceCommit=os.environ['GITHUB_SHA'],files=files,dependencyResolvedSHA256=digest(resolved),vendoredDependencies={'FluidAudio':vendored})
+ record=dict(sourceCommit=os.environ['GITHUB_SHA'],files=files,dependencyResolvedSHA256=digest(resolved),vendoredDependencies={'FluidAudio':vendored,'ONNXRuntime':onnx})
  record['inferenceSourceFingerprint']=hashlib.sha256(json.dumps(record,sort_keys=True,separators=(',',':')).encode()).hexdigest();return record
 
 def words(text):return re.findall('[a-z0-9]+',text.lower())

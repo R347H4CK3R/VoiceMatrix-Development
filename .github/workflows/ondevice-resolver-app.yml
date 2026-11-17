@@ -1,12 +1,15 @@
 name: On-device resolver full-app integration (no release)
 on:
   push:
-    branches: [feature/voicematrix-ondevice-ytdlp, feature/voicematrix-fresh-acquisition, feature/voicematrix-speaker-handoff, feature/voicematrix-download-diagnostics]
+    branches: [fix/build17-dependency-recovery, feature/voicematrix-ondevice-ytdlp, feature/voicematrix-fresh-acquisition, feature/voicematrix-speaker-handoff, feature/voicematrix-download-diagnostics]
     paths:
       - VoiceMatrix/**
       - VoiceMatrixTests/**
       - python-resolver/**
       - tools/python-runtime/**
+      - Vendors/ONNXRuntime/**
+      - Vendors/ONNXRuntime.inventory.json
+      - tools/vendored_onnx.py
       - project.yml
       - .github/workflows/ondevice-resolver-app.yml
   workflow_dispatch:

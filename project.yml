@@ -5,12 +5,11 @@
 # Build 11 complete-reference PCM read repair: rerun all path-filtered checks on exact candidate.
 name: VoiceMatrix
 options:
-  preGenCommand: python3 tools/python-runtime/prepare_app_python.py
+  preGenCommand: python3 tools/vendored_onnx.py && python3 tools/python-runtime/prepare_app_python.py
   bundleIdPrefix: com.voicematrix
 packages:
   ONNXRuntime:
-    url: https://github.com/microsoft/onnxruntime-swift-package-manager.git
-    revision: b7fb7f7dea8a2469e6335d95a61b8f36d0dc83b2
+    path: Vendors/ONNXRuntime
   FluidAudio:
     path: Vendors/FluidAudio
   SpeechSwift:

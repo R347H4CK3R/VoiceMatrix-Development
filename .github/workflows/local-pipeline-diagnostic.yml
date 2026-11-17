@@ -22,6 +22,9 @@ on:
       - 'VoiceMatrix/CharacterLibrary.swift'
       - 'VoiceMatrix/OnDeviceTranscription.swift'
       - 'VoiceMatrix/F5ReferenceEngine.swift'
+      - 'Vendors/ONNXRuntime/**'
+      - 'Vendors/ONNXRuntime.inventory.json'
+      - 'tools/vendored_onnx.py'
       - 'project.yml'
 permissions:
   contents: read

@@ -282,3 +282,5 @@ schemes:
 # Build16 exact-source gate rerun after test-without-building success-summary oracle correction.
 
 # Build16 exact-source gate rerun after authoritative simulator/app container identity proof.
+
+# Build16 exact-source gate rerun after canonical temporary-root test expectation correction.

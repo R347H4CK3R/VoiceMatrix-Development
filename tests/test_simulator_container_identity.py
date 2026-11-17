@@ -6,7 +6,7 @@ spec=importlib.util.spec_from_file_location('fixture',ROOT/'tools/speaker_handof
 class ContainerIdentity(unittest.TestCase):
  def test_relocation_is_bounded_and_preservation_still_enforced(self):
   with tempfile.TemporaryDirectory() as d:
-   root=pathlib.Path(d);sid=str(uuid.uuid4());base=root/'CoreSimulator/Devices'/sid/'data/Containers/Data/Application';old=base/str(uuid.uuid4());old.mkdir(parents=True)
+   root=pathlib.Path(d).resolve(strict=True);sid=str(uuid.uuid4());base=root/'CoreSimulator/Devices'/sid/'data/Containers/Data/Application';old=base/str(uuid.uuid4());old.mkdir(parents=True)
    fixture=root/'fixture/Application Support'
    for name in ['LocalVideoStudio','CharacterReferences']:(fixture/name).mkdir(parents=True)
    (fixture/'LocalVideoStudio/reference.wav').write_bytes(b'synthetic');(fixture/'CharacterReferences/index.json').write_text('{}')

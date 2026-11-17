@@ -278,3 +278,5 @@ schemes:
     build:
       targets:
         CharacterSpeechDiagnostic: all
+
+# Build16 exact-source gate rerun after test-without-building success-summary oracle correction.

@@ -17,6 +17,18 @@ class HandoffUIFixture(unittest.TestCase):
   for s in steps:
    if 'run' in s:check_bash_syntax(s['run'])
 
+ def test_actual_test_without_building_summary_and_fail_closed_oracle(self):
+  from unittest.mock import patch
+  workflow=yaml.safe_load((ROOT/'.github/workflows/speaker-handoff-ui.yml').read_text())
+  step=next(s['run'] for s in workflow['jobs']['ui']['steps'] if s.get('name')=='Tap both real handoff buttons and verify preserved data')
+  checker=step.split("python3 - <<'PY'\n",1)[1].split('\nPY',1)[0]
+  passed="Test Case '-[VoiceMatrixUITests.SpeakerHandoffUITests testExplicitSavedSpeakerSpeechAndConversionRoutes]' passed (91.549 seconds).\n"
+  summary='** TEST EXECUTE SUCCEEDED **\n'
+  with patch('pathlib.Path.read_text',return_value=passed+summary):exec(checker,{})
+  for invalid in [summary,passed,passed+'** TEST EXECUTE FAILED **',passed.replace(' passed',' skipped')+summary,passed+summary+"Test Case 'other' failed",passed+summary+"Test Case 'other' skipped"]:
+   with self.subTest(log=invalid),patch('pathlib.Path.read_text',return_value=invalid),self.assertRaises(AssertionError):exec(checker,{})
+  self.assertLess(step.index('assert '),step.index('--verify'))
+
 class FixturePreservation(unittest.TestCase):
  def test_seed_never_overwrites_and_verification_rejects_changes(self):
   import tempfile,sys,json

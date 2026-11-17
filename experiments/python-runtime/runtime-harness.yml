@@ -1,0 +1,56 @@
+name: PythonRuntimeHarness
+options:
+  bundleIdPrefix: com.voicematrix.verification
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: '26.0'
+    SWIFT_VERSION: '5.0'
+    CODE_SIGNING_ALLOWED: false
+    ONLY_ACTIVE_ARCH: YES
+    GENERATE_INFOPLIST_FILE: YES
+    CLANG_ENABLE_OBJC_ARC: YES
+    CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: NO
+targets:
+  VoiceMatrix:
+    type: application
+    platform: iOS
+    sources:
+      - path: VoiceMatrix/PythonRuntime
+      - path: tests/runtime-harness/Host
+      - path: .runtime-stage/app_packages
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - framework: Vendors/Python/Python.xcframework
+        embed: true
+        codeSign: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.voicematrix.verification.runtime
+        HEADER_SEARCH_PATHS: '$(BUILT_PRODUCTS_DIR)/Python.framework/Headers'
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    postBuildScripts:
+      - name: Install pinned Python standard library and extension frameworks
+        script: 'bash "$PROJECT_DIR/tools/install_python_runtime.sh"'
+        basedOnDependencyAnalysis: false
+  RuntimeHarnessTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - VoiceMatrixTests/VMPythonRuntimeCancellationTests.m
+      - VoiceMatrixTests/VMWebKitChallengeProviderTests.swift
+    dependencies:
+      - target: VoiceMatrix
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.voicematrix.verification.runtime.tests
+        HEADER_SEARCH_PATHS: '$(PROJECT_DIR)/VoiceMatrix/PythonRuntime'
+schemes:
+  VoiceMatrix:
+    build:
+      targets:
+        VoiceMatrix: all
+        RuntimeHarnessTests: [test]
+    test:
+      targets: [RuntimeHarnessTests]
+      gatherCoverageData: false

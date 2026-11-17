@@ -1,0 +1,42 @@
+name: Standalone Python runtime native verification (no release)
+on:
+  workflow_dispatch:
+defaults:
+  run:
+    working-directory: experiments/python-runtime
+permissions:
+  contents: read
+jobs:
+  native-runtime:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Prepare existing standard runner tooling
+        run: |
+          mkdir -p .tooling
+          curl --fail --location --proto '=https' --tlsv1.2 https://github.com/yonaskolb/XcodeGen/releases/download/2.44.1/xcodegen.zip -o .tooling/xcodegen.zip
+          echo 'a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73  .tooling/xcodegen.zip' | shasum -a 256 -c -
+          unzip -q .tooling/xcodegen.zip -d .tooling
+          .tooling/xcodegen/bin/xcodegen --version
+      - name: Verify cancellation, TLS and resolver policy on host
+        run: |
+          python3 tools/stage_runtime_packages.py
+          PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.runtime-stage/production_packages VM_RESOLVER_PATH=.runtime-stage/production_packages/voicematrix_resolver.py python3 tools/run_host_tests.py
+          cc -std=c11 -Wall -Wextra -Werror tests/test_challenge_lifetime.c -o lifetime && ./lifetime
+          cc -std=c11 -Wall -Wextra -Werror -pthread tests/test_challenge_race.c -o race && ./race
+          cc -std=c11 -Wall -Wextra -Werror -pthread tests/test_worker_context.c -o owner && ./owner
+      - name: Run actual iOS simulator Python and WebKit tests
+        run: bash tools/test_native_runtime.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-runtime-verification
+          path: |
+            experiments/python-runtime/native-runtime-tests.log
+            experiments/python-runtime/native-runtime-tests.xcresult
+          if-no-files-found: warn
+          retention-days: 7

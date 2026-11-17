@@ -114,17 +114,23 @@ final class LocalMediaAcquisitionTests: XCTestCase {
         CVPixelBufferLockBaseAddress(buffer,[])
         if let base=CVPixelBufferGetBaseAddress(buffer) { memset(base,0,CVPixelBufferGetBytesPerRow(buffer)*32) }
         CVPixelBufferUnlockBaseAddress(buffer,[])
+        print("ADAPTIVE_MERGE fixture video encoding started")
         for frame in 0..<30 {
             var waits=0
             while !input.isReadyForMoreMediaData {
                 try await Task.sleep(nanoseconds:10_000_000);waits += 1
-                guard waits<500 else { throw LocalMediaURLPolicy.Failure.bounds }
+                guard waits<500 else {
+                    let underlying=writer.error as NSError?
+                    throw NSError(domain:"VoiceMatrixSyntheticFixture",code:1,userInfo:[NSLocalizedDescriptionKey:
+                        "Video fixture writer readiness timeout before production merge; frame=\(frame), status=\(writer.status.rawValue), errorDomain=\(underlying?.domain ?? "none"), errorCode=\(underlying?.code ?? 0)"])
+                }
             }
             XCTAssertTrue(adaptor.append(buffer,withPresentationTime:CMTime(value:Int64(frame),timescale:10)))
         }
         writer.endSession(atSourceTime:CMTime(seconds:3,preferredTimescale:600));input.markAsFinished()
         await withCheckedContinuation { (c:CheckedContinuation<Void,Never>) in writer.finishWriting { c.resume() } }
         XCTAssertEqual(writer.status,.completed)
+        print("ADAPTIVE_MERGE fixture video encoding completed")
         let format=try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate:16_000,channels:1))
         let samples=try XCTUnwrap(AVAudioPCMBuffer(pcmFormat:format,frameCapacity:48_000));samples.frameLength=48_000
         for i in 0..<48_000 { samples.floatChannelData![0][i]=Float(sin(Double(i)*2*Double.pi*220/16_000))*0.03 }
@@ -132,7 +138,9 @@ final class LocalMediaAcquisitionTests: XCTestCase {
         let encode=try XCTUnwrap(AVAssetExportSession(asset:AVURLAsset(url:pcm),presetName:AVAssetExportPresetAppleM4A))
         try await encode.export(to:audio,as:.m4a)
         let originalVideo=try Data(contentsOf:video),originalAudio=try Data(contentsOf:audio)
+        print("ADAPTIVE_MERGE entering production merge; videoBytes=\(originalVideo.count), audioBytes=\(originalAudio.count)")
         let merged=try await LocalMediaAcquisition.merge(video:video,audio:audio,folder:folder,maximumBytes:10_000_000) { _ in }
+        print("ADAPTIVE_MERGE production merge completed; bytes=\(merged.bytes)")
         try await LocalMediaAcquisition.verify(merged,folder:folder)
         let asset=AVURLAsset(url:folder.appendingPathComponent(merged.file))
         let videoTracks=try await asset.loadTracks(withMediaType:.video),audioTracks=try await asset.loadTracks(withMediaType:.audio)

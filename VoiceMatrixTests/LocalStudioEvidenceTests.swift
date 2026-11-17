@@ -1,6 +1,51 @@
 import XCTest
 @testable import VoiceMatrix
 final class LocalStudioEvidenceTests: XCTestCase {
+    @MainActor func testSpeakerHandoffSelectsExactRetainedVoiceAndPreservesFailures() throws {
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:root) }
+        let jobs=root.appendingPathComponent("jobs"), id=UUID(), now=Date()
+        let folder=jobs.appendingPathComponent(id.uuidString.lowercased())
+        try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        var job=LocalVideoStudio.Job(id:id,created:now,updated:now,stage:"Complete",message:"Synthetic handoff integrity only")
+        job.speakerVoiceIDs=[:];job.speakerAssets=[:]
+        var profiles:[CharacterReference]=[]
+        var originals:[String:Data]=[:]
+        for (speaker,byte) in [("one",UInt8(1)),("two",UInt8(2))] {
+            let bytes=Data(repeating:byte,count:44), hash=LocalVisualEvidence.digest(bytes), voice="voice-"+speaker
+            job.speakerVoiceIDs?[speaker]=voice
+            job.speakerAssets?[speaker] = .init(voiceID:voice,referenceFile:"reference-"+speaker+".wav",referenceSHA256:hash,previewFile:"preview-"+speaker+".wav",previewSHA256:hash)
+            profiles.append(CharacterReference(id:voice,name:speaker,source:"synthetic",permission:"test fixture",referenceText:"Synthetic reference",schemaVersion:1,kind:"reference",engine:"f5",referenceFile:"reference.wav",referenceSHA256:hash,trainedModel:false,categories:[],referenceBytes:44,seconds:3))
+            for name in ["reference-"+speaker+".wav","preview-"+speaker+".wav"] { originals[name]=bytes;try bytes.write(to:folder.appendingPathComponent(name)) }
+        }
+        let snapshot=try JSONEncoder().encode(job);try snapshot.write(to:folder.appendingPathComponent("job.json"))
+        let local=LocalVideoStudio(root:jobs,asrBundle:nil,f5Bundle:nil,speakerBundle:nil)
+        let library=CharacterLibrary(supportRoot:root.appendingPathComponent("library"),f5Bundle:nil)
+        let audio=AudioStore(recordingRoot:root.appendingPathComponent("recordings"))
+        library.profiles=profiles;library.selectedID="unrelated-existing-selection"
+        func rejected(_ jobID:UUID?=nil,_ speaker:String="one") {
+            let before=library.selectedID
+            XCTAssertFalse(local.selectSpeaker(jobID:jobID ?? id,speaker:speaker,library:library,audio:audio))
+            XCTAssertEqual(library.selectedID,before)
+        }
+        rejected(UUID());rejected(id,"missing")
+        local.setActive(false);rejected();local.setActive(true)
+        library.busy=true;rejected();library.busy=false
+        let processing=try XCTUnwrap(audio.claimProcessing());rejected();audio.releaseProcessing(processing)
+        let microphone=try XCTUnwrap(audio.claimMicrophone());rejected();audio.releaseMicrophone(microphone)
+        library.profiles=[];rejected()
+        library.profiles=[profiles[0],profiles[0]];rejected()
+        library.profiles=[CharacterReference(id:profiles[0].id,name:"changed",source:"synthetic",permission:"test fixture",referenceText:"Synthetic reference",schemaVersion:1,kind:"reference",engine:"f5",referenceFile:"reference.wav",referenceSHA256:profiles[1].referenceSHA256,trainedModel:false,categories:[],referenceBytes:44,seconds:3)];rejected()
+        library.profiles=profiles
+        XCTAssertTrue(local.selectSpeaker(jobID:id,speaker:"one",library:library,audio:audio));XCTAssertEqual(library.selectedID,"voice-one")
+        XCTAssertTrue(local.selectSpeaker(jobID:id,speaker:"two",library:library,audio:audio));XCTAssertEqual(library.selectedID,"voice-two")
+        let changed=Data(repeating:9,count:44);try changed.write(to:folder.appendingPathComponent("preview-one.wav"));rejected()
+        XCTAssertEqual(try Data(contentsOf:folder.appendingPathComponent("preview-one.wav")),changed)
+        for (name,bytes) in originals where name != "preview-one.wav" { XCTAssertEqual(try Data(contentsOf:folder.appendingPathComponent(name)),bytes) }
+        XCTAssertEqual(try Data(contentsOf:folder.appendingPathComponent("job.json")),snapshot)
+        XCTAssertFalse(local.busy);XCTAssertFalse(library.busy);XCTAssertFalse(audio.processingInUse)
+        XCTAssertEqual(library.profiles,profiles)
+    }
     @MainActor func testFreshAcquisitionRequiresCurrentConsentAndPreservesPriorFiles() async throws {
         let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at:root) }

@@ -277,7 +277,8 @@ struct SettingsView: View {
                 Text("Your collection and saved recordings stay on this iPhone. Speech and voice changing run locally.")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
-            Section("What’s new · 0.4.12 (15)") {
+            Section("What’s new · 0.4.13 (16)") {
+                Text("Adds explicit per-speaker speech and conversion shortcuts from retained video jobs. Each action selects the matching saved reference, not an unrelated previously selected voice. Missing or changed evidence leaves the current selection and files untouched. This does not verify likeness or start generation automatically.")
                 Text("A confirmed fresh download attempt can recover from expired media links by contacting the original source again in a separate job. Previous jobs and files are kept; earlier tracks are never mixed with a new attempt.")
                 Text("Includes the on-device yt-dlp resolver for supported public YouTube sources. Processing stays on this iPhone; no laptop or external conversion service. Some sources remain unsupported, with Files import available.")
                 Text("Local speech and voice-changing routes are clearer. Laptop tools are optional; saved video lists send only when you tap Send List.")

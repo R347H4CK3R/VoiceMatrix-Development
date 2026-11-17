@@ -161,6 +161,22 @@ import CryptoKit
             return evidence
         } catch { return nil }
     }
+    /// Explicit navigation handoff only; never starts generation or changes retained files.
+    func selectSpeaker(jobID: UUID, speaker: String, library: CharacterLibrary, audio: AudioStore) -> Bool {
+        guard !busy, active, !library.busy,
+              !audio.processingInUse, !audio.microphoneInUse,
+              current?.id == jobID else { return false }
+        guard let assets = current?.speakerAssets?[speaker],
+              validatedSpeakerAssetURL(speaker, preview: false) != nil else { return false }
+        guard let voiceID = LocalSpeakerHandoff.voiceID(expected: assets.voiceID,
+                referenceSHA256: assets.referenceSHA256,
+                profiles: library.profiles.map { .init(id: $0.id, referenceSHA256: $0.referenceSHA256) }) else {
+            notice = "This speaker's matching saved voice is missing, changed or ambiguous. Your current selection and retained files were kept."
+            return false
+        }
+        library.selectedID = voiceID
+        return true
+    }
     /// Validate both retained files on explicit playback, not on every live-log refresh.
     /// Private app storage is trusted against concurrent hostile replacement after this read.
     func speakerAssetURL(_ speaker: String, preview: Bool) -> URL? {

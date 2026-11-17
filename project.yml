@@ -21,8 +21,8 @@ settings:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: 1,2
     GENERATE_INFOPLIST_FILE: true
-    MARKETING_VERSION: 0.4.12
-    CURRENT_PROJECT_VERSION: '15'
+    MARKETING_VERSION: 0.4.13
+    CURRENT_PROJECT_VERSION: '16'
     CODE_SIGNING_ALLOWED: false
 targets:
   VoiceMatrix:
@@ -190,6 +190,7 @@ targets:
     - path: VoiceMatrix/LocalReferenceAttempt.swift
     - path: VoiceMatrix/LocalVoiceProfilePackage.swift
     - path: VoiceMatrix/LocalVideoStudio.swift
+    - path: VoiceMatrix/LocalSpeakerHandoff.swift
     - path: VoiceMatrix/LocalMediaImportPolicy.swift
     - path: VoiceMatrix/LocalVisualEvidence.swift
     - path: VoiceMatrix/SpeakerSimilarityPolicy.swift

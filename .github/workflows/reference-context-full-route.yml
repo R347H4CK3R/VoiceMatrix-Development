@@ -8,6 +8,7 @@ name: Production reference context full two-reader gate
     - preview/voicematrix-build14
     - feature/voicematrix-ondevice-ytdlp
     - feature/voicematrix-fresh-acquisition
+    - feature/voicematrix-speaker-handoff
 permissions:
   contents: read
   actions: read

@@ -15,6 +15,7 @@ struct LocalVideoStudioView: View {
     @State private var authorized = false
     private struct FreshDownloadRequest: Identifiable { let id: UUID }
     @State private var retryRequest: FreshDownloadRequest?
+    @State private var speakerDestination: CharacterStudioMode?
     @State private var selectionError: String?
     var body: some View {
         ScrollView {
@@ -81,15 +82,23 @@ struct LocalVideoStudioView: View {
                     }.accessibilityIdentifier("local-video-similarity")
                 }
                 if local.current?.voiceID != nil {
-                    NavigationLink("Use saved references for new speech") { CharacterLibraryView() }
+                    NavigationLink("Browse saved voices") { CharacterLibraryView() }
                 }
-                if let outcomes = local.current?.speakerOutcomes, !outcomes.isEmpty {
+                if let job = local.current, let outcomes = job.speakerOutcomes, !outcomes.isEmpty {
                     Text("Speaker results").font(.headline)
                     ForEach(outcomes.keys.sorted(), id: \.self) { speaker in
                         DisclosureGroup("Unidentified speaker " + speaker) {
                             Text(outcomes[speaker] ?? "Pending").font(.caption)
                             if local.current?.speakerAssets?[speaker] != nil {
                                 Text("Preview-only reference; not a trained RVC model. Identity and likeness are unverified.").font(.caption).foregroundStyle(.secondary)
+                                Button("Make speech with this speaker") {
+                                    openSpeaker(speaker, jobID: job.id, mode: .speech)
+                                }.disabled(local.busy || library.busy || audio.processingInUse || audio.microphoneInUse)
+                                    .accessibilityIdentifier("local-video-speaker-speech-" + speaker)
+                                Button("Change my voice with this speaker") {
+                                    openSpeaker(speaker, jobID: job.id, mode: .conversion)
+                                }.disabled(local.busy || library.busy || audio.processingInUse || audio.microphoneInUse)
+                                    .accessibilityIdentifier("local-video-speaker-conversion-" + speaker)
                                 Button("Listen to this speaker's reference") {
                                     audio.stop()
                                     if let url=local.speakerAssetURL(speaker, preview: false) { audio.play(url) }
@@ -183,6 +192,9 @@ struct LocalVideoStudioView: View {
             }.padding(20)
         }
         .navigationTitle("Video Voice Studio")
+        .navigationDestination(item: $speakerDestination) { mode in
+            CharacterLibraryView(mode: mode)
+        }
         .alert(item: $retryRequest) { request in
             Alert(title: Text("Start a fresh download?"),
                   message: Text("Confirm you are authorized to use this source and its voices. This contacts the original website again and starts a separate job. Previous jobs and files are kept; tracks from different attempts are never combined. Unsupported or restricted sources may still fail."),
@@ -202,6 +214,12 @@ struct LocalVideoStudioView: View {
                 } catch { selected = nil; selectionError = error.localizedDescription }
             case .failure: selectionError = "The selected file could not be opened. No job was started."
             }
+        }
+    }
+    private func openSpeaker(_ speaker: String, jobID: UUID, mode: CharacterStudioMode) {
+        if local.selectSpeaker(jobID: jobID, speaker: speaker, library: library, audio: audio) {
+            audio.stop()
+            speakerDestination = mode
         }
     }
     private func loadJournal(_ offset: Int) {

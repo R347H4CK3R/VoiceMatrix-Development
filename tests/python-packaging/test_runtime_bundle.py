@@ -6,7 +6,7 @@ class RuntimeBundle(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
   cls.tmp=tempfile.TemporaryDirectory();cls.app=pathlib.Path(cls.tmp.name)/'VoiceMatrix.app';cls.app.mkdir()
-  (cls.app/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'com.voicematrix.app','CFBundleShortVersionString':'0.4.12','CFBundleVersion':'15'}))
+  (cls.app/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'com.voicematrix.app','CFBundleShortVersionString':'0.4.13','CFBundleVersion':'16'}))
   def write(path,data):
    p=cls.app/path;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(data)
   archive=ROOT/'Vendors/Python/Python-3.13-iOS-support.b18.tar.gz'

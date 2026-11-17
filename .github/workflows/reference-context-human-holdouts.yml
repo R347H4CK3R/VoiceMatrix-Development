@@ -8,6 +8,7 @@ name: Production reference context four human holdout gate
     - preview/voicematrix-build14
     - feature/voicematrix-ondevice-ytdlp
     - feature/voicematrix-fresh-acquisition
+    - feature/voicematrix-speaker-handoff
 permissions:
   contents: read
   actions: read

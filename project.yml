@@ -1,3 +1,4 @@
+# Build13 stdlib-only queue boundary regression; full exact-source gate rerun.
 # Build13 complete exact-source verification after isolated queue-harness correction.
 # Build 11 complete-reference PCM read repair: rerun all path-filtered checks on exact candidate.
 name: VoiceMatrix

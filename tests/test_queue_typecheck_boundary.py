@@ -1,4 +1,4 @@
-import pathlib, unittest, yaml
+import pathlib, unittest, re
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 STUB='tests/native/QueueLocalStudioDestinationStub.swift'
 class QueueTypecheckBoundary(unittest.TestCase):
@@ -8,8 +8,11 @@ class QueueTypecheckBoundary(unittest.TestCase):
   stub=(ROOT/STUB).read_text()
   self.assertIn('#if QUEUE_BOUNDARY_TYPECHECK',stub)
   self.assertIn('struct LocalVideoStudioView: View',stub)
-  project=yaml.safe_load((ROOT/'project.yml').read_text())
-  source_roots=[(ROOT/s['path']).resolve() for s in project['targets']['VoiceMatrix']['sources']]
+  project=(ROOT/'project.yml').read_text()
+  application=project.split('  VoiceMatrix:\n',1)[1].split('  VoiceMatrixTests:',1)[0]
+  sources=application.split('    sources:\n',1)[1].split('    dependencies:',1)[0]
+  source_roots=[(ROOT/s).resolve() for s in re.findall(r'^    - path: (.+)$',sources,re.M)]
+  self.assertTrue(source_roots)
   target=(ROOT/STUB).resolve()
   for root in source_roots:
    self.assertFalse(target==root or root in target.parents, 'Test destination must never enter app target')

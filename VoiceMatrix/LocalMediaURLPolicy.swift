@@ -61,6 +61,17 @@ enum LocalMediaURLPolicy {
                   source == target || (archiveHost(source) && archiveHost(target)) else { throw Failure.url }
         }
     }
+    /// Fresh retries start from the same admitted source, never from cached signed streams.
+    /// Legacy jobs may only retain the canonical source URL. Never infer a source from a file.
+    static func freshAcquisitionInput(original: URL?, retained: URL?, completed: Bool, hasSource: Bool) -> URL? {
+        guard !completed, !hasSource, let retained,
+              let canonical = try? input(retained.absoluteString) else { return nil }
+        if let original {
+            guard let checked = try? input(original.absoluteString), checked == canonical else { return nil }
+        }
+        return canonical
+    }
+
     static func input(_ text: String) throws -> URL {
         guard text.utf8.count <= 16_384, let url=URL(string:text.trimmingCharacters(in:.whitespacesAndNewlines)) else { throw Failure.url }
         if let id = try? videoID(url) { return URL(string:"https://www.youtube.com/watch?v=" + id)! }

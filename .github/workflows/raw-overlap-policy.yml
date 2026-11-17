@@ -8,6 +8,7 @@ name: Raw overlap policy native boundary proof
     - preview/voicematrix-build13
     - preview/voicematrix-build14
     - feature/voicematrix-ondevice-ytdlp
+    - feature/voicematrix-fresh-acquisition
 permissions:
   contents: read
 jobs:

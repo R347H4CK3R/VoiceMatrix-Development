@@ -1,7 +1,7 @@
 name: On-device resolver full-app integration (no release)
 on:
   push:
-    branches: [feature/voicematrix-ondevice-ytdlp]
+    branches: [feature/voicematrix-ondevice-ytdlp, feature/voicematrix-fresh-acquisition]
     paths:
       - VoiceMatrix/**
       - VoiceMatrixTests/**

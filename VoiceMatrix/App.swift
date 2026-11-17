@@ -277,8 +277,9 @@ struct SettingsView: View {
                 Text("Your collection and saved recordings stay on this iPhone. Speech and voice changing run locally.")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
-            Section("What’s new · 0.4.11 (14)") {
-                Text("Adds an on-device yt-dlp resolver for supported public YouTube sources. Processing stays on this iPhone; no laptop or external conversion service. Some sources remain unsupported, with Files import available.")
+            Section("What’s new · 0.4.12 (15)") {
+                Text("A confirmed fresh download attempt can recover from expired media links by contacting the original source again in a separate job. Previous jobs and files are kept; earlier tracks are never mixed with a new attempt.")
+                Text("Includes the on-device yt-dlp resolver for supported public YouTube sources. Processing stays on this iPhone; no laptop or external conversion service. Some sources remain unsupported, with Files import available.")
                 Text("Local speech and voice-changing routes are clearer. Laptop tools are optional; saved video lists send only when you tap Send List.")
                 Text("Create-a-voice permission now resets when its source recording changes. Existing voices, recordings and saved video lists are preserved.")
                 Text("Experimental preview: this resolver does not bypass sign-in, age restrictions or protected media. On-device RVC remains diagnostic; physical-iPhone quality is not verified.").font(.caption)

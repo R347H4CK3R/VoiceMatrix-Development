@@ -8,7 +8,7 @@ def inspect(app):
     app=app.resolve();assert app.is_dir(),'Built/extracted .app missing'
     info=plistlib.loads((app/'Info.plist').read_bytes())
     assert info['CFBundleIdentifier']=='com.voicematrix.app'
-    assert info['CFBundleShortVersionString']=='0.4.11' and str(info['CFBundleVersion'])=='14'
+    assert info['CFBundleShortVersionString']=='0.4.12' and str(info['CFBundleVersion'])=='15'
     def reject_symlinks(directory):
         assert not directory.is_symlink(),f'Symlinked runtime root: {directory.name}'
         for path in directory.rglob('*'):
@@ -16,7 +16,7 @@ def inspect(app):
     for directory in (app/'python',app/'app_packages',app/'PythonRuntimeNotices'):
         assert directory.is_dir(),'Required runtime resource tree missing'
         reject_symlinks(directory)
-    proof={'schemaVersion':1,'version':'0.4.11','build':'14','sdkArchiveSHA256':SDK_SHA,'native':{},'resources':{},'wheels':[]}
+    proof={'schemaVersion':1,'version':'0.4.12','build':'15','sdkArchiveSHA256':SDK_SHA,'native':{},'resources':{},'wheels':[]}
     def resource(relative,expected):
         actual=(app/relative).read_bytes();assert actual==expected,f'Resource mismatch: {relative}'
         proof['resources'][relative]={'bytes':len(actual),'sha256':sha(actual)}
@@ -112,5 +112,5 @@ def main():
     parser=argparse.ArgumentParser();parser.add_argument('app',type=pathlib.Path);parser.add_argument('--json-out',type=pathlib.Path);args=parser.parse_args()
     proof=inspect(args.app)
     if args.json_out:args.json_out.write_text(json.dumps(proof,sort_keys=True,indent=2)+'\n')
-    print(f"Verified actual build14 app: {len(proof['native'])} native binaries, {len(proof['resources'])} pinned resources, {len(proof['wheels'])} wheel identities")
+    print(f"Verified actual build15 app: {len(proof['native'])} native binaries, {len(proof['resources'])} pinned resources, {len(proof['wheels'])} wheel identities")
 if __name__=='__main__':main()

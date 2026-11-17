@@ -52,6 +52,7 @@
     "test_raw_overlap_policy.RawOverlapPolicyTests.test_native_fresh_analysis_clears_stale_associations_without_metadata",
     "test_raw_overlap_policy.RawOverlapPolicyTests.test_native_policy_boundaries_and_invalid_evidence",
     "test_reference_source_consent.SourceConsentTests.test_native_permission_tracks_import_recording_nil_and_reapproval",
-    "test_reference_source_consent.SourceConsentTests.test_save_action_cannot_transfer_permission_to_new_source"
+    "test_reference_source_consent.SourceConsentTests.test_save_action_cannot_transfer_permission_to_new_source",
+    "test_fresh_acquisition_retry.FreshAcquisitionRetryTests.test_retry_policy_rechecks_original_source_not_cached_media"
   ]
 }

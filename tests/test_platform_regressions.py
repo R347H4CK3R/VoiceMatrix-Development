@@ -23,7 +23,7 @@ class PlatformRegressionTests(unittest.TestCase):
   self.assertFalse(p.native_coverage_passed(result,['native']))
  def test_exact_manifest_and_workflow_bind_both_platforms(self):
   manifest=json.loads(p.MANIFEST.read_text(encoding='utf-8'))['posixTestIDs']
-  self.assertEqual(len(manifest),52);self.assertEqual(len(manifest),len(set(manifest)))
+  self.assertEqual(len(manifest),53);self.assertEqual(len(manifest),len(set(manifest)))
   discovered=unittest.defaultTestLoader.discover(str(p.ROOT/'tests'))
   ids={t.id() for t in p.flatten(discovered)};self.assertTrue(set(manifest)<=ids)
   workflow=(p.ROOT/'.github/workflows/queue-processor.yml').read_text()

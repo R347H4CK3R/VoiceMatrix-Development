@@ -239,6 +239,17 @@ import CryptoKit
             run(source: source.isFileURL ? source : nil, library: library, audio: audio, speech: speech)
         } catch { notice = "Could not start a local job. Check free storage; existing voices were kept." }
     }
+    var freshAcquisitionURL: URL? {
+        guard let job = current else { return nil }
+        return LocalMediaURLPolicy.freshAcquisitionInput(original: job.originalAcquisitionURL,
+            retained: job.acquisitionURL, completed: job.completed, hasSource: job.sourceFile != nil)
+    }
+    /// Explicit confirmation is bound to the selected job. Existing receipt/tracks are untouched;
+    /// start creates a distinct UUID folder and repeats normal storage, source and processing gates.
+    func retryAcquisition(jobID: UUID, authorized: Bool, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio) {
+        guard authorized, !busy, active, current?.id == jobID, let source = freshAcquisitionURL else { return }
+        start(source, authorized: true, library: library, audio: audio, speech: speech)
+    }
     func resume(library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio) {
         guard !busy, active, let job = current, !job.completed, job.sourceFile != nil || job.acquisitionURL != nil else { return }
         run(source: nil, library: library, audio: audio, speech: speech)

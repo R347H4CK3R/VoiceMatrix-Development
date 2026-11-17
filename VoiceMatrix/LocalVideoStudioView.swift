@@ -13,6 +13,8 @@ struct LocalVideoStudioView: View {
     @State private var importing = false
     @State private var selected: URL?
     @State private var authorized = false
+    private struct FreshDownloadRequest: Identifiable { let id: UUID }
+    @State private var retryRequest: FreshDownloadRequest?
     @State private var selectionError: String?
     var body: some View {
         ScrollView {
@@ -57,6 +59,11 @@ struct LocalVideoStudioView: View {
                     Button("Pause and retain files") { local.cancel() }.buttonStyle(.bordered)
                 } else if let job = local.current, !job.completed, job.sourceFile != nil || job.acquisitionURL != nil {
                     if job.acquisitionURL != nil && job.sourceFile == nil {
+                        if local.freshAcquisitionURL != nil {
+                            Button("Try a fresh download") { retryRequest = FreshDownloadRequest(id: job.id) }
+                                .buttonStyle(.bordered).accessibilityIdentifier("local-video-fresh-download")
+                            Text("Resume reuses the retained download plan. A fresh attempt asks the original website again, which can help if its media links expired. It may still fail for unsupported or restricted sources.").font(.footnote).foregroundStyle(.secondary)
+                        }
                         Button("Import an authorized local file instead") { importing = true }
                             .buttonStyle(.borderedProminent).accessibilityIdentifier("local-video-import-fallback")
                         Text("Choose a video or audio file you already have permission to use in Files, then enable authorization and tap Generate speaker references. The earlier job and its partial files remain retained.").font(.footnote).foregroundStyle(.secondary)
@@ -176,6 +183,13 @@ struct LocalVideoStudioView: View {
             }.padding(20)
         }
         .navigationTitle("Video Voice Studio")
+        .alert(item: $retryRequest) { request in
+            Alert(title: Text("Start a fresh download?"),
+                  message: Text("Confirm you are authorized to use this source and its voices. This contacts the original website again and starts a separate job. Previous jobs and files are kept; tracks from different attempts are never combined. Unsupported or restricted sources may still fail."),
+                  primaryButton: .default(Text("Download original source again")) {
+                      local.retryAcquisition(jobID: request.id, authorized: true, library: library, audio: audio, speech: speech)
+                  }, secondaryButton: .cancel())
+        }
         .onChange(of: local.current?.id) { _, _ in journalPage=nil; journalError=nil }
         .onChange(of: sourceURL) { _, _ in authorized = false }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.movie, .audio]) { result in

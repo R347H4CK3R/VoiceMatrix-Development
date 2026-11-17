@@ -1,6 +1,46 @@
 import XCTest
 @testable import VoiceMatrix
 final class LocalStudioEvidenceTests: XCTestCase {
+    @MainActor func testFreshAcquisitionRequiresCurrentConsentAndPreservesPriorFiles() async throws {
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:root) }
+        let jobs=root.appendingPathComponent("jobs"), now=Date(), id=UUID()
+        let oldFolder=jobs.appendingPathComponent(id.uuidString.lowercased())
+        try FileManager.default.createDirectory(at:oldFolder,withIntermediateDirectories:true)
+        let retained=Data("retained earlier acquisition attempt".utf8)
+        let oldReceipt=oldFolder.appendingPathComponent("acquisition.json")
+        try retained.write(to:oldReceipt)
+        var job=LocalVideoStudio.Job(id:id,created:now,updated:now,stage:"Failed",message:"Synthetic acquisition failure")
+        job.originalAcquisitionURL=URL(string:"https://youtu.be/abcdefghijk")
+        job.acquisitionURL=URL(string:"https://www.youtube.com/watch?v=abcdefghijk")
+        let snapshot=try JSONEncoder().encode(job)
+        try snapshot.write(to:oldFolder.appendingPathComponent("job.json"))
+        let studio=LocalVideoStudio(root:jobs,asrBundle:nil,f5Bundle:nil,speakerBundle:nil)
+        let library=CharacterLibrary(supportRoot:root.appendingPathComponent("library"),f5Bundle:nil)
+        let audio=AudioStore(recordingRoot:root.appendingPathComponent("recordings")),speech=SpeechStudio()
+        XCTAssertEqual(studio.freshAcquisitionURL,job.acquisitionURL)
+        studio.retryAcquisition(jobID:UUID(),authorized:true,library:library,audio:audio,speech:speech)
+        XCTAssertEqual(studio.current?.id,id)
+        studio.retryAcquisition(jobID:id,authorized:false,library:library,audio:audio,speech:speech)
+        XCTAssertEqual(studio.current?.id,id)
+        studio.setActive(false)
+        studio.retryAcquisition(jobID:id,authorized:true,library:library,audio:audio,speech:speech)
+        XCTAssertEqual(studio.current?.id,id)
+        studio.setActive(true)
+        studio.retryAcquisition(jobID:id,authorized:true,library:library,audio:audio,speech:speech)
+        let newID=try XCTUnwrap(studio.current?.id)
+        XCTAssertNotEqual(newID,id)
+        XCTAssertEqual(studio.current?.acquisitionURL,job.acquisitionURL)
+        XCTAssertNil(studio.current?.sourceFile)
+        XCTAssertFalse(FileManager.default.fileExists(atPath:jobs.appendingPathComponent(newID.uuidString.lowercased()).appendingPathComponent("acquisition.json").path))
+        studio.retryAcquisition(jobID:newID,authorized:true,library:library,audio:audio,speech:speech)
+        XCTAssertEqual(studio.current?.id,newID) // Already busy; no second attempt.
+        for _ in 0..<100 where studio.busy { try await Task.sleep(nanoseconds:10_000_000) }
+        XCTAssertFalse(studio.busy) // Missing local engine stops before any network acquisition.
+        XCTAssertEqual(try Data(contentsOf:oldReceipt),retained)
+        XCTAssertEqual(try Data(contentsOf:oldFolder.appendingPathComponent("job.json")),snapshot)
+        XCTAssertTrue(studio.history.contains { $0.id == id })
+    }
     @MainActor func testIndividualSpeakerAssetsSurviveReloadAndRejectChangedBytes() throws {
         let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at:root) }

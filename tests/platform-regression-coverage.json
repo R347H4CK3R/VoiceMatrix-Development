@@ -54,6 +54,7 @@
     "test_reference_source_consent.SourceConsentTests.test_native_permission_tracks_import_recording_nil_and_reapproval",
     "test_reference_source_consent.SourceConsentTests.test_save_action_cannot_transfer_permission_to_new_source",
     "test_fresh_acquisition_retry.FreshAcquisitionRetryTests.test_retry_policy_rechecks_original_source_not_cached_media",
-    "test_speaker_handoff.SpeakerHandoffTests.test_exact_unique_profile_identity"
+    "test_speaker_handoff.SpeakerHandoffTests.test_exact_unique_profile_identity",
+    "test_character_package.CharacterPackageTests.test_matching_external_inventory_cannot_override_onnx_license"
   ]
 }

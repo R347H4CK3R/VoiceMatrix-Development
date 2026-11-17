@@ -23,7 +23,8 @@ class PlatformRegressionTests(unittest.TestCase):
   self.assertFalse(p.native_coverage_passed(result,['native']))
  def test_exact_manifest_and_workflow_bind_both_platforms(self):
   manifest=json.loads(p.MANIFEST.read_text(encoding='utf-8'))['posixTestIDs']
-  self.assertEqual(len(manifest),54);self.assertEqual(len(manifest),len(set(manifest)))
+  self.assertEqual(len(manifest),55);self.assertEqual(len(manifest),len(set(manifest)))
+  self.assertIn('test_character_package.CharacterPackageTests.test_matching_external_inventory_cannot_override_onnx_license',manifest)
   discovered=unittest.defaultTestLoader.discover(str(p.ROOT/'tests'))
   ids={t.id() for t in p.flatten(discovered)};self.assertTrue(set(manifest)<=ids)
   workflow=(p.ROOT/'.github/workflows/queue-processor.yml').read_text()

@@ -53,6 +53,7 @@ def inspect(app):
             prefix=next((p for p in ('Python.xcframework/lib/','Python.xcframework/ios-arm64/lib-arm64/') if name.startswith(p)),None)
             if not prefix:continue
             relative='python/lib/'+name[len(prefix):]
+            if relative.startswith('python/lib/python3.13/test/'):continue
             if '__pycache__' in relative or relative.endswith(('.pyc','.dylib')):continue
             expected=tar.extractfile(member).read()
             if relative.endswith('.so'):

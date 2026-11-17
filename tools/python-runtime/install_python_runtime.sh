@@ -16,6 +16,8 @@ install_stdlib "$SDK"
 process_dylibs "$SDK" python/lib/python3.13/lib-dynload
 process_dylibs "$SDK" app_packages
 # Runtime resources never retain bytecode caches or stdlib test fixtures.
+# CPython test-only WAV/AIFF fixtures are not production dependencies.
+rm -rf "$CODESIGNING_FOLDER_PATH/python/lib/python3.13/test"
 find "$CODESIGNING_FOLDER_PATH/python" "$CODESIGNING_FOLDER_PATH/app_packages" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "$CODESIGNING_FOLDER_PATH/python" "$CODESIGNING_FOLDER_PATH/app_packages" -name '*.pyc' -delete
 # Fail closed if packaging failed to relocate a Python extension binary.

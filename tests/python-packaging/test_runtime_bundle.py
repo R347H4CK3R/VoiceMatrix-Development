@@ -21,6 +21,7 @@ class RuntimeBundle(unittest.TestCase):
     prefix=next((p for p in ('Python.xcframework/lib/','Python.xcframework/ios-arm64/lib-arm64/') if name.startswith(p)),None)
     if not prefix:continue
     relative='python/lib/'+name[len(prefix):];data=tf.extractfile(member).read()
+    if relative.startswith('python/lib/python3.13/test/'):continue
     if relative.endswith('.so'):
      module=pathlib.PurePosixPath(relative).name.split('.')[0];target=f'Frameworks/{module}.framework/{module}'
      write(target,data);write(relative[:-3]+'.fwork',(target+'\n').encode())
@@ -74,3 +75,18 @@ class RuntimeBundle(unittest.TestCase):
    p.write_text('print(123)')
    with self.assertRaises(AssertionError):verifier.inspect(self.app)
   finally:p.unlink(missing_ok=True)
+
+ def test_production_runtime_excludes_upstream_test_audio(self):
+  self.assertFalse((self.app/'python/lib/python3.13/test').exists())
+  forbidden={'.wav','.aiff','.aif','.mp3','.m4a','.flac','.ogg','.vmpack','.pth'}
+  self.assertFalse([p for p in (self.app/'python').rglob('*') if p.is_file() and p.suffix.lower() in forbidden])
+  self.assertIn('rm -rf "$CODESIGNING_FOLDER_PATH/python/lib/python3.13/test"',(ROOT/'tools/python-runtime/install_python_runtime.sh').read_text())
+ def test_reintroduced_upstream_test_fixture_rejected(self):
+  p=self.app/'python/lib/python3.13/test/audiodata/pluck-pcm16.wav'
+  original=p.read_bytes() if p.exists() else None
+  try:
+   p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'RIFF fixture')
+   with self.assertRaises(AssertionError):verifier.inspect(self.app)
+  finally:
+   if original is None:p.unlink(missing_ok=True)
+   else:p.write_bytes(original)

@@ -1,9 +1,10 @@
+# Build14 combined runtime packaging correction: rerun unchanged gate on exact source.
 # Build12 shared frozen graph verification.
 name: Laptop queue recovery checks
 on:
   push:
     branches-ignore: [codex/iphone-build4, codex/iphone-build5, codex/rvc-conversion-controls]
-    paths: ['.github/workflows/voicematrix-049-candidate.yml', 'tools/video_queue.py', 'tools/queue_transport.py', 'tests/test_video_queue.py', 'tests/test_queue_recovery.py', 'tests/test_queue_transport.py', '.github/workflows/queue-recovery.yml']
+    paths: ['VoiceMatrix/**', 'python-resolver/**', 'tools/python-runtime/**', 'project.yml', 'tests/test_preview_build14.py', 'tests/test_build14_gate_triggers.py', '.github/workflows/iphone-build14.yml', '.github/workflows/voicematrix-049-candidate.yml', 'tools/video_queue.py', 'tools/queue_transport.py', 'tests/test_video_queue.py', 'tests/test_queue_recovery.py', 'tests/test_queue_transport.py', '.github/workflows/queue-recovery.yml']
   workflow_dispatch:
 permissions:
   contents: read

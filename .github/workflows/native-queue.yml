@@ -1,3 +1,4 @@
+# Build14 combined runtime packaging correction: rerun unchanged gate on exact source.
 # Build12 shared frozen graph verification.
 name: Native queue UI checks
 on:

@@ -1,3 +1,4 @@
+# Build13 inert generated native-test mirrors synchronized; exact-source gates required.
 # Build13 stdlib-only queue boundary regression; full exact-source gate rerun.
 # Build13 complete dependency-path triggers accompany final source.
 # Build13 isolated queue destination harness: recheck all exact-source gates.

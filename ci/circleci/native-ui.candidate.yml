@@ -76,8 +76,8 @@ jobs:
           -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests
           -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests -only-testing:VoiceMatrixTests/AppUpdateTests
           -only-testing:VoiceMatrixTests/SpeechControlsTests -only-testing:VoiceMatrixUITests/SpeechFeatureUITests
-          > character-ui-build.log 2>&1 || { tail -160 character-ui-build.log; exit
-          1; }
+          -only-testing:VoiceMatrixUITests/RVCOnlineUITests > character-ui-build.log
+          2>&1 || { tail -160 character-ui-build.log; exit 1; }
 
           '
         no_output_timeout: 20m
@@ -107,8 +107,8 @@ jobs:
           -only-testing:VoiceMatrixTests/LocalSoundQualityTests -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests
           -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests
           -only-testing:VoiceMatrixTests/AppUpdateTests -only-testing:VoiceMatrixTests/SpeechControlsTests
-          -only-testing:VoiceMatrixUITests/SpeechFeatureUITests > character-ui.log
-          2>&1 || { tail -160 character-ui.log; exit 1; }
+          -only-testing:VoiceMatrixUITests/SpeechFeatureUITests -only-testing:VoiceMatrixUITests/RVCOnlineUITests
+          > character-ui.log 2>&1 || { tail -160 character-ui.log; exit 1; }
 
           '
         no_output_timeout: 20m

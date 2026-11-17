@@ -40,7 +40,7 @@ struct LocalVideoStudioView: View {
                 }.buttonStyle(.bordered).disabled(local.busy)
                     .accessibilityLabel("Paste video URL from Clipboard")
                     .accessibilityIdentifier("local-video-paste")
-                Text("URL acquisition needs internet to contact the source website. Public YouTube pages with direct supported streams, and direct media on upload.wikimedia.org or archive.org, are supported candidates. Sign-in, age checks, encrypted signatures and challenges are not bypassed; those sources need local-file import.").font(.footnote).foregroundStyle(.secondary)
+                Text("URL acquisition needs internet to contact the source website. YouTube link support is limited: many public pages provide no downloadable media URLs. Direct media on upload.wikimedia.org or archive.org are supported candidates. Sign-in, age checks, encrypted signatures and challenges are not bypassed; those sources need local-file import.").font(.footnote).foregroundStyle(.secondary)
                 Toggle("I am authorized to use this media and its voices", isOn: $authorized).disabled(local.busy)
                 Button("Generate speaker references") {
                     if let selected { local.start(selected, authorized: authorized, library: library, audio: audio, speech: speech) }
@@ -56,6 +56,11 @@ struct LocalVideoStudioView: View {
                     ProgressView("Working on this iPhone…")
                     Button("Pause and retain files") { local.cancel() }.buttonStyle(.bordered)
                 } else if let job = local.current, !job.completed, job.sourceFile != nil || job.acquisitionURL != nil {
+                    if job.acquisitionURL != nil && job.sourceFile == nil {
+                        Button("Import an authorized local file instead") { importing = true }
+                            .buttonStyle(.borderedProminent).accessibilityIdentifier("local-video-import-fallback")
+                        Text("Choose a video or audio file you already have permission to use in Files, then enable authorization and tap Generate speaker references. The earlier job and its partial files remain retained.").font(.footnote).foregroundStyle(.secondary)
+                    }
                     Button("Resume retained job") { local.resume(library: library, audio: audio, speech: speech) }.buttonStyle(.bordered)
                 }
                 if let reference = local.reference { Button("Listen to reference") { audio.play(reference) }.disabled(local.busy) }

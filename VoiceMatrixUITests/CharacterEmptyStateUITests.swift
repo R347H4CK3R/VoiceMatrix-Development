@@ -47,7 +47,9 @@ import XCTest
         app.launchArguments = ["-tutorialSeen", "YES", "-laptopURL", "https://127.0.0.1:9"]
         app.launch()
         XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 30))
-        let requests = app.buttons["Video requests"]
+        let optional = app.buttons["Optional laptop tools"]
+        reveal(optional, in: app); optional.tap()
+        let requests = app.buttons["Saved video list · optional laptop workflow"]
         reveal(requests, in: app); requests.tap()
         XCTAssertTrue(app.navigationBars["Video List"].waitForExistence(timeout: 15))
         for _ in 0..<2 {
@@ -67,7 +69,9 @@ import XCTest
         app.launchArguments = ["-tutorialSeen", "YES", "-laptopURL", "https://127.0.0.1:9"]
         app.launch()
         XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 30))
-        let requests = app.buttons["Video requests"]
+        let optional = app.buttons["Optional laptop tools"]
+        reveal(optional, in: app); optional.tap()
+        let requests = app.buttons["Saved video list · optional laptop workflow"]
         reveal(requests, in: app); requests.tap()
         let submit = app.buttons["request-voice-candidates"]
         reveal(submit, in: app)

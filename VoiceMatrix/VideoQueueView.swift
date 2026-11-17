@@ -100,12 +100,16 @@ struct VideoQueueView: View {
     }
     var body: some View {
         Form {
+            Section("On this iPhone") {
+                NavigationLink("Open on-iPhone Video Voice Studio") { LocalVideoStudioView() }
+                Text("Use Video Voice Studio to create references on this iPhone. This saved list is a separate optional laptop workflow. Adding or opening a list never sends it; laptop actions below require an explicit tap.").font(.caption).foregroundStyle(.secondary)
+            }
             Section("Step 1 · Add a video") {
                 TextField("Character names (optional)", text: $name).accessibilityLabel("Character names")
                 TextField("Paste YouTube link", text: $link).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                 TextField("Source-use basis (your recording or permission)", text: $sourceUseRecord, axis: .vertical)
                 Toggle("I may use this source for private voice candidates", isOn: $sourceUseApproved)
-                Button(requestingCandidate ? "Requesting…" : "Request voice candidates") { requestCandidates(url: link, hint: name) }
+                Button(requestingCandidate ? "Requesting…" : "Request voice candidates on laptop") { requestCandidates(url: link, hint: name) }
                     .disabled(requestingCandidate || !sourceUseApproved || sourceUseRecord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("request-voice-candidates")
                 Text("The laptop downloads temporary media, groups possible speakers and checks F5 voice candidates. Unknown voices receive unreviewed speaker labels. This does not guarantee every character or identical likeness, and does not create RVC weights.").font(.caption).foregroundStyle(.secondary)
@@ -117,7 +121,7 @@ struct VideoQueueView: View {
                     VStack(alignment: .leading) {
                         Text(video.name.isEmpty ? "Video " + video.id : video.name).font(.headline)
                         Text(video.url).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                        Button("Request candidates for this video") { requestCandidates(url: video.url, hint: video.name) }
+                        Button("Request laptop candidates for this video") { requestCandidates(url: video.url, hint: video.name) }
                             .disabled(requestingCandidate || !sourceUseApproved || sourceUseRecord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             .font(.caption)
                         NavigationLink("View laptop workflow") { VideoWorkflowView(videoID: video.id) }
@@ -131,7 +135,7 @@ struct VideoQueueView: View {
                 Button(sending ? "Sending…" : "Send List to Laptop") {
                     manualSend = Task { @MainActor in await sendList(videos) }
                 }.disabled(sending || videos.isEmpty)
-                Text("Your laptop address is included. Connect Tailscale on both devices using the same account, then tap Send List to Laptop. No JSON selection is needed. Voice creation and review are separate steps. Offline speech does not need this connection.").font(.caption).foregroundStyle(.secondary)
+                Text("Optional: Send List to Laptop uploads this list to your configured laptop. Both devices must be connected through Tailscale. If receipt is unconfirmed, check the workflow before sending again. This is not required for on-iPhone Video Voice Studio or offline speech.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Laptop workflow") {
                 NavigationLink { VideoWorkflowView() } label: {
@@ -155,20 +159,6 @@ struct VideoQueueView: View {
             }
             if !message.isEmpty { Text(message).accessibilityAddTraits(.updatesFrequently) }
         }.navigationTitle("Video List")
-            .task(id: saved) {
-                guard !saved.isEmpty else { return }
-                do {
-                    let pending = try JSONDecoder().decode([QueuedVideo].self, from: saved)
-                    guard !pending.isEmpty else { return }
-                    try await Task.sleep(nanoseconds: 700_000_000)
-                    // A changed list waits for the prior request rather than overlapping it.
-                    while sending {
-                        try await Task.sleep(nanoseconds: 100_000_000)
-                    }
-                    await sendList(pending)
-                } catch is CancellationError { }
-                catch { message = "Your list is saved. The automatic laptop request could not be prepared." }
-            }
             .onDisappear { manualSend?.cancel(); candidateSend?.cancel() }
             .onAppear {
                 guard !saved.isEmpty else { return }

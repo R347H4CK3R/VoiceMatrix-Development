@@ -4,6 +4,26 @@ import CoreVideo
 @testable import VoiceMatrix
 
 final class LocalMediaAcquisitionTests: XCTestCase {
+    func testNoDirectURLPlayerResponseHasActionableFailure() throws {
+        var metadata=progressive;metadata.removeValue(forKey:"url")
+        do {
+            _ = try LocalMediaURLPolicy.youtubePlan(page(stream:metadata),videoID:"abcdefghijk")
+            XCTFail("Metadata-only stream must not become a download")
+        } catch LocalMediaURLPolicy.Failure.noDirectStreams { }
+        catch { XCTFail("Wrong diagnostic: \(error)") }
+    }
+    func testHTTPFailureIsDistinctAndRetainsAttempt() async throws {
+        let folder=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        defer { try? FileManager.default.removeItem(at:folder) }
+        let config=URLSessionConfiguration.ephemeral;config.protocolClasses=[SyntheticMediaProtocol.self]
+        do {
+            _ = try await LocalMediaAcquisition.Transfer.download(URL(string:"https://archive.org/denied.wav")!,role:.direct,folder:folder,ext:"wav",maximumBytes:64,configuration:config) { _ in }
+            XCTFail("HTTP 403 must not succeed")
+        } catch LocalMediaURLPolicy.Failure.httpStatus(let code) { XCTAssertEqual(code,403) }
+        catch { XCTFail("Wrong diagnostic: \(error)") }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath:folder.path).count,1)
+    }
     func testRetentionScanCountsFilesAndRejectsMissingRootAndSymlinks() throws {
         let root=FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
         XCTAssertThrowsError(try LocalMediaAcquisition.retainedBytes(root:root))
@@ -174,7 +194,7 @@ private final class SyntheticMediaProtocol: URLProtocol {
             client?.urlProtocol(self,wasRedirectedTo:URLRequest(url:target),redirectResponse:redirect)
             return
         }
-        let response=HTTPURLResponse(url:url,statusCode:200,httpVersion:"HTTP/1.1",headerFields:["Content-Type":"audio/wav"])!
+        let response=HTTPURLResponse(url:url,statusCode:url.lastPathComponent == "denied.wav" ? 403 : 200,httpVersion:"HTTP/1.1",headerFields:["Content-Type":"audio/wav"])!
         client?.urlProtocol(self,didReceive:response,cacheStoragePolicy:.notAllowed)
         client?.urlProtocol(self,didLoad:Data(repeating:42,count:16))
         if url.lastPathComponent == "wait.wav" { return }

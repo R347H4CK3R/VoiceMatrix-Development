@@ -29,3 +29,9 @@ Python tests check wiring/security-source contracts only. Native XCTest covers n
 Pending: native compile and all native tests; real provider public-page success/failure; physical-iPhone download/memory/storage/interruption; AVFoundation separate-track merge gate and interrupted merge; broad provider coverage. No live source was fetched for an acquisition test, no external package was installed or executed, and no claim of full standalone1.0.0 acceptance is made.
 
 Export uses Apple’s async `export(to:as:isolation:)`, whose initiating Task cancellation cancels the export: https://developer.apple.com/documentation/avfoundation/avassetexportsession/export(to:as:isolation:). Merge progress only updates when the exporter percentage changes, not on every polling heartbeat.
+
+## Acquisition diagnostics update
+
+Transport failures now distinguish HTTP rejection (numeric status), URLSession network failure (numeric code only), empty/truncated responses, and size limits. Logs never include provider response bodies, signed stream URLs, or URLSession error descriptions that could expose private URLs. All existing retention, host boundaries, TLS validation, and no-authentication rules remain unchanged.
+
+A public player response with format metadata but no direct URLs now explicitly reports that this response cannot be acquired. This is not general YouTube download support. The failed URL job offers a local-file import action in the same screen; starting the replacement local job leaves the original retained folder untouched. Local-file analysis does not require a laptop. Native regression tests cover metadata-only responses and HTTP rejection/retention; provider and physical-device behavior still require verification.

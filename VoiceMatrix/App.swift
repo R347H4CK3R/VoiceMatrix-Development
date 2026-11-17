@@ -76,9 +76,6 @@ struct HomeView: View {
                     NavigationLink { RVCOnDeviceView() } label: {
                         HomeCard(title: "On-device RVC", detail: "Diagnostic preview · experimental quality.", icon: "waveform.badge.magnifyingglass")
                     }.accessibilityIdentifier("on-device-rvc")
-                    NavigationLink { RVCOnlineView() } label: {
-                        HomeCard(title: "Laptop RVC", detail: "Online speech-to-speech conversion.", icon: "laptopcomputer")
-                    }.accessibilityIdentifier("laptop-rvc")
                 }
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Your collection").font(.title3.bold())
@@ -93,9 +90,16 @@ struct HomeView: View {
                             Image(systemName: "chevron.right").font(.caption.bold())
                         }.padding(20).background(StudioPalette.surface, in: RoundedRectangle(cornerRadius: 22))
                     }
-                    NavigationLink { VideoQueueView() } label: {
-                        Label("Video requests", systemImage: "list.bullet.rectangle").font(.subheadline.weight(.semibold))
-                    }.padding(.vertical, 8)
+                    DisclosureGroup("Optional laptop tools") {
+                        Text("These tools require a laptop. They are separate from on-iPhone creation and offline speech.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        NavigationLink { RVCOnlineView() } label: {
+                            HomeCard(title: "Laptop RVC", detail: "Optional online speech-to-speech conversion.", icon: "laptopcomputer")
+                        }.accessibilityIdentifier("laptop-rvc")
+                        NavigationLink { VideoQueueView() } label: {
+                            Label("Saved video list · optional laptop workflow", systemImage: "list.bullet.rectangle").font(.subheadline.weight(.semibold))
+                        }.padding(.vertical, 8)
+                    }
                 }
                 Label("Your saved voices work offline", systemImage: "lock.shield")
                     .font(.footnote).foregroundStyle(.secondary)
@@ -272,6 +276,12 @@ struct SettingsView: View {
                 Label("\(library.profiles.count) imported voices", systemImage: "person.2.wave.2")
                 Text("Your collection and saved recordings stay on this iPhone. Speech and voice changing run locally.")
                     .font(.subheadline).foregroundStyle(.secondary)
+            }
+            Section("What’s new · 0.4.10 (13)") {
+                Text("Video download errors now explain HTTP, network and unsupported-stream failures, with an import-from-Files option. Some public YouTube pages still cannot be downloaded directly.")
+                Text("Local speech and voice-changing routes are clearer. Laptop tools are optional; saved video lists send only when you tap Send List.")
+                Text("Create-a-voice permission now resets when its source recording changes. Existing voices, recordings and saved video lists are preserved.")
+                Text("Experimental preview: on-device RVC remains diagnostic, and physical-iPhone quality is not verified.").font(.caption)
             }
             Section("App updates") {
                 NavigationLink("Check for Updates") { AppUpdatesView() }.accessibilityIdentifier("app-updates")

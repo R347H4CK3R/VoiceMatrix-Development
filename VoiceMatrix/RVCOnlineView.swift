@@ -16,7 +16,22 @@ struct RVCOnlineView: View {
                 Label("ONLINE SPEECH-TO-SPEECH ONLY", systemImage: "laptopcomputer")
                     .font(.caption.weight(.bold)).foregroundStyle(StudioPalette.mint)
                 Text("Import your spoken audio to convert it on your paired laptop. The laptop and its RVC service must stay available.")
-                Text("Offline RVC and text-to-speech are unavailable. Your existing voices and saved recordings are unchanged.")
+                Text("This optional screen uses laptop RVC models only. For standalone speech and voice changing, use the iPhone tools below. Your existing voices and saved recordings are unchanged.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Use this iPhone instead") {
+                NavigationLink { CharacterLibraryView() } label: {
+                    Label("Make speech on iPhone", systemImage: "text.bubble.fill")
+                }.accessibilityIdentifier("rvc-local-speech")
+                NavigationLink { CharacterLibraryView(mode: .conversion) } label: {
+                    Label("Change my voice on iPhone", systemImage: "mic.fill")
+                }.accessibilityIdentifier("rvc-local-conversion")
+                Text("These tools use your saved voice references and the bundled local engines. They are not interchangeable with laptop RVC models. Resemblance still needs listening review.")
+                    .font(.caption).foregroundStyle(.secondary)
+                NavigationLink { RVCOnDeviceView() } label: {
+                    Label("On-device RVC diagnostic preview", systemImage: "testtube.2")
+                }.accessibilityIdentifier("rvc-local-diagnostic")
+                Text("The separate RVC preview requires supported model packs imported from Files. It is experimental; phone performance and voice quality are not yet validated.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("1 · Choose a laptop model") {

@@ -119,7 +119,7 @@ import Combine
                 // only for a later explicit submission, never for an active job.
                 self.catalog = catalog; catalogCheckedAt = Date(); catalogReachable = true
                 if !catalog.models.contains(where: { $0.id == selectedID }) { selectedID = "" }
-                message = catalog.onlineConversionAvailable ? "Models are on your laptop. Identity and likeness have not been verified." : "Online RVC is unavailable on this laptop. Offline RVC and RVC text synthesis are not supported."
+                message = catalog.onlineConversionAvailable ? "Models are on your laptop. Identity and likeness have not been verified." : "Online RVC is unavailable on this laptop. Use the iPhone speech and voice-changing tools for local processing; laptop RVC models cannot be used by those engines."
             } catch {
                 guard generation == ticket else { return }
                 catalogReachable = false; message = RVCOnlineError.message(for: error)

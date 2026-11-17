@@ -6,9 +6,14 @@ enum LocalMediaURLPolicy {
     enum Kind: String, Codable { case combined, video, audio }
     struct Part: Codable { let url: URL; let kind: Kind; let ext: String }
     enum Failure: LocalizedError {
-        case url, restricted, unsupported, response, bounds, storage, changed
+        case url, restricted, unsupported, response, bounds, storage, changed, noDirectStreams, incomplete
+        case httpStatus(Int), network(Int)
         var errorDescription: String? {
             switch self {
+            case .httpStatus(let code): return "The source website returned HTTP \(code); no complete media was acquired. Retained files were kept. Try again later, or import an authorized local file."
+            case .network(let code): return "The connection to the source website failed (network code \(code)). Check your internet connection, then retry or import an authorized local file. Retained files were kept."
+            case .incomplete: return "The source download ended empty or before its declared byte count. Partial files were kept, not appended. Retry or import an authorized local file."
+            case .noDirectStreams: return "YouTube returned a player page but no direct downloadable media URLs. This app cannot acquire this response; retrying may give the same result. Import an authorized video or audio file from Files instead. No laptop is needed for local analysis."
             case .url: return "Use an HTTPS YouTube link or a direct media link from upload.wikimedia.org or archive.org. Other hosts, credentials and redirects outside the approved hosts are not supported."
             case .restricted: return "The website requires access, sign-in or verification, or this is a live/restricted video. No bypass or third-party downloader was used. Import an authorized local file instead."
             case .unsupported: return "This page does not provide supported public MP4/AAC streams directly. Encrypted signatures, streaming manifests and website challenges are not supported. Import an authorized local file instead."
@@ -99,6 +104,9 @@ enum LocalMediaURLPolicy {
         var choices:[(part:Part,height:Int,size:Int64)] = []
         let formats=(streams["formats"] as? [[String:Any]] ?? []) + (streams["adaptiveFormats"] as? [[String:Any]] ?? [])
         guard formats.count <= 300 else { throw Failure.bounds }
+        if !formats.isEmpty && formats.allSatisfy({ $0["url"] == nil && $0["signatureCipher"] == nil && $0["cipher"] == nil }) {
+            throw Failure.noDirectStreams
+        }
         for f in formats {
             guard f["signatureCipher"] == nil,f["cipher"] == nil,f["drmFamilies"] == nil,
                   let raw=f["url"] as? String,let url=URL(string:raw),(try? validate(url,role:.stream)) != nil,

@@ -1,6 +1,21 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Permission is for one selected local clip, not every later recording/import.
+struct ReferenceVoiceConsent {
+    private(set) var approvedSource: URL?
+    func permits(_ source: URL?) -> Bool {
+        guard let source else { return false }
+        return approvedSource == source
+    }
+    mutating func setPermission(_ permitted: Bool, for source: URL?) {
+        approvedSource = permitted ? source : nil
+    }
+    mutating func sourceChanged(from old: URL?, to new: URL?) {
+        if old != new { approvedSource = nil }
+    }
+}
+
 struct CreateReferenceVoiceView: View {
     @EnvironmentObject private var library: CharacterLibrary
     @EnvironmentObject private var audio: AudioStore
@@ -8,7 +23,7 @@ struct CreateReferenceVoiceView: View {
     @StateObject private var recorder=Recorder()
     @State private var name=""
     @State private var transcript=""
-    @State private var permitted=false
+    @State private var consent=ReferenceVoiceConsent()
     @State private var importing=false
     private var blocked:Bool {library.busy || audio.processingInUse || recorder.requestingPermission}
     var body:some View {
@@ -38,16 +53,19 @@ struct CreateReferenceVoiceView: View {
                 if transcript.utf8.count > F5SpeechChunks.maximumReferenceBytes {
                     Text("This transcript is too long for the speech engine. Use a shorter clip and its exact words.").font(.caption).foregroundStyle(.secondary)
                 }
-                Toggle("I have permission to use this voice recording",isOn:$permitted).disabled(blocked)
+                Toggle("I have permission to use this voice recording",isOn:Binding(
+                    get:{consent.permits(recorder.output)},
+                    set:{consent.setPermission($0,for:recorder.output)}))
+                    .disabled(blocked || recorder.recording || recorder.output == nil)
             }
             Section("3 · Save to Voices") {
                 Button("Save and select voice") {
-                    if let source=recorder.output {
+                    if let source=recorder.output, consent.permits(source) {
                         library.createReferenceVoice(from:source,name:name,transcript:transcript,
-                            permissionConfirmed:permitted,audio:audio,studio:studio)
+                            permissionConfirmed:consent.permits(source),audio:audio,studio:studio)
                     }
                 }.buttonStyle(.borderedProminent)
-                    .disabled(blocked || recorder.recording || recorder.output == nil || !permitted ||
+                    .disabled(blocked || recorder.recording || recorder.output == nil || !consent.permits(recorder.output) ||
                         name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || name.count>80 ||
                         transcript.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || transcript.utf8.count>F5SpeechChunks.maximumReferenceBytes)
                     .accessibilityIdentifier("save-reference-voice")
@@ -70,6 +88,7 @@ struct CreateReferenceVoiceView: View {
             case .failure:recorder.status="Audio could not be opened. Try again."
             }
         }
+        .onChange(of:recorder.output) {old,new in consent.sourceChanged(from:old,to:new)}
         .onDisappear {recorder.discard();audio.stop()}
     }
 }

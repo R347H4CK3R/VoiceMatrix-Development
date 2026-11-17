@@ -13,8 +13,8 @@ class VerboseCandidateTests(unittest.TestCase):
   self.assertIn("expected_build='10'",text)
   self.assertIn("--expected-build 10",text)
   self.assertNotIn('0.4.8',text)
-  self.assertIn('MARKETING_VERSION: 0.4.9',(ROOT/'project.yml').read_text())
-  self.assertIn("CURRENT_PROJECT_VERSION: '12'",(ROOT/'project.yml').read_text())
+  self.assertIn('MARKETING_VERSION: 0.4.10',(ROOT/'project.yml').read_text())
+  self.assertIn("CURRENT_PROJECT_VERSION: '13'",(ROOT/'project.yml').read_text())
  def test_queue_recovery_installs_media_fixture_dependency(self):
   text=(ROOT/'.github/workflows/queue-recovery.yml').read_text()
   self.assertIn('choco install ffmpeg',text)

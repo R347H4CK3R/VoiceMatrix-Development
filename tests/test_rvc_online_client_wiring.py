@@ -14,7 +14,8 @@ class RVCClientWiringTests(unittest.TestCase):
   self.assertIn('.environmentObject(rvc)',app)
   self.assertIn('NavigationLink { RVCOnlineView() }',app)
   self.assertIn('Button { rvc.send(audio: audio) }',view)
-  self.assertIn('Offline RVC and text-to-speech are unavailable',view)
+  self.assertIn('This optional screen uses laptop RVC models only',view)
+  self.assertIn('not interchangeable with laptop RVC models',view)
  def test_controller_uses_safe_error_mapping(self):
   source=(ROOT/'VoiceMatrix/RVCOnlineStudio.swift').read_text(encoding='utf-8')
   self.assertNotIn('error.localizedDescription',source)

@@ -11,14 +11,46 @@ import XCTest
         XCTAssertTrue(element.waitForExistence(timeout: 10))
     }
 
+    private func openLaptopRVC(in app: XCUIApplication) {
+        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 30))
+        let link = app.buttons["laptop-rvc"]
+        // The optional group starts collapsed. On return it may already be open;
+        // do not toggle it closed when testing repeated navigation.
+        if !link.exists {
+            let disclosure = app.buttons["Optional laptop tools"]
+            reveal(disclosure, in: app)
+            XCTAssertTrue(disclosure.isHittable)
+            disclosure.tap()
+        }
+        reveal(link, in: app)
+        XCTAssertTrue(link.isHittable)
+        link.tap()
+        XCTAssertTrue(app.navigationBars["Laptop RVC"].waitForExistence(timeout: 15))
+    }
+
+    func testLocalRoutesRemainReachableWithoutLaptop() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-tutorialSeen", "YES", "-laptopURL", "https://127.0.0.1:9"]
+        app.launch()
+        openLaptopRVC(in: app)
+        for (identifier, title) in [("rvc-local-speech", "Make Speech"),
+                                    ("rvc-local-conversion", "Change My Voice"),
+                                    ("rvc-local-diagnostic", "On-device RVC")] {
+            let route = app.buttons[identifier]
+            reveal(route, in: app); route.tap()
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 15))
+            app.navigationBars[title].buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.navigationBars["Laptop RVC"].waitForExistence(timeout: 15))
+        }
+    }
+
     func testUnavailableLaptopNeverEnablesSendAcrossReopening() {
         let app = XCUIApplication()
         app.launchArguments = ["-tutorialSeen", "YES", "-laptopURL", "https://127.0.0.1:9"]
         app.launch()
         XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 30))
         for _ in 0..<2 {
-            let link = app.buttons["laptop-rvc"]
-            reveal(link, in: app); link.tap()
+            openLaptopRVC(in: app)
             XCTAssertTrue(app.navigationBars["Laptop RVC"].waitForExistence(timeout: 15))
             XCTAssertTrue(app.staticTexts["ONLINE SPEECH-TO-SPEECH ONLY"].exists)
             let upload = app.buttons["rvc-send-audio"]

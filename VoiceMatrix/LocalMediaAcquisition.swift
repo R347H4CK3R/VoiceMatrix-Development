@@ -211,9 +211,11 @@ enum LocalMediaAcquisition {
         }
         func urlSession(_ session:URLSession,dataTask:URLSessionDataTask,didReceive response:URLResponse,completionHandler:@escaping (URLSession.ResponseDisposition)->Void) {
             guard !done,!canceled else { completionHandler(.cancel);return }
-            guard let http=response as? HTTPURLResponse,http.statusCode==200,
-                  let url=response.url,(try? LocalMediaURLPolicy.validate(url,role:role)) != nil,
-                  response.expectedContentLength<=maximumBytes else { completionHandler(.cancel);finish(.failure(LocalMediaURLPolicy.Failure.response));return }
+            guard let http=response as? HTTPURLResponse else { completionHandler(.cancel);finish(.failure(LocalMediaURLPolicy.Failure.response));return }
+            guard http.statusCode==200 else { completionHandler(.cancel);finish(.failure(LocalMediaURLPolicy.Failure.httpStatus(http.statusCode)));return }
+            guard let url=response.url,(try? LocalMediaURLPolicy.validate(url,role:role)) != nil else { completionHandler(.cancel);finish(.failure(LocalMediaURLPolicy.Failure.url));return }
+            guard response.expectedContentLength<=maximumBytes else { completionHandler(.cancel);finish(.failure(LocalMediaURLPolicy.Failure.bounds));return }
+            progress(role == .page ? "Received the website page response (HTTP 200). Reading its bounded player metadata." : "Received the media response (HTTP 200). Downloading retained source bytes.")
             let mime=response.mimeType?.lowercased() ?? ""
             let acceptable=role == .page ? mime=="text/html" : ["video/mp4","video/quicktime","audio/mp4","audio/x-m4a","audio/wav","audio/x-wav","audio/aac","audio/x-caf","application/octet-stream"].contains(mime)
             guard acceptable else { completionHandler(.cancel);finish(.failure(LocalMediaURLPolicy.Failure.unsupported));return }
@@ -234,7 +236,9 @@ enum LocalMediaAcquisition {
         }
         func urlSession(_ session:URLSession,task:URLSessionTask,didCompleteWithError error:Error?) {
             guard !done else { return }
-            guard error==nil,count>0,expected<0 || count==expected,let destination else { finish(.failure(LocalMediaURLPolicy.Failure.response));return }
+            if let network=error as? URLError { finish(.failure(LocalMediaURLPolicy.Failure.network(network.code.rawValue)));return }
+            guard error==nil else { finish(.failure(LocalMediaURLPolicy.Failure.response));return }
+            guard count>0,expected<0 || count==expected,let destination else { finish(.failure(LocalMediaURLPolicy.Failure.incomplete));return }
             do { try file?.synchronize() } catch { finish(.failure(LocalMediaURLPolicy.Failure.storage));return }
             finish(.success(Result(file:destination.lastPathComponent,sha256:contentHash.finalize().map{String(format:"%02x",$0)}.joined(),bytes:count)))
         }

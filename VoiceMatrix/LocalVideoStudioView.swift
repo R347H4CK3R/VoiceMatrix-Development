@@ -110,7 +110,7 @@ struct LocalVideoStudioView: View {
                             } else {
                                 Text("No accepted per-speaker preview receipt is available for this job. Existing library voices and retained attempts are unchanged.").font(.caption).foregroundStyle(.secondary)
                             }
-                        }.accessibilityIdentifier("local-video-speaker-" + speaker)
+                        }
                     }
                 }
                 if let evidence = local.current?.visualEvidence {

@@ -1,4 +1,5 @@
 import pathlib,subprocess,unittest,yaml
+from tools.test_shell import check_bash_syntax
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 class HandoffUIFixture(unittest.TestCase):
  def test_fixture_uses_real_store_and_refuses_existing_destination(self):
@@ -14,7 +15,7 @@ class HandoffUIFixture(unittest.TestCase):
   steps=w['jobs']['ui']['steps'];runs='\n'.join(s.get('run','') for s in steps)
   for x in ['simctl install','get_app_container','CharacterFolderStore.swift','SpeakerHandoffUIFixture.swift','--verify','testExplicitSavedSpeakerSpeechAndConversionRoutes'] :self.assertIn(x,runs)
   for s in steps:
-   if 'run' in s:subprocess.run(['bash','-n'],input=s['run'],text=True,check=True)
+   if 'run' in s:check_bash_syntax(s['run'])
 
 class FixturePreservation(unittest.TestCase):
  def test_seed_never_overwrites_and_verification_rejects_changes(self):

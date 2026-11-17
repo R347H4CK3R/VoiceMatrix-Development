@@ -32,3 +32,8 @@ class SpeakerHandoffTests(unittest.TestCase):
   import json
   manifest=json.loads((ROOT/'tests/platform-regression-coverage.json').read_text())
   self.assertIn('test_speaker_handoff.SpeakerHandoffTests.test_exact_unique_profile_identity',manifest['posixTestIDs'])
+ def test_speaker_group_does_not_override_action_identifiers(self):
+  s=(ROOT/'VoiceMatrix/LocalVideoStudioView.swift').read_text()
+  self.assertNotIn('}.accessibilityIdentifier("local-video-speaker-" + speaker)',s)
+  self.assertIn('.accessibilityIdentifier("local-video-speaker-speech-" + speaker)',s)
+  self.assertIn('.accessibilityIdentifier("local-video-speaker-conversion-" + speaker)',s)

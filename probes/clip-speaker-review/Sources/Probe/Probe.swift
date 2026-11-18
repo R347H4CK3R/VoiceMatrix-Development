@@ -20,8 +20,12 @@ import Darwin
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
         let manifest = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: fixtures.appendingPathComponent("fixture.json")))
         try LocalSpeakerDiarization.verify(models)
+        var failures: [String] = []
         for item in manifest.cases {
+            var originals: [(URL, String)] = []
+            do {
             let sourceURL = fixtures.appendingPathComponent(item.name + ".wav")
+            originals.append((sourceURL, item.audioSHA256))
             try check(try hash(sourceURL) == item.audioSHA256, "source hash")
             let store = SeparationStore(root: output.appendingPathComponent(item.name))
             let source = SeparationClipHandoff.Source(jobID: UUID(), url: sourceURL, sha256: item.audioSHA256)
@@ -29,6 +33,7 @@ import Darwin
             let reviewStore = ClipSpeakerReviewStore(clipStore: store)
             let receiptURL = clip.url.deletingLastPathComponent().appendingPathComponent("receipt.json")
             let receiptHash = try hash(receiptURL), clipHash = try hash(clip.url)
+            originals.append((receiptURL, receiptHash)); originals.append((clip.url, clipHash))
             if item.name == "below-minimum" {
                 do {
                     _ = try await ClipSpeakerReviewAnalyzer.analyze(clip, store: reviewStore, bundle: models)
@@ -73,9 +78,22 @@ import Darwin
                 }
                 log("PASS \(item.name): \(result.groups.count) anonymous guesses; overlap=\(result.hasOverlap)")
             }
-            try check(try hash(sourceURL) == item.audioSHA256, "original source modified")
-            try check(try hash(clip.url) == clipHash, "clip modified")
-            try check(try hash(receiptURL) == receiptHash, "receipt modified")
+            } catch {
+                failures.append("\(item.name): \(error)")
+                log("FAIL \(item.name): \(error)")
+            }
+            // Check retained inputs even when inference or a quality assertion failed.
+            for (url, expected) in originals {
+                do { try check(try hash(url) == expected, "preservation: \(url.lastPathComponent)") }
+                catch {
+                    failures.append("\(item.name) preservation: \(error)")
+                    log("FAIL \(item.name) preservation: \(error)")
+                }
+            }
+        }
+        if !failures.isEmpty {
+            log("FAILED CASES: " + failures.joined(separator: "; "))
+            throw Failure.failed(failures.joined(separator: "; "))
         }
         log("PASS real bounded retained-clip pipeline. macOS native inference only; not physical iPhone acceptance.")
     }

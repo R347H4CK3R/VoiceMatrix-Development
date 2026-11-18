@@ -18,3 +18,12 @@ class FixtureTests(unittest.TestCase):
             check(root)
             copied.write_bytes(b'corrupt')
             with self.assertRaises(AssertionError):check(root)
+
+    def test_history_scroll_avoids_interactive_slider_center(self):
+        source=(Path(__file__).resolve().parents[1]/'VoiceMatrixUITests/RVCHistoryUITests.swift').read_text()
+        self.assertIn('app.collectionViews["rvc-preview-screen"]',source)
+        self.assertIn('CGVector(dx:0.02,dy:0.72)',source)
+        self.assertIn('CGVector(dx:0.02,dy:0.28)',source)
+        self.assertIn('if notice.exists && notice.isHittable {break};scrollHistoryForm(app)',source)
+        self.assertIn('XCTAssertTrue(notice.waitForExistence(timeout:10))',source)
+        self.assertIn('XCTAssertTrue(app.staticTexts["rvc-history-empty"].exists)',source)

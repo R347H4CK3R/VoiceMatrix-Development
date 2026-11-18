@@ -32,7 +32,7 @@ enum SeparationClipExtractor {
         guard cursor>=end-sampleTolerance else {throw Failure.invalidTimeline}
     }
 
-    static func extract(source:URL,start:Double,seconds:Double,diagnostic:@Sendable (String)->Void = {_ in}) async throws -> Clip {
+    static func extract(source:URL,start:Double,seconds:Double,diagnostic:@escaping @Sendable (String)->Void = {_ in}) async throws -> Clip {
         try Task.checkCancellation()
         guard source.isFileURL else {throw Failure.localFileRequired}
         guard start.isFinite,seconds.isFinite,start>=0,(0.5...10).contains(seconds),

@@ -28,5 +28,7 @@ jobs:
       if: always()
       with:
         name: Standalone-MKV-native-results
-        path: mkv-native-results.log
+        path: |
+          mkv-native-results.log
+          mkv-native-diagnostics/
         if-no-files-found: error

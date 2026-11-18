@@ -33,7 +33,16 @@ class MKVExportTests(unittest.TestCase):
             for spec, fmt, codec in [('0:v:0','rawvideo','rawvideo'),('0:a:0','s16le','pcm_s16le')]:
                 def decode(p):
                     return subprocess.check_output(['ffmpeg','-v','error','-i',str(p),'-map',spec,'-f',fmt,'-c',codec,'-'])
-                self.assertEqual(hashlib.sha256(decode(source)).digest(),hashlib.sha256(decode(dest)).digest())
+                originalDecoded, exportedDecoded = decode(source), decode(dest)
+                if originalDecoded != exportedDecoded:
+                    evidence = ROOT/'mkv-native-diagnostics'
+                    evidence.mkdir(exist_ok=True)
+                    shutil.copyfile(source,evidence/'source.mp4')
+                    shutil.copyfile(dest,evidence/'export.mkv')
+                    print('DECODE_MISMATCH',spec,'sourceBytes',len(originalDecoded),'exportBytes',len(exportedDecoded),flush=True)
+                    for item in [source,dest]:
+                        print('STREAM_METADATA',item.suffix,subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(item)]).decode(),flush=True)
+                self.assertEqual(hashlib.sha256(originalDecoded).digest(),hashlib.sha256(exportedDecoded).digest(),spec)
             self.assertEqual(original,source.read_bytes())
             saved = dest.read_bytes()
             self.assertNotEqual(subprocess.run([str(binary),str(source),str(dest)],capture_output=True).returncode,0)

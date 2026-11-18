@@ -125,3 +125,13 @@ class NativeClipTests(unittest.TestCase):
                 self.assertEqual(result.returncode,0,result.stdout+result.stderr)
                 self.assertTrue(json.loads(result.stdout)['scratchChecked'])
                 self.assertEqual(hashlib.sha256(self.wav.read_bytes()).hexdigest(),before)
+
+    def test_resampled_full_endpoint_and_tail_match_full_decode(self):
+        full,whole=self.extract(self.mono,0,2)
+        tail,selected=self.extract(self.mono,1.25,.75)
+        self.assertLessEqual(abs(full['frames']-88200),1)
+        self.assertLessEqual(abs(tail['frames']-33075),1)
+        expected=whole[55125*2:55125*2+len(selected)]
+        self.assertEqual(len(selected),len(expected))
+        self.assertLess(max(abs(a-b) for a,b in zip(selected,expected)),3e-5,
+                        'Resampler tail must match full-source decoder state')

@@ -90,8 +90,9 @@ enum SeparationClipExtractor {
         if !segments.isEmpty {try validateCoverage(coverage,start:selectedStart,end:selectedEnd)}
         try Task.checkCancellation()
         let reader=try AVAssetReader(asset:asset)
-        reader.timeRange=CMTimeRange(start:CMTime(value:startFrame,timescale:Int32(rate)),
-                                     duration:CMTime(value:Int64(wantedFrames),timescale:Int32(rate)))
+        // Do not set timeRange. Seeking restarts AAC/resampler state; a finite
+        // requested range can also omit converter tail frames. Decode from the
+        // real stream beginning and retain only timestamp-mapped selected frames.
         let output=AVAssetReaderTrackOutput(track:track,outputSettings:[
             AVFormatIDKey:kAudioFormatLinearPCM,
             AVSampleRateKey:rate,
@@ -109,6 +110,8 @@ enum SeparationClipExtractor {
         var samples:[Float]=[]
         samples.reserveCapacity(wantedFrames*2)
         var decodedFrames=0,previousPTS:Double?,bufferIndex=0
+        var originFrame:Int64?,intervalComplete=false
+        let selectedEndFrame=startFrame+Int64(wantedFrames)
         while let sample=output.copyNextSampleBuffer() {
             try Task.checkCancellation()
             guard CMSampleBufferDataIsReady(sample),
@@ -123,12 +126,20 @@ enum SeparationClipExtractor {
                   let block=CMSampleBufferGetDataBuffer(sample) else {throw Failure.invalidPCM}
             let frameCount=CMSampleBufferGetNumSamples(sample)
             let bytes=CMBlockBufferGetDataLength(block)
-            guard frameCount>0,frameCount<=maximumFrames,
+            guard frameCount>0,frameCount<=1_048_576,
                   bytes==frameCount*channels*4,
-                  decodedFrames+frameCount<=min(maximumFrames,wantedFrames+1) else {throw Failure.bounds}
+                  decodedFrames+frameCount<=1800*rate+1,bufferIndex<1_000_000 else {throw Failure.bounds}
             let pts=CMSampleBufferGetPresentationTimeStamp(sample).seconds
             let sampleDuration=CMSampleBufferGetDuration(sample).seconds
-            let expectedPTS=selectedStart+Double(decodedFrames)/Double(rate)
+            guard pts.isFinite,pts>=(-sampleTolerance),pts<=1800 else {throw Failure.invalidTimeline}
+            if originFrame==nil {
+                let firstFrame=Int64((pts*Double(rate)).rounded())
+                guard firstFrame<=startFrame else {throw Failure.invalidTimeline}
+                originFrame=firstFrame
+            }
+            guard let originFrame else {throw Failure.invalidTimeline}
+            let bufferStart=originFrame+Int64(decodedFrames)
+            let expectedPTS=Double(bufferStart)/Double(rate)
             if bufferIndex<4 {diagnostic("clip buffer=\(bufferIndex) frames=\(frameCount) pts=\(pts) expectedPTS=\(expectedPTS) duration=\(sampleDuration)")}
             bufferIndex += 1
             guard pts.isFinite,abs(pts-expectedPTS)<=sampleTolerance,
@@ -136,30 +147,50 @@ enum SeparationClipExtractor {
                   abs(sampleDuration-Double(frameCount)/Double(rate))<=sampleTolerance else {throw Failure.invalidTimeline}
             if let previousPTS,pts<=previousPTS {throw Failure.invalidTimeline}
             previousPTS=pts
-            var data=Data(count:bytes)
-            let status=data.withUnsafeMutableBytes {buffer in
-                CMBlockBufferCopyDataBytes(block,atOffset:0,dataLength:bytes,destination:buffer.baseAddress!)
-            }
-            guard status==kCMBlockBufferNoErr else {throw Failure.unreadable}
-            try data.withUnsafeBytes {raw in
-                for frame in 0..<frameCount {
-                    if frame%4096==0 {try Task.checkCancellation()}
-                    let offset=frame*channels*4
-                    let left=Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:offset,as:UInt32.self)))
-                    let right=channels==1 ? left : Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:offset+4,as:UInt32.self)))
-                    guard left.isFinite,right.isFinite else {throw Failure.invalidPCM}
-                    samples.append(left);samples.append(right)
+            let keepStart=max(bufferStart,startFrame)
+            let keepEnd=min(bufferStart+Int64(frameCount),selectedEndFrame)
+            if keepEnd>keepStart {
+                // Exact consecutive selected samples only. There is no gap fill,
+                // padding, or arbitrary seek-preroll compensation.
+                guard keepStart==startFrame+Int64(samples.count/2) else {throw Failure.invalidTimeline}
+                let keptFrames=Int(keepEnd-keepStart)
+                let byteOffset=Int(keepStart-bufferStart)*channels*4
+                let keptBytes=keptFrames*channels*4
+                guard samples.count/2+keptFrames<=wantedFrames else {throw Failure.bounds}
+                var data=Data(count:keptBytes)
+                let status=data.withUnsafeMutableBytes {buffer in
+                    CMBlockBufferCopyDataBytes(block,atOffset:byteOffset,dataLength:keptBytes,destination:buffer.baseAddress!)
+                }
+                guard status==kCMBlockBufferNoErr else {throw Failure.unreadable}
+                try data.withUnsafeBytes {raw in
+                    for frame in 0..<keptFrames {
+                        if frame%4096==0 {try Task.checkCancellation()}
+                        let offset=frame*channels*4
+                        let left=Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:offset,as:UInt32.self)))
+                        let right=channels==1 ? left : Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:offset+4,as:UInt32.self)))
+                        guard left.isFinite,right.isFinite else {throw Failure.invalidPCM}
+                        samples.append(left);samples.append(right)
+                    }
                 }
             }
             decodedFrames += frameCount
+            if samples.count==wantedFrames*2 {
+                try Task.checkCancellation()
+                intervalComplete=true
+                // Deliberately stop only after all requested actual samples exist.
+                // Nothing after the selected interval is part of this handoff.
+                if reader.status == .reading {reader.cancelReading()}
+                break
+            }
         }
         try Task.checkCancellation()
-        diagnostic("clip readerStatus=\(reader.status.rawValue) decodedFrames=\(decodedFrames) wantedFrames=\(wantedFrames)")
-        guard reader.status == .completed else {throw Failure.unreadable}
-        // Resampling endpoint rounding may differ by one frame. Never synthesize a
-        // frame or discard decoded data to make this check pass; report actual count.
-        guard decodedFrames>0,abs(decodedFrames-wantedFrames)<=1,
-              samples.count==decodedFrames*2 else {throw Failure.invalidTimeline}
-        return Clip(samples:samples,frames:decodedFrames,sampleRate:rate,start:selectedStart)
+        let retainedFrames=samples.count/2
+        diagnostic("clip readerStatus=\(reader.status.rawValue) prefixDecodedFrames=\(decodedFrames) retainedFrames=\(retainedFrames) wantedFrames=\(wantedFrames) intervalComplete=\(intervalComplete)")
+        guard intervalComplete || reader.status == .completed else {throw Failure.unreadable}
+        // At the true stream endpoint resampling rounding may differ by one frame.
+        // A short result is accepted only at EOF, never padded or called complete.
+        guard retainedFrames>0,wantedFrames-retainedFrames<=1,
+              samples.count==retainedFrames*2 else {throw Failure.invalidTimeline}
+        return Clip(samples:samples,frames:retainedFrames,sampleRate:rate,start:selectedStart)
     }
 }

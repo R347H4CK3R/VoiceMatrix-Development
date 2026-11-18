@@ -1,0 +1,74 @@
+name: Bounded actual vocal separation diagnostic
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/standalone-vocal-separation]
+    paths:
+      - 'VoiceMatrix/VocalSeparation*.swift'
+      - 'VoiceMatrix/Separation*.swift'
+      - 'VoiceMatrix/RetainedMediaReader.swift'
+      - 'tests/test_separation_store.py'
+      - 'probes/separation-store/**'
+      - 'probes/separation-import/**'
+      - 'tools/*vocal_separation*.py'
+      - 'tests/test_vocal_separation*.py'
+      - 'probes/vocal-separation*/**'
+      - 'LICENSES/Spleeter-MIT.txt'
+      - '.github/workflows/vocal-separation-native.yml'
+permissions:
+  contents: read
+jobs:
+  inference:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install reference tools
+        run: |
+          brew install xcodegen ffmpeg
+          python3 -m pip install numpy==2.2.6 onnxruntime==1.24.2
+      - name: Check pinned model preparation and real DSP parity
+        run: python3 -m unittest tests.test_vocal_separation_models tests.test_vocal_separation_dsp tests.test_separation_store -v
+      - name: Prepare fixed licensed known-mixture reference with actual pinned models
+        run: |
+          python3 tools/vendored_onnx.py
+          python3 tools/prepare_vocal_separation.py --output probes/vocal-separation-native/Fixtures/Models
+          python3 -m tools.vocal_separation_reference --models probes/vocal-separation-native/Fixtures/Models --output probes/vocal-separation-native/Fixtures/Reference > separation-reference.json
+      - name: Create owned iPhone simulator
+        run: |
+          python3 - <<'PY'
+          import json,subprocess,os
+          runtimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','-j']))['runtimes']
+          runtime=next(r['identifier'] for r in reversed(runtimes) if r.get('isAvailable') and 'iOS' in r['name'])
+          types=json.loads(subprocess.check_output(['xcrun','simctl','list','devicetypes','-j']))['devicetypes']
+          device=next(d['identifier'] for d in reversed(types) if d['name'].startswith('iPhone'))
+          udid=subprocess.check_output(['xcrun','simctl','create','VoiceMatrix-separation-check',device,runtime],text=True).strip()
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write('SEPARATION_SIMULATOR='+udid+'\n')
+          subprocess.run(['xcrun','simctl','boot',udid],check=True)
+          subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True,timeout=300)
+          PY
+      - name: Build and run actual Swift plus iOS ORT model inference
+        run: |
+          set -o pipefail
+          cd probes/vocal-separation-native
+          xcodegen generate
+          xcodebuild test -project VocalSeparationHarness.xcodeproj -scheme VocalSeparationHarness -destination "platform=iOS Simulator,id=$SEPARATION_SIMULATOR" -derivedDataPath native-build -resultBundlePath separation.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO 2>&1 | tee separation-native.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Vocal-separation-native-reference-evidence
+          path: |
+            separation-reference.json
+            probes/vocal-separation-native/separation-native.log
+            probes/vocal-separation-native/separation.xcresult
+          if-no-files-found: error
+      - name: Remove only owned simulator
+        if: always()
+        run: |
+          if [ -n "${SEPARATION_SIMULATOR:-}" ]; then
+            xcrun simctl shutdown "$SEPARATION_SIMULATOR" || true
+            xcrun simctl delete "$SEPARATION_SIMULATOR"
+          fi

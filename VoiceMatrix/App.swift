@@ -73,6 +73,9 @@ struct HomeView: View {
                     NavigationLink { CharacterLibraryView(mode: .conversion) } label: {
                         HomeCard(title: "Change my voice", detail: "Record or import your own words.", icon: "mic.fill")
                     }.accessibilityIdentifier("change-my-voice")
+                    NavigationLink { VocalSeparationView() } label: {
+                        HomeCard(title: "Separate vocals", detail: "Vocals and accompaniment · experimental · up to 10 seconds.", icon: "waveform.path")
+                    }.accessibilityIdentifier("vocal-separation")
                     NavigationLink { RVCOnDeviceView() } label: {
                         HomeCard(title: "On-device RVC", detail: "Diagnostic preview · experimental quality.", icon: "waveform.badge.magnifyingglass")
                     }.accessibilityIdentifier("on-device-rvc")

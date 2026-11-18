@@ -1,0 +1,49 @@
+name: VocalSeparationHarness
+options:
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    CODE_SIGNING_ALLOWED: NO
+    GENERATE_INFOPLIST_FILE: YES
+packages:
+  ONNXRuntime:
+    path: ../../Vendors/ONNXRuntime
+targets:
+  VocalSeparationHarness:
+    type: application
+    platform: iOS
+    sources:
+      - Host.swift
+      - ../../VoiceMatrix/RetainedMediaReader.swift
+      - ../../VoiceMatrix/VocalSeparationAssets.swift
+      - ../../VoiceMatrix/VocalSeparationDSP.swift
+      - ../../VoiceMatrix/VocalSeparationEngine.swift
+    dependencies:
+      - package: ONNXRuntime
+        product: onnxruntime
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.voicematrix.separation-harness
+  SeparationInferenceChecks:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Checks.swift
+      - path: Fixtures
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: VocalSeparationHarness
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.voicematrix.separation-checks
+schemes:
+  VocalSeparationHarness:
+    build:
+      targets:
+        VocalSeparationHarness: all
+    test:
+      targets:
+        - SeparationInferenceChecks

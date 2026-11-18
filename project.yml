@@ -59,6 +59,10 @@ targets:
     - path: VoiceMatrix/Resources/Diarization
       type: folder
       buildPhase: resources
+    - path: VoiceMatrix/Resources/Separation
+      type: folder
+      optional: true
+      buildPhase: resources
     - path: VoiceMatrix/Resources/F5TTS
       type: folder
       buildPhase: resources

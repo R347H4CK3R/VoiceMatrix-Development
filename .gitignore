@@ -20,3 +20,10 @@ VoiceMatrix/Resources/ParakeetASR/*
 # Pinned Python SDK/packages are staged at build time, not committed.
 Vendors/Python/
 .python-runtime/
+
+# Generated pinned separation models and native diagnostic fixtures
+VoiceMatrix/Resources/Separation/
+probes/vocal-separation-native/Fixtures/
+probes/vocal-separation-native/*.xcodeproj/
+probes/vocal-separation-native/native-build/
+probes/vocal-separation-native/*.xcresult/

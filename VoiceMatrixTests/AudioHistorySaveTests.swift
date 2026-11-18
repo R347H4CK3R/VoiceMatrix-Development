@@ -33,4 +33,37 @@ import AVFoundation
         reloaded.delete(SavedAudio(url:bSaved));XCTAssertFalse(reloaded.isSaved(b));XCTAssertTrue(reloaded.isSaved(a))
         XCTAssertEqual(try Data(contentsOf:legacy),legacyBytes)
     }
+    func testTwoSeparationPairsSaveAndRenameWithoutAliasing() throws {
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString,isDirectory:true)
+        let previous=UserDefaults.standard.object(forKey:"savedSources")
+        defer {
+            try? FileManager.default.removeItem(at:root)
+            if let previous {UserDefaults.standard.set(previous,forKey:"savedSources")}
+            else {UserDefaults.standard.removeObject(forKey:"savedSources")}
+        }
+        let store=SeparationStore(root:root.appendingPathComponent("VocalSeparation"))
+        let a=try store.publish(vocals:[0.1,-0.1],accompaniment:[0.2,-0.2],inputName:"first.wav",inputSHA256:String(repeating:"a",count:64))
+        let b=try store.publish(vocals:[0.3,-0.3],accompaniment:[0.4,-0.4],inputName:"second.wav",inputSHA256:String(repeating:"b",count:64))
+        let urls=[a.vocals,a.accompaniment,b.vocals,b.accompaniment]
+        XCTAssertEqual(Set(urls.map{RecordingSaveIdentity.forSource($0).key}).count,4)
+        let saved=root.appendingPathComponent("Recordings"),audio=AudioStore(recordingRoot:root.appendingPathComponent("Recordings"))
+        for (index,url) in urls.enumerated() {
+            XCTAssertFalse(audio.isSaved(url))
+            audio.save(url)
+            XCTAssertNil(audio.error)
+            XCTAssertTrue(audio.isSaved(url))
+            XCTAssertEqual(audio.recordings.count,index+1)
+            XCTAssertEqual(try Data(contentsOf:saved.appendingPathComponent(RecordingSaveIdentity.forSource(url).filename)),try Data(contentsOf:url))
+        }
+        let firstSaved=saved.appendingPathComponent(RecordingSaveIdentity.forSource(a.vocals).filename)
+        audio.rename(SavedAudio(url:firstSaved),to:"my separated vocal")
+        XCTAssertNil(audio.error)
+        XCTAssertTrue(audio.isSaved(a.vocals))
+        audio.save(a.vocals);XCTAssertEqual(audio.recordings.count,4)
+        let reloaded=AudioStore(recordingRoot:saved)
+        for url in urls {XCTAssertTrue(reloaded.isSaved(url))}
+        XCTAssertEqual(try Data(contentsOf:saved.appendingPathComponent("my separated vocal.wav")),try Data(contentsOf:a.vocals))
+        XCTAssertEqual(try store.results().count,2)
+    }
+
 }

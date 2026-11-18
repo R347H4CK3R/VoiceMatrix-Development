@@ -1,4 +1,4 @@
-# PRIVATE NONEXECUTING CANDIDATE. Native workflow remains disabled by default.
+# PRIVATE NONEXECUTING CANDIDATE. Not installed as .circleci/config.yml.
 version: 2.1
 parameters:
   run-native:
@@ -75,7 +75,8 @@ jobs:
           -only-testing:VoiceMatrixTests/LocalSpeakerModelTests -only-testing:VoiceMatrixTests/LocalSoundQualityTests
           -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests
           -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests -only-testing:VoiceMatrixTests/AppUpdateTests
-          -only-testing:VoiceMatrixTests/SpeechControlsTests -only-testing:VoiceMatrixUITests/SpeechFeatureUITests
+          -only-testing:VoiceMatrixTests/SpeechControlsTests -only-testing:VoiceMatrixTests/AudioHistorySaveTests
+          -only-testing:VoiceMatrixUITests/VocalSeparationUITests -only-testing:VoiceMatrixUITests/SpeechFeatureUITests
           -only-testing:VoiceMatrixUITests/RVCOnlineUITests -only-testing:VoiceMatrixUITests/RVCHistoryUITests
           > character-ui-build.log 2>&1 || { tail -160 character-ui-build.log; exit
           1; }
@@ -108,6 +109,7 @@ jobs:
           -only-testing:VoiceMatrixTests/LocalSoundQualityTests -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests
           -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests
           -only-testing:VoiceMatrixTests/AppUpdateTests -only-testing:VoiceMatrixTests/SpeechControlsTests
+          -only-testing:VoiceMatrixTests/AudioHistorySaveTests -only-testing:VoiceMatrixUITests/VocalSeparationUITests
           -only-testing:VoiceMatrixUITests/SpeechFeatureUITests -only-testing:VoiceMatrixUITests/RVCOnlineUITests
           -only-testing:VoiceMatrixUITests/RVCHistoryUITests/testHistoryRemainsReachableWithoutInstalledModelsAcrossRelaunch
           > character-ui.log 2>&1 || { tail -160 character-ui.log; exit 1; }

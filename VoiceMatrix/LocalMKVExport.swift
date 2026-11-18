@@ -54,6 +54,23 @@ enum LocalMKVExport {
             throw Failure.unsupported("AAC configuration is not the supported explicit LC configuration")
         }
     }
+    /// Apple documents EmptyMedia as a marker for an empty edit, not a codec packet.
+    /// Only a zero-duration marker at time zero can be ignored here; nonzero edits,
+    /// permanent empty media and unknown zero-sample buffers remain unsupported.
+    /// https://developer.apple.com/documentation/coremedia/kcmsamplebufferattachmentkey_emptymedia
+    static func isInitialEmptyMarker(_ sample: CMSampleBuffer) -> Bool {
+        guard CMSampleBufferGetNumSamples(sample) == 0,
+              CMSampleBufferGetDataBuffer(sample) == nil,
+              CMSampleBufferGetImageBuffer(sample) == nil,
+              CMSampleBufferGetFormatDescription(sample) == nil,
+              CMTimeCompare(CMSampleBufferGetPresentationTimeStamp(sample), .zero) == 0,
+              CMSampleBufferGetDuration(sample).seconds == 0,
+              (CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_EmptyMedia,attachmentModeOut:nil) as? Bool) == true,
+              (CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_PermanentEmptyMedia,attachmentModeOut:nil) as? Bool) != true,
+              CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_TrimDurationAtStart,attachmentModeOut:nil) == nil,
+              CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_TrimDurationAtEnd,attachmentModeOut:nil) == nil else { return false }
+        return true
+    }
     static func export(input: URL, destination: URL, maxBytes: Int64,
                        progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> URL {
         try Task.checkCancellation()
@@ -110,11 +127,17 @@ enum LocalMKVExport {
         var pending = outputs.map { $0.copyNextSampleBuffer() }
         var previous: [Double] = [-1,-1]
         var counts = [0,0]
+        var initialMarkers = [0,0]
         while pending.contains(where: { $0 != nil }) {
             try Task.checkCancellation()
             guard Date() < deadline, counts.reduce(0,+) < 300_000 else { throw Failure.unsupported("export work limit") }
             let index = pending[0] == nil ? 1 : pending[1] == nil ? 0 : (CMSampleBufferGetPresentationTimeStamp(pending[0]!).seconds <= CMSampleBufferGetPresentationTimeStamp(pending[1]!).seconds ? 0 : 1)
             let sample = pending[index]!
+            if counts[index] == 0, initialMarkers[index] == 0, isInitialEmptyMarker(sample) {
+                initialMarkers[index] += 1 // At most one marker per track, never an unbounded drain loop.
+                pending[index] = outputs[index].copyNextSampleBuffer()
+                continue
+            }
             let pts = CMSampleBufferGetPresentationTimeStamp(sample)
             let dts = CMSampleBufferGetDecodeTimeStamp(sample)
             let length = CMSampleBufferGetDuration(sample).seconds
@@ -141,9 +164,12 @@ enum LocalMKVExport {
                     let status = CMSampleBufferGetSampleTimingInfo(sample, at: offset, timingInfoOut: &info)
                     return "status=\(status),pts=\(time(info.presentationTimeStamp)),dts=\(time(info.decodeTimeStamp)),duration=\(time(info.duration)),bytes=\(CMSampleBufferGetSampleSize(sample,at:offset))"
                 }
+                let empty = CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_EmptyMedia,attachmentModeOut:nil) as? Bool
+                let permanent = CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_PermanentEmptyMedia,attachmentModeOut:nil) as? Bool
+                let markerFlags = "empty=\(String(describing:empty)),permanent=\(String(describing:permanent)),initialMarkers=\(initialMarkers[index])"
                 let first = sampleCount > 0 ? timing(0) : "none"
                 let last = sampleCount > 1 ? timing(sampleCount-1) : first
-                throw Failure.unsupported("sample-policy [\(violations.joined(separator:","))] track=\(index+1),buffer=\(counts[index]),samples=\(sampleCount),pts=\(time(pts)),dts=\(time(dts)),duration=\(length),previousPTS=\(previous[index]),assetDuration=\(duration),formatMatches=\(formatMatches),bytes=\(block.map { CMBlockBufferGetDataLength($0) } ?? -1),first={\(first)},last={\(last)}")
+                throw Failure.unsupported("sample-policy [\(violations.joined(separator:","))] \(markerFlags),track=\(index+1),buffer=\(counts[index]),samples=\(sampleCount),pts=\(time(pts)),dts=\(time(dts)),duration=\(length),previousPTS=\(previous[index]),assetDuration=\(duration),formatMatches=\(formatMatches),bytes=\(block.map { CMBlockBufferGetDataLength($0) } ?? -1),first={\(first)},last={\(last)}")
             }
             // Edit-list priming/padding needs an independently verified mapping. Fail closed rather than shift audio.
             for key in [kCMSampleBufferAttachmentKey_TrimDurationAtStart,kCMSampleBufferAttachmentKey_TrimDurationAtEnd] {

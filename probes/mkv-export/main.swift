@@ -3,6 +3,28 @@ import AVFoundation
 import AudioToolbox
 
 @main struct Probe {
+    static func markerPolicy() throws {
+        func marker(pts: CMTime = .zero, duration: CMTime = .zero) throws -> CMSampleBuffer {
+            var timing = CMSampleTimingInfo(duration:duration,presentationTimeStamp:pts,decodeTimeStamp:.invalid)
+            var result: CMSampleBuffer?
+            let status = CMSampleBufferCreate(allocator:kCFAllocatorDefault,dataBuffer:nil,dataReady:true,
+                makeDataReadyCallback:nil,refcon:nil,formatDescription:nil,sampleCount:0,
+                sampleTimingEntryCount:1,sampleTimingArray:&timing,sampleSizeEntryCount:0,sampleSizeArray:nil,sampleBufferOut:&result)
+            guard status == 0, let result else { fatalError("Cannot construct marker: \(status)") }
+            CMSetAttachment(result,key:kCMSampleBufferAttachmentKey_EmptyMedia,value:kCFBooleanTrue,attachmentMode:kCMAttachmentMode_ShouldPropagate)
+            return result
+        }
+        let empty = try marker()
+        precondition(LocalMKVExport.isInitialEmptyMarker(empty),"Initial zero-duration empty marker must be recognized")
+        CMRemoveAttachment(empty,key:kCMSampleBufferAttachmentKey_EmptyMedia)
+        precondition(!LocalMKVExport.isInitialEmptyMarker(empty),"Unmarked empty sample must not be ignored")
+        let permanent = try marker()
+        CMSetAttachment(permanent,key:kCMSampleBufferAttachmentKey_PermanentEmptyMedia,value:kCFBooleanTrue,attachmentMode:kCMAttachmentMode_ShouldPropagate)
+        precondition(!LocalMKVExport.isInitialEmptyMarker(permanent),"Permanent empty media must not be ignored")
+        let later = try marker(pts:CMTime(value:1,timescale:1))
+        precondition(!LocalMKVExport.isInitialEmptyMarker(later),"Later edit must not be ignored")
+        print("EMPTY_MARKER_POLICY_PASSED only explicit initial zero-duration empty edit recognized")
+    }
     static func aacPolicy() throws {
         let lc = Data([0x11,0x88]) // AAC-LC 48 kHz mono, 1024-frame packets.
         for flags in [UInt32(0),UInt32(2)] {
@@ -48,7 +70,7 @@ import AudioToolbox
     }
     static func main() async throws {
         let args = CommandLine.arguments
-        if args.count == 2 && args[1] == "--aac-policy" { try aacPolicy(); return }
+        if args.count == 2 && args[1] == "--aac-policy" { try aacPolicy(); try markerPolicy(); return }
         guard args.count == 3 || args.count == 4 else { fatalError("input.mp4 output.mkv") }
         let input = URL(fileURLWithPath: args[1])
         try await evidence(input)

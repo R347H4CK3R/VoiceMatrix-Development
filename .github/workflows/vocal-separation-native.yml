@@ -44,7 +44,8 @@ jobs:
           runtimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','-j']))['runtimes']
           runtime=next(r['identifier'] for r in reversed(runtimes) if r.get('isAvailable') and 'iOS' in r['name'])
           types=json.loads(subprocess.check_output(['xcrun','simctl','list','devicetypes','-j']))['devicetypes']
-          device=next(d['identifier'] for d in reversed(types) if d['name'].startswith('iPhone'))
+          device='com.apple.CoreSimulator.SimDeviceType.iPhone-16-Plus'
+          assert any(d['identifier']==device for d in types),'Required supported iPhone simulator missing'
           udid=subprocess.check_output(['xcrun','simctl','create','VoiceMatrix-separation-check',device,runtime],text=True).strip()
           with open(os.environ['GITHUB_ENV'],'a') as f:f.write('SEPARATION_SIMULATOR='+udid+'\n')
           subprocess.run(['xcrun','simctl','boot',udid],check=True)

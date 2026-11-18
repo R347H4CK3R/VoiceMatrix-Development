@@ -54,3 +54,9 @@ class SeparationLicenseTests(unittest.TestCase):
   self.assertIn('Xiaomi',notices['NOTICE.txt'])
   self.assertIn('Fangjun Kuang',notices['NOTICE.txt'])
   self.assertIn('10.21105/joss.02154',notices['NOTICE.txt'])
+
+class SimulatorSelectionTests(unittest.TestCase):
+ def test_harness_uses_supported_modern_device(self):
+  workflow=(ROOT/'.github/workflows/vocal-separation-native.yml').read_text()
+  self.assertIn("device='com.apple.CoreSimulator.SimDeviceType.iPhone-16-Plus'",workflow)
+  self.assertNotIn('reversed(types)',workflow)

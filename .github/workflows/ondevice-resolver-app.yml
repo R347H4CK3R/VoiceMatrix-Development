@@ -37,7 +37,7 @@ jobs:
           unzip -q .tooling/xcodegen.zip -d .tooling
           python3 tools/check_conversion_inputs.py
           python3 tools/create_diagnostic_collection.py
-          mkdir -p VoiceMatrix/Resources/Phonon VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS
+          mkdir -p VoiceMatrix/Resources/Phonon VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS VoiceMatrix/Resources/Separation
           .tooling/xcodegen/bin/xcodegen generate
           PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.python-runtime/app_packages python3 tools/python-runtime/run_resolver_tests.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/python-packaging -v

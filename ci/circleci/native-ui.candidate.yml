@@ -36,10 +36,10 @@ jobs:
           build
         command: "python3 tools/bundle_diarization.py\npython3 tools/check_conversion_inputs.py\n\
           python3 tools/create_diagnostic_collection.py\nmkdir -p VoiceMatrix/Resources/Phonon\
-          \ VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS\n# These are\
-          \ UI availability fixtures, not valid engines or speech assets.\n# No config,\
-          \ weights, stock profiles or private references enter the app.\nprintf '{\"\
-          testOnlyUIAvailability\":true}\\n' > VoiceMatrix/Resources/F5TTS/voicematrix-engine.json\n\
+          \ VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS VoiceMatrix/Resources/Separation\n\
+          # These are UI availability fixtures, not valid engines or speech assets.\n\
+          # No config, weights, stock profiles or private references enter the app.\n\
+          printf '{\"testOnlyUIAvailability\":true}\\n' > VoiceMatrix/Resources/F5TTS/voicematrix-engine.json\n\
           printf '{\"testOnlyUIAvailability\":true}\\n' > VoiceMatrix/Resources/OpenVoice/model-manifest.json\n\
           cp -R tests/fixtures/DiagnosticVoices VoiceMatrix/Resources/F5TTS/UITestVoices\n\
           # XCTest waits for UI idleness after taps; a 2.5-second clip can finish\n\

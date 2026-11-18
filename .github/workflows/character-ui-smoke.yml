@@ -61,7 +61,7 @@ jobs:
           python3 tools/bundle_diarization.py
           python3 tools/check_conversion_inputs.py
           python3 tools/create_diagnostic_collection.py
-          mkdir -p VoiceMatrix/Resources/Phonon VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS
+          mkdir -p VoiceMatrix/Resources/Phonon VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS VoiceMatrix/Resources/Separation
           # These are UI availability fixtures, not valid engines or speech assets.
           # No config, weights, stock profiles or private references enter the app.
           printf '{"testOnlyUIAvailability":true}\n' > VoiceMatrix/Resources/F5TTS/voicematrix-engine.json

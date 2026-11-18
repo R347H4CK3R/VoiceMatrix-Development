@@ -52,3 +52,15 @@ class SeparationWorkflowTests(unittest.TestCase):
         native=(ROOT/'.github/workflows/vocal-separation-native.yml').read_text()
         self.assertIn('tests.test_separation_store',native)
         self.assertIn("'probes/separation-import/**'",native)
+
+class SeparationSourceOnlyResourceTests(unittest.TestCase):
+    def test_compile_gates_make_empty_resource_folder_without_fake_models(self):
+        for name in ['native-app.yml','character-ui-smoke.yml','ondevice-resolver-app.yml',
+                     'suggestion-input-diagnostic.yml','speaker-handoff-ui.yml']:
+            with self.subTest(workflow=name):
+                source=(ROOT/'.github/workflows'/name).read_text()
+                setup=next(line for line in source.splitlines() if 'mkdir -p VoiceMatrix/Resources/Phonon' in line)
+                self.assertIn('VoiceMatrix/Resources/Separation',setup)
+                self.assertNotIn('prepare_vocal_separation.py',source)
+                self.assertNotIn('touch VoiceMatrix/Resources/Separation',source)
+        self.assertFalse((ROOT/'VoiceMatrix/Resources/Separation/.gitkeep').exists())

@@ -14,6 +14,8 @@ class SeparationSurfaceTests(unittest.TestCase):
         importer=(ROOT/'VoiceMatrix/SeparationAudioImport.swift').read_text()
         self.assertIn('source.length)/rate<=10',importer)
         self.assertIn('left.count==expected',importer)
+        self.assertIn('let remaining=source.length-consumed',importer)
+        self.assertLess(importer.index('guard remaining>0'),importer.index('try source.read'))
         self.assertIn('channels==1 ? 0:1',importer)
         self.assertIn('withTaskCancellationHandler',view)
         self.assertIn('audio.releaseProcessing(lease)',view)

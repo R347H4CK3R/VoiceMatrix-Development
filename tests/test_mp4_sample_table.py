@@ -20,9 +20,10 @@ class MP4TableTests(unittest.TestCase):
    # Conventional mp4a header channelCount=2 must not override mono ASC.
    conventional=d/'header-two.mp4'; b=bytearray(original); idx=b.index(b'mp4a'); b[idx+20:idx+22]=struct.pack('>H',2);conventional.write_bytes(b)
    headerResult=json.loads(subprocess.check_output([str(binary),str(conventional)]));self.assertEqual(headerResult[1]['channels'],1)
-   for name,typ,offset,value in [('table-count',b'stsz',12,0xffffffff),('chunk-count',b'stsc',12,0xffffffff),('external',b'url ',4,0),('duration',b'stts',16,0xffffffff),('roll',b'sgpd',20,0xfffe0000)]:
+   for name,typ,offset,value in [('table-count',b'stsz',12,0xffffffff),('chunk-count',b'stsc',12,0xffffffff),('external',b'url ',4,0),('duration',b'stts',16,0xffffffff)]:
     bad=d/(name+'.mp4'); b=bytearray(original);idx=b.index(typ);b[idx+offset:idx+offset+4]=struct.pack('>I',value);bad.write_bytes(b)
     self.assertNotEqual(subprocess.run([str(binary),str(bad)],capture_output=True).returncode,0,name)
+   roll=d/'roll.mp4';b=bytearray(original);idx=b.index(b'sgpd');b[idx+20:idx+22]=struct.pack('>H',0xfffe);roll.write_bytes(b);self.assertNotEqual(subprocess.run([str(binary),str(roll)],capture_output=True).returncode,0)
    fragmented=d/'fragment.mp4';fragmented.write_bytes(original+struct.pack('>I4s',8,b'moof'));self.assertNotEqual(subprocess.run([str(binary),str(fragmented)],capture_output=True).returncode,0)
 
    bad=d/'offset.mp4'; b=bytearray(original); idx=b.index(b'stco'); b[idx+12:idx+16]=struct.pack('>I',0xffffffff);bad.write_bytes(b)

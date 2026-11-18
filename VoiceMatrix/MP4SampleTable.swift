@@ -51,7 +51,7 @@ final class MP4SampleTable {
         let movieVersion = try Self.u8(movie,0)
         guard movieVersion <= 1 else { throw Failure.unsupported }
         let movieScale = try Self.u32(movie,movieVersion == 0 ? 12:20)
-        guard movieScale > 0, try u32(movie,movieVersion == 0 ? 20:32)==0x00010000 else { throw Failure.unsupported }
+        guard movieScale > 0, try Self.u32(movie,movieVersion == 0 ? 20:32)==0x00010000 else { throw Failure.unsupported }
         let traks = children.filter { $0.type == "trak" }
         guard traks.count == 2 else { throw Failure.unsupported }
         var v: Track?, a: Track?
@@ -228,6 +228,7 @@ final class MP4SampleTable {
         let handle:FileHandle
         let url:URL
         let original:stat
+        private let deadline=Date().addingTimeInterval(180)
         init(_ url:URL) throws {
             guard url.isFileURL else { throw Failure.unsupported }
             let fd=open(url.path,O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC)
@@ -248,6 +249,7 @@ final class MP4SampleTable {
         }
         func verify() throws {
             try Task.checkCancellation()
+            guard Date()<deadline else { throw Failure.bounds }
             var current=stat(),named=stat()
             guard fstat(handle.fileDescriptor,&current)==0,lstat(url.path,&named)==0,
                   named.st_mode & mode_t(S_IFMT)==mode_t(S_IFREG),

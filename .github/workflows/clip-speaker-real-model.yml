@@ -1,0 +1,43 @@
+name: Retained clip real speech analysis
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/retained-clip-speaker-review, verification/clip-speaker-real-model]
+    paths:
+      - 'probes/clip-speaker-review/**'
+      - '.github/workflows/clip-speaker-real-model.yml'
+      - 'VoiceMatrix/ClipSpeakerReview*.swift'
+permissions:
+  contents: read
+jobs:
+  real-short-clips:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare pinned licensed local speech and model
+        run: |
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          python3 tools/bundle_diarization.py --destination "$RUNNER_TEMP/clip-review-models"
+          python3 probes/clip-speaker-review/prepare.py "$RUNNER_TEMP/clip-review-fixtures"
+          python3 -m unittest tests.test_clip_speaker_fixtures -v
+      - name: Compile production retained clip pipeline and run actual Core ML
+        run: |
+          set -o pipefail
+          for file in LocalSpeakerDiarization LocalSpeakerPolicy LocalOverlapPolicy ClipSpeakerReviewStore ClipSpeakerReviewCoordinator SeparationClipHandoff SeparationClipExtractor SeparationStore RetainedMediaReader VocalSeparationAssets; do
+            cp "VoiceMatrix/$file.swift" probes/clip-speaker-review/Sources/Probe/
+          done
+          swift build --package-path probes/clip-speaker-review -c release
+          probes/clip-speaker-review/.build/release/Probe "$RUNNER_TEMP/clip-review-models" "$RUNNER_TEMP/clip-review-fixtures" "$RUNNER_TEMP/clip-review-results" | tee clip-speaker-real-model.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retained-clip-real-model-evidence
+          path: |
+            clip-speaker-real-model.log
+            ${{ runner.temp }}/clip-review-fixtures/fixture.json
+            ${{ runner.temp }}/clip-review-results/*-analysis.json
+          if-no-files-found: warn

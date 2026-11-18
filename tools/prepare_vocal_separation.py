@@ -23,9 +23,21 @@ def validate(folder):
  if folder.is_symlink() or not folder.is_dir():raise ValueError('Unsafe model folder')
  for name,(size,sha) in MODELS.items():check(folder/name,size,sha)
 
+def pack_notices():
+ mit=(ROOT/'LICENSES/Spleeter-MIT.txt').read_text()
+ apache=(ROOT/'LICENSES/Sherpa-ONNX-APACHE-2.0.txt').read_text()
+ notice=(ROOT/'LICENSES/Separation-NOTICE.txt').read_text()
+ return {'LICENSES.txt':'Spleeter weights: MIT\n\n'+mit+'\n\nSherpa-ONNX conversion: Apache-2.0\n\n'+apache,
+         'NOTICE.txt':notice}
+
 def prepare(destination,archive=None):
  destination=pathlib.Path(destination)
- if destination.exists() or destination.is_symlink():validate(destination);return destination
+ if destination.exists() or destination.is_symlink():
+  validate(destination)
+  for name,text in pack_notices().items():
+   path=destination/name
+   if path.is_symlink() or not path.is_file() or path.read_text()!=text:raise ValueError('Existing model pack has missing or stale license notices; prepare a fresh destination')
+  return destination
  destination.parent.mkdir(parents=True,exist_ok=True)
  with tempfile.TemporaryDirectory(prefix='.separation-staging-',dir=destination.parent) as td:
   temp=pathlib.Path(td)
@@ -52,7 +64,7 @@ def prepare(destination,archive=None):
      shutil.copyfileobj(source,output,1024*1024)
   validate(staged)
   (staged/'manifest.json').write_text(json.dumps(PROVENANCE,indent=2)+'\n')
-  shutil.copyfile(ROOT/'LICENSES/Spleeter-MIT.txt',staged/'LICENSES.txt')
+  for name,text in pack_notices().items():(staged/name).write_text(text)
   # CI creates this folder in its own workspace. Never replace an existing pack.
   if destination.exists() or destination.is_symlink():raise ValueError('Destination appeared during preparation')
   staged.rename(destination)

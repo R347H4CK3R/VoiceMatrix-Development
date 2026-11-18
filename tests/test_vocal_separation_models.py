@@ -41,3 +41,16 @@ class PreparationSafetyTests(unittest.TestCase):
   self.assertIn('engine.separate(left:left,right:right)',text)
   self.assertIn('beforeError*0.8',text)
   self.assertIn('XCTAssertLessThan(maximum,0.002)',text)
+
+class SeparationLicenseTests(unittest.TestCase):
+ def test_pack_notices_include_weight_and_conversion_licenses(self):
+  from tools import prepare_vocal_separation as p
+  self.assertTrue(hasattr(p,'pack_notices'),'Model bundle lacks combined weight/conversion license staging')
+  notices=p.pack_notices()
+  self.assertIn('MIT License',notices['LICENSES.txt'])
+  self.assertIn('Deezer SA.',notices['LICENSES.txt'])
+  self.assertIn('Apache License',notices['LICENSES.txt'])
+  self.assertIn('TERMS AND CONDITIONS',notices['LICENSES.txt'])
+  self.assertIn('Xiaomi',notices['NOTICE.txt'])
+  self.assertIn('Fangjun Kuang',notices['NOTICE.txt'])
+  self.assertIn('10.21105/joss.02154',notices['NOTICE.txt'])

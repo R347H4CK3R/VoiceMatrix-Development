@@ -1,0 +1,49 @@
+VoiceMatrix experimental vocal/accompaniment separation: third-party attribution
+
+1. Original Spleeter model weights
+Deezer Spleeter, Copyright (c) 2019-present, Deezer SA.
+Original source and pretrained models: MIT License (included in LICENSES.txt).
+Source: https://github.com/deezer/spleeter
+Authoritative model-license evidence: Hennequin, Khlif, Voituret and Moussallam,
+Journal of Open Source Software 5(50), 2154 (2020), page 3:
+https://doi.org/10.21105/joss.02154
+The paper explicitly identifies source code and pretrained models as MIT.
+The paper's own CC BY 4.0 license is separate from the model license.
+
+2. Published ONNX conversion and conversion reference
+The redistributed ONNX files are the unmodified float32 two-stem files published
+by k2-fsa/sherpa-onnx in its source-separation-models release. Hashes and exact
+sizes are recorded in manifest.json and compiled into VoiceMatrix.
+Conversion code: Apache License 2.0 (included in LICENSES.txt).
+Relevant upstream script notices:
+  scripts/spleeter/unet.py: Copyright 2023 Xiaomi Corp. (author: Fangjun Kuang)
+  scripts/spleeter/export_onnx.py: Copyright 2025 Xiaomi Corp. (author: Fangjun Kuang)
+Inspected conversion-reference source revision:
+https://github.com/k2-fsa/sherpa-onnx/tree/a8cd5f3bc9490a9a58aa319cf0d5b60b6cd9e642/scripts/spleeter
+Published model source:
+https://github.com/k2-fsa/sherpa-onnx/releases/tag/source-separation-models
+No upstream root NOTICE file was present at the inspected revision. This notice
+is assembled by VoiceMatrix, not represented as an upstream NOTICE document.
+The inspected revision documents conversion provenance; it is not a claim that
+we independently rebuilt the released model binaries from that exact revision.
+
+3. VoiceMatrix inference adaptation
+VoiceMatrix's Swift FFT/overlap-add implementation and NumPy diagnostic reference
+are independently written to match the published Spleeter numerical contract.
+The transform semantics were checked against sherpa-onnx and kaldi-native-fbank
+(the latter's STFT/iSTFT and periodic-Hann behavior). Neither runtime library nor
+its C++ source is included in this model pack. Their numerical conventions are
+credited here without claiming that the entire app or all DSP code is an Apache
+derivative or that model weights have been relicensed.
+
+Changes relative to the published inference example: enforce 10-second bounds,
+4096-sample zero guards and final hop padding, crop back to the exact input length,
+use the existing ONNX Runtime CPU backend, and validate exact model hashes.
+The model binaries themselves are unchanged. Their metadata field says 41000;
+the published Python and C++ inference reference uses 44100 Hz, which this
+integration explicitly fixes as its sample-rate contract.
+
+4. Existing runtime
+ONNX Runtime is separately MIT-licensed; its existing app notices remain in place.
+No model training or upstream Python conversion script runs on the user's phone.
+No rights to input recordings or third-party music are granted by these licenses.

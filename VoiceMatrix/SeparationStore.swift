@@ -145,7 +145,7 @@ struct SeparationStore {
                 guard directory.lastPathComponent=="Result-"+r.id.uuidString,(1...441000).contains(r.frames),r.gain.isFinite,r.gain>0,r.gain<=1 else {continue}
                 let result=Result(receipt:r,directory:directory)
                 guard try Self.validWAV(result.vocals,frames:r.frames,sha:r.vocalsSHA256),
-                      Self.validWAV(result.accompaniment,frames:r.frames,sha:r.accompanimentSHA256) else {continue}
+                      try Self.validWAV(result.accompaniment,frames:r.frames,sha:r.accompanimentSHA256) else {continue}
                 results.append(result)
             } catch is CancellationError {throw CancellationError()}
             catch {continue} // Corrupt/partial entries are preserved, never offered for playback.

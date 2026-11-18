@@ -31,7 +31,7 @@ jobs:
       - name: Install reference tools
         run: |
           brew install xcodegen ffmpeg
-          python3 -m pip install numpy==2.2.6 onnxruntime==1.24.2
+          python3 -m pip install numpy==2.2.6 onnxruntime==1.24.2 PyYAML==6.0.3
       - name: Check pinned model preparation and real DSP parity
         run: python3 -m unittest tests.test_vocal_separation_models tests.test_vocal_separation_dsp tests.test_separation_store tests.test_separated_vocals_reference -v
       - name: Prepare fixed licensed known-mixture reference with actual pinned models

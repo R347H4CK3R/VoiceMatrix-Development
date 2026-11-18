@@ -13,12 +13,19 @@ func stage<T>(_ label:String,_ body:() throws -> T) throws -> T {
 func run() throws {
 let root=URL(fileURLWithPath:CommandLine.arguments[1],isDirectory:true)
 try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
-func fixture(_ name:String,rate:Double,channels:AVAudioChannelCount,frames:AVAudioFrameCount) throws -> URL {
+func fixture(_ name:String,rate:Double,channels:AVAudioChannelCount,frames:AVAudioFrameCount,impulses:Bool=false) throws -> URL {
     let url=root.appendingPathComponent(name+".wav")
     let format=AVAudioFormat(commonFormat:.pcmFormatFloat32,sampleRate:rate,channels:channels,interleaved:false)!
     let buffer=AVAudioPCMBuffer(pcmFormat:format,frameCapacity:frames)!
     buffer.frameLength=frames
-    for c in 0..<Int(channels) {for i in 0..<Int(frames) {buffer.floatChannelData![c][i]=c==0 ? 0.125 : -0.25}}
+    for c in 0..<Int(channels) {for i in 0..<Int(frames) {
+        buffer.floatChannelData![c][i]=impulses ? 0 : (c==0 ? 0.125 : -0.25)
+    }}
+    if impulses {
+        buffer.floatChannelData![0][0]=0.5
+        buffer.floatChannelData![0][Int(frames)-1]=0.5
+        buffer.floatChannelData![1][Int(frames)/2] = -0.5
+    }
     // WAV storage is interleaved; the AVAudioPCMBuffer processing format is planar.
     // Never pass AVLinearPCMIsNonInterleaved=true as the on-disk WAV settings.
     let disk=AVAudioFormat(commonFormat:.pcmFormatFloat32,sampleRate:rate,channels:channels,interleaved:true)!
@@ -41,6 +48,23 @@ precondition(b.left==b.right && b.left.count==4410)
 let resampled=try fixture("resample",rate:48000,channels:2,frames:4800)
 let c=try stage("resampled decode") {try SeparationAudioImport.decode(resampled)}
 precondition(c.left.count==4410 && c.right.count==4410)
+let impulseURL=try fixture("boundary-impulses",rate:48000,channels:2,frames:4800,impulses:true)
+let impulseBefore=try Data(contentsOf:impulseURL)
+let impulse=try stage("resampled first last and midpoint impulses") {try SeparationAudioImport.decode(impulseURL)}
+precondition(impulse.left.count==4410 && impulse.right.count==4410)
+func peak(_ samples:[Float],_ range:Range<Int>)->Int {range.max{abs(samples[$0])<abs(samples[$1])}!}
+let first=peak(impulse.left,0..<128),last=peak(impulse.left,4282..<4410),middle=peak(impulse.right,0..<4410)
+FileHandle.standardError.write(Data("impulse peaks: first=\(first), last=\(last), middle=\(middle)\n".utf8))
+precondition(first<=1 && abs(last-4409)<=1 && abs(middle-2205)<=1)
+precondition(impulse.left[first]>0.1 && impulse.left[last]>0.1 && impulse.right[middle] < -0.1)
+// Independent channels: center event cannot leak into the boundary-only channel.
+precondition(impulse.left[2000..<2400].allSatisfy{abs($0)<0.000001})
+precondition(impulse.right[0..<128].allSatisfy{abs($0)<0.000001})
+let impulseAfter=try Data(contentsOf:impulseURL);precondition(impulseBefore==impulseAfter)
+
+let exactLimitURL=try fixture("exact-limit-resample",rate:48000,channels:2,frames:480000)
+let exactLimit=try stage("resampled exact ten second boundary") {try SeparationAudioImport.decode(exactLimitURL)}
+precondition(exactLimit.left.count==441000 && exactLimit.right.count==441000)
 let long=try fixture("long",rate:44100,channels:2,frames:441001)
 do {_=try SeparationAudioImport.decode(long);fatalError("overlong input accepted")}catch{}
 let multichannel=try fixture("surround",rate:44100,channels:3,frames:4410)

@@ -21,7 +21,15 @@ enum SeparationAudioImport {
               let input=AVAudioPCMBuffer(pcmFormat:stereo,frameCapacity:8192),
               let output=AVAudioPCMBuffer(pcmFormat:target,frameCapacity:8192),
               let converter=AVAudioConverter(from:stereo,to:target) else {throw SeparationStore.Failure.invalid}
-        converter.primeMethod = .none
+        // Whole-file conversion uses normal priming, not the .none live-input
+        // latency mode. The converter supplies unavailable boundary silence.
+        // Drain to EOF and require exact duration; never slice an unexplained tail.
+        converter.primeMethod = .normal
+        let expected=Int((Double(source.length)*44100/rate).rounded())
+        guard (1...441000).contains(expected) else {throw SeparationStore.Failure.bounds}
+        // Bounded scratch headroom permits EOF/priming diagnostics at the 10s
+        // boundary. It does not increase the accepted output duration below.
+        let maximumDrainedFrames=expected+8192
         var left:[Float]=[],right:[Float]=[],readError:Error?,empty=0,consumed:Int64=0
         while true {
             try Task.checkCancellation()
@@ -56,7 +64,7 @@ enum SeparationAudioImport {
             guard status != .error else {throw DecodeFailure(description:"converter returned error without NSError after \(consumed) source frames")}
             guard let data=output.floatChannelData else {throw SeparationStore.Failure.invalid}
             let count=Int(output.frameLength)
-            guard left.count+count<=441000 else {throw SeparationStore.Failure.bounds}
+            guard left.count+count<=maximumDrainedFrames else {throw DecodeFailure(description:"converter exceeded bounded priming scratch after \(consumed) source frames")}
             for i in 0..<count {
                 guard data[0][i].isFinite,data[1][i].isFinite,abs(data[0][i])<=1,abs(data[1][i])<=1 else {throw SeparationStore.Failure.invalid}
                 left.append(data[0][i]);right.append(data[1][i])
@@ -65,8 +73,7 @@ enum SeparationAudioImport {
             if status == .endOfStream {break}
             guard empty<3 else {throw SeparationStore.Failure.invalid}
         }
-        let expected=Int((Double(source.length)*44100/rate).rounded())
-        guard consumed==source.length,!left.isEmpty,left.count==expected else {throw DecodeFailure(description:"frame mismatch: consumed \(consumed)/\(source.length), output \(left.count)/\(expected)")}
+        guard consumed==source.length,!left.isEmpty,left.count==expected else {throw DecodeFailure(description:"frame mismatch: consumed \(consumed)/\(source.length), output \(left.count)/\(expected), prime leading \(converter.primeInfo.leadingFrames), trailing \(converter.primeInfo.trailingFrames)")}
         return Audio(left:left,right:right)
     }
 }

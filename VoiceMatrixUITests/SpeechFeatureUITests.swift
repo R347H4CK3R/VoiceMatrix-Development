@@ -49,8 +49,15 @@ import XCTest
         XCTAssertLessThan(details.frame.maxY, app.tabBars.firstMatch.frame.minY)
         details.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
-        details.typeText("Synthetic test draft, never submitted.")
-        XCTAssertEqual(details.value as? String, "Synthetic test draft, never submitted.")
+        let expectedDetails = "Synthetic test draft, never submitted."
+        details.typeText(expectedDetails)
+        // Simulator event delivery can outlive typeText's idle check. The failure
+        // recording showed the complete text arriving after the immediate read.
+        // Wait for the exact value, never retry typing or accept a partial draft.
+        let delivered = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", expectedDetails), object: details)
+        XCTAssertEqual(XCTWaiter.wait(for: [delivered], timeout: 10), .completed)
+        XCTAssertEqual(details.value as? String, expectedDetails)
         app.buttons["Done"].tap()
         app.swipeUp()
         reveal(send, in: app); XCTAssertFalse(send.isEnabled)
@@ -67,6 +74,8 @@ import XCTest
         let again = app.buttons["Send a suggestion"]; reveal(again, in: app); again.tap()
         let saved = app.textFields["suggestion-title"]; reveal(saved, in: app)
         XCTAssertEqual(saved.value as? String, "Synthetic UI suggestion")
+        let savedDetails = app.textViews["Suggestion details"]; reveal(savedDetails, in: app)
+        XCTAssertEqual(savedDetails.value as? String, expectedDetails, "The entire draft body must survive relaunch")
         reveal(send, in: app); XCTAssertFalse(send.isEnabled, "Acknowledgement must not persist")
         let clear = app.buttons["Clear local draft"]; reveal(clear, in: app); clear.tap()
         XCTAssertFalse(send.isEnabled)

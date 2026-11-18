@@ -11,7 +11,7 @@ import Foundation
   var tracks: [[String:Any]] = []
   for t in [table.video, table.audio] {
    var packets: [[String:Any]] = []
-   for s in t.samples { let data = try table.read(s); precondition(data.count == s.size); packets.append(["offset":s.offset,"size":s.size,"pts":s.timestamp,"duration":s.duration,"key":s.key]) }
+   for s in t.samples { let data = try table.read(s); precondition(data.count == s.size); packets.append(["offset":s.offset,"size":s.size,"pts":s.timestamp,"duration":s.duration,"key":s.key,"discardPaddingNanoseconds":s.discardPaddingNanoseconds]) }
    tracks.append(["width":t.width,"height":t.height,"rate":t.sampleRate,"channels":t.channels,"packets":packets])
   }
   try table.verifyUnchanged()

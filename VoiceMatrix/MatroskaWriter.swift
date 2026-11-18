@@ -69,13 +69,19 @@ final class MatroskaWriter {
         try handle.write(contentsOf:data)
         count += Int64(data.count)
     }
-    func append(track: UInt64, milliseconds: Int64, durationMS: UInt64, key: Bool, bytes: Data) throws {
+    func append(track: UInt64, milliseconds: Int64, durationMS: UInt64, key: Bool, bytes: Data, discardPaddingNanoseconds: UInt64 = 0) throws {
         guard (track == 1 || track == 2), milliseconds >= lastTime, milliseconds >= 0, milliseconds <= 1_800_100, !bytes.isEmpty, bytes.count <= 16_777_216 else { throw Failure.invalid }
+        guard discardPaddingNanoseconds <= 140_000_000, track == 2 || discardPaddingNanoseconds == 0 else { throw Failure.invalid }
         lastTime = milliseconds
         let position = count - segmentStart
         // One finite cluster per packet bounds memory and signed block time offsets.
         let block = Data([UInt8(0x80 | track),0,0,0]) + bytes
         var group = Self.element(0xA1,block) + Self.uint(0x9B,durationMS)
+        if discardPaddingNanoseconds > 0 {
+            // Positive signed Matroska DiscardPadding trims only the end of this block.
+            var padding = Int64(discardPaddingNanoseconds).bigEndian
+            group += Self.element(0x75A2,withUnsafeBytes(of:&padding) { Data($0) })
+        }
         if track == 1 {
             if !key {
                 guard let previousVideoTime, previousVideoTime < milliseconds else { throw Failure.invalid }

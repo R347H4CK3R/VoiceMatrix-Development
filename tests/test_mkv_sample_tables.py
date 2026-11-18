@@ -123,9 +123,9 @@ MUTATIONS = ('unsupported-codec', 'encrypted-codec', 'fragmented', 'encrypted-sa
              'zero-timescale', 'duplicate-stts', 'overlapping-chunks', 'oversized-moov', 'truncated')
 
 
-def generate(destination):
+def generate(destination, duration='3'):
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x120:rate=25',
-                    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '3',
+                    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', duration,
                     '-c:v', 'libx264', '-bf', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
                     '-use_editlist', '0', str(destination)], check=True, timeout=60)
 
@@ -189,6 +189,53 @@ class NativeSampleTableTests(unittest.TestCase):
                         if 'dts_time' in before and 'dts_time' in after:
                             self.assertLessEqual(abs(float(before['dts_time']) - float(after['dts_time'])), 0.001001)
         self.assertEqual(self.original, self.source.read_bytes())
+
+    @staticmethod
+    def audio_packets(file):
+        return json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'a:0',
+            '-show_packets', '-show_streams', '-of', 'json', str(file)], timeout=60))
+
+    def test_exact_terminal_aac_padding_is_carried_once(self):
+        source_info = self.audio_packets(self.source)
+        self.assertEqual(source_info['streams'][0]['sample_rate'], '48000')
+        self.assertEqual(source_info['streams'][0]['time_base'], '1/48000')
+        source_packets = source_info['packets']
+        self.assertEqual(int(source_packets[-1]['duration']), 640)
+        self.assertTrue(all(int(p['duration']) == 1024 for p in source_packets[:-1]))
+        output = self.root / 'tail-padding.mkv'
+        subprocess.run([str(self.binary), str(self.source), str(output)], check=True, timeout=90)
+        exported = self.audio_packets(output)['packets']
+        self.assertEqual(len(exported), len(source_packets))
+        final_trims = [d for d in exported[-1].get('side_data_list', []) if d.get('side_data_type') == 'Skip Samples']
+        self.assertEqual(len(final_trims), 1)
+        self.assertEqual(int(final_trims[0]['skip_samples']), 0)
+        self.assertEqual(int(final_trims[0]['discard_padding']), 384)
+        for number, packet in enumerate(exported[:-1]):
+            with self.subTest(packet=number):
+                for side in packet.get('side_data_list', []):
+                    if side.get('side_data_type') == 'Skip Samples':
+                        self.assertEqual(int(side.get('skip_samples', 0)), 0)
+                        self.assertEqual(int(side.get('discard_padding', 0)), 0)
+        self.assertEqual(self.original, self.source.read_bytes())
+
+    def test_complete_terminal_aac_frame_adds_no_padding(self):
+        source, output = self.root / 'whole-frame.mp4', self.root / 'whole-frame.mkv'
+        # 3.008 seconds = 141 * 1024 samples at 48 kHz. Prove the generated
+        # source's actual packet durations rather than assuming encoder behavior.
+        generate(source, duration='3.008')
+        original = source.read_bytes()
+        packets = self.audio_packets(source)['packets']
+        self.assertTrue(packets)
+        self.assertTrue(all(int(p['duration']) == 1024 for p in packets))
+        subprocess.run([str(self.binary), str(source), str(output)], check=True, timeout=90)
+        exported = self.audio_packets(output)['packets']
+        self.assertEqual(len(exported), len(packets))
+        for packet in exported:
+            for side in packet.get('side_data_list', []):
+                if side.get('side_data_type') == 'Skip Samples':
+                    self.assertEqual(int(side.get('skip_samples', 0)), 0)
+                    self.assertEqual(int(side.get('discard_padding', 0)), 0)
+        self.assertEqual(original, source.read_bytes())
 
     def test_hostile_sample_tables_reject_without_output_or_mutation(self):
         for name in MUTATIONS:

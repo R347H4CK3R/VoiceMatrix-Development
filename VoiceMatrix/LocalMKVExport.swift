@@ -64,7 +64,7 @@ enum LocalMKVExport {
             let sample = tracks[index].samples[positions[index]]
             let bytes = try source.read(sample)
             try writer.append(track:UInt64(index+1),milliseconds:Int64((sample.timestamp*1000).rounded()),
-                              durationMS:UInt64(max(1,(sample.duration*1000).rounded())),key:sample.key,bytes:bytes)
+                              durationMS:UInt64(max(1,(sample.duration*1000).rounded())),key:sample.key,bytes:bytes,discardPaddingNanoseconds:sample.discardPaddingNanoseconds)
             positions[index] += 1
             packets += 1
             progress(min(0.99,sample.timestamp/source.duration))

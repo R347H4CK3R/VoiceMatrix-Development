@@ -9,7 +9,14 @@ import Glibc
 /// AVFoundation to retime, group or trim samples. Unsupported structures fail closed.
 final class MP4SampleTable {
     enum Failure: Error { case unsupported, bounds, changed }
-    struct Sample { let offset: Int64; let size: Int; let timestamp: Double; let duration: Double; let key: Bool }
+    struct Sample {
+        let offset: Int64; let size: Int; let timestamp: Double; let duration: Double; let key: Bool
+        let discardPaddingNanoseconds: UInt64
+        init(offset: Int64, size: Int, timestamp: Double, duration: Double, key: Bool, discardPaddingNanoseconds: UInt64 = 0) {
+            self.offset=offset;self.size=size;self.timestamp=timestamp;self.duration=duration;self.key=key
+            self.discardPaddingNanoseconds=discardPaddingNanoseconds
+        }
+    }
     struct Track { let configuration: Data; let width: Int; let height: Int; let sampleRate: Double; let channels: Int; let samples: [Sample]; let seekPreRoll: Double }
     let video: Track
     let audio: Track
@@ -157,6 +164,24 @@ final class MP4SampleTable {
         var durations:[UInt32]=[];durations.reserveCapacity(count);var total:UInt64=0
         for row in times { let n=Int(try u32(row,0)), delta=try u32(row,4);guard n>0,n<=count-durations.count,delta>0 else { throw Failure.bounds };durations += Array(repeating:delta,count:n);total += UInt64(n)*UInt64(delta) }
         guard durations.count==count,total==mediaDuration else { throw Failure.unsupported }
+        var finalPaddingNanoseconds:UInt64=0
+        if kind=="soun" {
+            // Supported ASC is AAC-LC with frameLengthFlag=0: each coded packet
+            // decodes to 1024 frames. Only the final stts entry may shorten output.
+            // Keep all compressed bytes; the muxer represents the tail as DiscardPadding.
+            let integerRate=UInt64(rate)
+            for (i,delta) in durations.enumerated() {
+                if i % 1024 == 0 { try Task.checkCancellation();guard Date()<deadline else { throw Failure.bounds } }
+                let numerator=UInt64(delta)*integerRate
+                guard numerator % UInt64(scale)==0 else { throw Failure.unsupported }
+                let frames=numerator/UInt64(scale)
+                guard frames>0,frames<=1024,i==count-1 || frames==1024 else { throw Failure.unsupported }
+                if i==count-1 {
+                    // Integer nearest-nanosecond rounding; products are bounded by1023e9.
+                    finalPaddingNanoseconds=((1024-frames)*1_000_000_000+integerRate/2)/integerRate
+                }
+            }
+        }
         if let ctts=try optional(stbl,"ctts") { var covered=0;for row in try rows(ctts.data,width:8) { let n=Int(try u32(row,0));guard n>0,n<=count-covered,try u32(row,4)==0 else { throw Failure.unsupported };covered += n };guard covered==count else { throw Failure.unsupported } }
         var sync=Set<Int>()
         if let stss=try optional(stbl,"stss") { var prev=0;for row in try rows(stss.data,width:4) { let n=Int(try u32(row,0));guard n>prev,n<=count else { throw Failure.unsupported };sync.insert(n-1);prev=n };guard kind=="vide",sync.contains(0) else { throw Failure.unsupported } }
@@ -178,7 +203,7 @@ final class MP4SampleTable {
             let n=mappings[run].1;guard n<=count-result.count else { throw Failure.unsupported }
             var offset=offsets[chunk-1]
             for _ in 0..<n { let i=result.count,size=sampleSizes[i];if i % 1024 == 0 { try Task.checkCancellation();guard Date()<deadline else { throw Failure.bounds } };guard media.contains(where: { offset >= $0.lowerBound && offset <= $0.upperBound-Int64(size) }) else { throw Failure.bounds }
-                result.append(Sample(offset:offset,size:size,timestamp:Double(clock)/Double(scale),duration:Double(durations[i])/Double(scale),key:sync.contains(i)))
+                result.append(Sample(offset:offset,size:size,timestamp:Double(clock)/Double(scale),duration:Double(durations[i])/Double(scale),key:sync.contains(i),discardPaddingNanoseconds:i==count-1 ? finalPaddingNanoseconds:0))
                 offset += Int64(size);clock += UInt64(durations[i])
             }
         }

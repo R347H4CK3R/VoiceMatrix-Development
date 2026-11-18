@@ -6,7 +6,7 @@ if len(passed) < 6 or re.search(r"Test Case .* (?:skipped|failed)",text) or '** 
     raise SystemExit('Required actual-app adapter tests did not all execute successfully')
 required = {
     'OnDeviceMediaResolverTests': ['testResolverDiagnosticsUseFixedAllowlistedMappings'],
-    'LocalMediaAcquisitionTests': ['testHTMLMediaResponseRejectedWithSanitizedDiagnosticAndRetention', 'testNonMediaTypeIsDistinctAndHTMLPageAdmissionIsUnchanged'],
+    'LocalMediaAcquisitionTests': ['testMKVReceiptVerificationBindsSourceAndRejectsCorruptionAndLegacyAbsence', 'testYouTubeAcquisitionUsesResolverPlanWithoutPagePreflight', 'testResolverFirstAcquisitionPreservesAccessFailureAndRejectsForeignPlan', 'testHTMLMediaResponseRejectedWithSanitizedDiagnosticAndRetention', 'testNonMediaTypeIsDistinctAndHTMLPageAdmissionIsUnchanged'],
 }
 for suite, methods in required.items():
     for method in methods:

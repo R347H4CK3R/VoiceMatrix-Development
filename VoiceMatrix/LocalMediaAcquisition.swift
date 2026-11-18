@@ -4,7 +4,7 @@ import CryptoKit
 
 enum LocalMediaAcquisition {
     struct Result: Codable { let file: String; let sha256: String; let bytes: Int64 }
-    private struct Receipt: Codable { let input: URL; let parts: [LocalMediaURLPolicy.Part]; var files: [Result]; var merged: Result? }
+    private struct Receipt: Codable { let input: URL; let parts: [LocalMediaURLPolicy.Part]; var files: [Result]; var merged: Result?; var matroska: Result? }
     typealias Progress = @Sendable (String) -> Void
     static func acquire(input: URL, folder: URL, progress: @escaping Progress) async throws -> Result {
         do { return try await acquireChecked(input:input,folder:folder,progress:progress) }
@@ -18,39 +18,34 @@ enum LocalMediaAcquisition {
         let receiptURL=folder.appendingPathComponent("acquisition.json")
         var receipt: Receipt
         if FileManager.default.fileExists(atPath:receiptURL.path) {
-            let values=try receiptURL.resourceValues(forKeys:[.fileSizeKey,.isSymbolicLinkKey])
-            guard values.isSymbolicLink != true,(values.fileSize ?? Int.max)<=131_072 else { throw LocalMediaURLPolicy.Failure.changed }
-            receipt=try JSONDecoder().decode(Receipt.self,from:Data(contentsOf:receiptURL))
+            receipt = try readReceipt(receiptURL)
             guard receipt.input==normalized,(1...2).contains(receipt.parts.count),receipt.files.count<=receipt.parts.count else { throw LocalMediaURLPolicy.Failure.changed }
             for part in receipt.parts { try LocalMediaURLPolicy.validate(part.url,role:(try? LocalMediaURLPolicy.videoID(normalized)) != nil ? .stream:.direct) }
             for file in receipt.files { try await verify(file,folder:folder) }
-            if let merged=receipt.merged { try await verify(merged,folder:folder);progress("Reusing verified retained download and merged source.");return merged }
+            if let merged = receipt.merged {
+                try await verify(merged, folder: folder)
+                progress("Reusing verified retained download and merged source.")
+                try await retainMatroska(receipt: receipt, folder: folder, progress: progress)
+                return merged
+            }
             progress("Resuming acquisition. Verified completed tracks are reused; partial attempts are kept, never appended.")
         } else {
             let parts:[LocalMediaURLPolicy.Part]
             if let id=try? LocalMediaURLPolicy.videoID(normalized) {
-                progress("Requesting the ordinary public YouTube page directly from this iPhone. No login or external converter.")
-                let page=try await Transfer.download(normalized,role:.page,folder:folder,ext:"html",maximumBytes:min(4_000_000, try remainingBudget(folder:folder, reserveForMerge:false)),progress:progress)
-                do {
-                    parts=try LocalMediaURLPolicy.youtubePlan(Data(contentsOf:folder.appendingPathComponent(page.file)),videoID:id)
-                } catch let failure as LocalMediaURLPolicy.Failure {
-                    switch failure {
-                    case .unsupported, .noDirectStreams:
-                        try Task.checkCancellation()
-                        progress("Trying the bundled on-device resolver. No laptop, sign-in, access-check bypass or third-party conversion service is used.")
-                        #if os(iOS)
-                        parts = try await OnDeviceYouTubeResolver.shared.resolve(normalized, authorized: true)
-                        #else
-                        // Diagnostic hosts do not acquire through an iPhone-only runtime.
-                        throw failure
-                        #endif
-                        try Task.checkCancellation()
-                        progress("The on-device resolver returned a supported source plan. Native download and media checks still apply.")
-                    default: throw failure
-                    }
+                #if os(iOS)
+                // The bundled maintained extractor owns public-page parsing. A separate
+                // ad-hoc preflight must not fail before yt-dlp gets a chance to run.
+                parts = try await resolveYouTubePlan(input: normalized, progress: progress) { url in
+                    try await OnDeviceYouTubeResolver.shared.resolve(url, authorized: true)
                 }
+                #else
+                // Host-only diagnostics retain the parser, never impersonate an iPhone runtime.
+                progress("Requesting the ordinary public YouTube page directly from this diagnostic host.")
+                let page=try await Transfer.download(normalized,role:.page,folder:folder,ext:"html",maximumBytes:min(4_000_000, try remainingBudget(folder:folder, reserveForMerge:false)),progress:progress)
+                parts=try LocalMediaURLPolicy.youtubePlan(Data(contentsOf:folder.appendingPathComponent(page.file)),videoID:id)
+                #endif
             } else { parts=[.init(url:normalized,kind:.combined,ext:normalized.pathExtension.lowercased())] }
-            receipt=Receipt(input:normalized,parts:parts,files:[],merged:nil)
+            receipt=Receipt(input:normalized,parts:parts,files:[],merged:nil,matroska:nil)
             try JSONEncoder().encode(receipt).write(to:receiptURL,options:.atomic)
         }
         var downloaded:Int64=receipt.files.reduce(0){$0+$1.bytes}
@@ -74,9 +69,95 @@ enum LocalMediaAcquisition {
         try Task.checkCancellation()
         receipt.merged=result
         try JSONEncoder().encode(receipt).write(to:receiptURL,options:.atomic)
+        try await retainMatroska(receipt: receipt, folder: folder, progress: progress)
         progress("Acquisition complete: \(result.bytes) verified bytes retained. Starting local media checks.")
         return result
     }
+    /// Bounded regular-file reads reject symlinks, FIFOs and mutation during the read.
+    private static func readReceipt(_ url: URL) throws -> Receipt {
+        var bytes = Data()
+        do {
+            try RetainedMediaReader.read(url, maximumBytes: 131_072) { bytes.append($0) }
+            return try JSONDecoder().decode(Receipt.self, from: bytes)
+        } catch is CancellationError { throw CancellationError() }
+        catch { throw LocalMediaURLPolicy.Failure.changed }
+    }
+
+    /// Shared by fresh acquisition and retained-source resume. Never replaces any prior export.
+    private static func retainMatroska(receipt originalReceipt: Receipt, folder: URL, progress: @escaping Progress) async throws {
+        guard let source = originalReceipt.merged, source.file.hasSuffix(".mp4") else { return }
+        try Task.checkCancellation()
+        var receipt = originalReceipt
+        let output = folder.appendingPathComponent("retained-" + UUID().uuidString.lowercased() + ".mkv")
+        var ownedIdentity: [FileAttributeKey: Any]?
+        var committed = false
+        defer {
+            // Only our successfully promoted, still-identical new file can be removed.
+            // Prior receipts/exports and replacements by another operation are never touched.
+            if !committed, let owned = ownedIdentity,
+               let current = try? FileManager.default.attributesOfItem(atPath: output.path),
+               let device = owned[.systemNumber] as? NSNumber,
+               let inode = owned[.systemFileNumber] as? NSNumber,
+               current[.type] as? FileAttributeType == .typeRegular,
+               current[.systemNumber] as? NSNumber == device,
+               current[.systemFileNumber] as? NSNumber == inode {
+                try? FileManager.default.removeItem(at: output)
+            }
+        }
+        do {
+            if let existing = receipt.matroska {
+                guard existing.file.hasSuffix(".mkv") else { throw LocalMediaURLPolicy.Failure.changed }
+                try await verify(existing, folder: folder)
+                progress("Reusing the verified retained MKV export and MP4 decoder companion.")
+                return
+            }
+            let limit = min(LocalMediaURLPolicy.maximumBytes, try remainingBudget(folder: folder, reserveForMerge: false))
+            progress("Creating a genuine MKV copy on this iPhone. The original MP4 remains the decoding source; unsupported timing or codecs keep the MP4 fallback.")
+            _ = try await LocalMKVExport.export(input: folder.appendingPathComponent(source.file), destination: output, maxBytes: limit)
+            ownedIdentity = try FileManager.default.attributesOfItem(atPath: output.path)
+            receipt.matroska = try await digest(output)
+            try Task.checkCancellation()
+            try JSONEncoder().encode(receipt).write(to: folder.appendingPathComponent("acquisition.json"), options: .atomic)
+            committed = true
+            progress("MKV copy verified and retained. Processing uses the same retained MP4 companion on this iPhone; no laptop or server.")
+        } catch is CancellationError { throw CancellationError() }
+        catch {
+            progress("MKV export was not available for this media or storage budget. The verified MP4 is retained and local processing continues with it; no file was mislabeled as MKV. Existing exports are kept unchanged.")
+        }
+    }
+
+    static func verifiedMatroska(folder: URL, sourceSHA256: String) async throws -> URL? {
+        let directory = try folder.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard directory.isDirectory == true, directory.isSymbolicLink != true else { throw LocalMediaURLPolicy.Failure.changed }
+        let path = folder.appendingPathComponent("acquisition.json")
+        let receipt = try readReceipt(path)
+        guard let original = receipt.merged, original.sha256 == sourceSHA256, let export = receipt.matroska else { return nil }
+        try await verify(original, folder: folder)
+        guard export.file.hasSuffix(".mkv") else { throw LocalMediaURLPolicy.Failure.changed }
+        try await verify(export, folder: folder)
+        return folder.appendingPathComponent(export.file)
+    }
+
+    /// Resolve before downloading media; the native downloader independently revalidates every stream.
+    static func resolveYouTubePlan(input: URL, progress: @escaping Progress,
+                                  resolve: @Sendable (URL) async throws -> [LocalMediaURLPolicy.Part]) async throws -> [LocalMediaURLPolicy.Part] {
+        let normalized = try LocalMediaURLPolicy.input(input.absoluteString)
+        _ = try LocalMediaURLPolicy.videoID(normalized)
+        try Task.checkCancellation()
+        progress("Resolving the public YouTube URL with bundled yt-dlp on this iPhone. No laptop or external conversion service; access checks are not bypassed.")
+        let parts = try await resolve(normalized)
+        try Task.checkCancellation()
+        guard (1...2).contains(parts.count) else { throw LocalMediaURLPolicy.Failure.unsupported }
+        for part in parts { try LocalMediaURLPolicy.validate(part.url, role: .stream) }
+        if parts.count == 1 {
+            guard parts[0].kind == .combined, parts[0].ext == "mp4" else { throw LocalMediaURLPolicy.Failure.unsupported }
+        } else {
+            guard parts[0].kind == .video, parts[0].ext == "mp4", parts[1].kind == .audio, parts[1].ext == "m4a" else { throw LocalMediaURLPolicy.Failure.unsupported }
+        }
+        progress("The on-device resolver returned a supported source plan. Native download and media checks still apply.")
+        return parts
+    }
+
     private static func remainingBudget(folder:URL,reserveForMerge:Bool,completedSourceBytes:Int64 = 0) throws -> Int64 {
         let retained=try retainedBytes(root:folder.deletingLastPathComponent())
         let free=try folder.resourceValues(forKeys:[.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage ?? 0

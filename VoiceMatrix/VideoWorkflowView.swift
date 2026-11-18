@@ -15,6 +15,11 @@ struct VideoWorkflowView: View {
     private var unavailable: Bool { connectionIssue != nil }
 
     init(videoID: String? = nil) { self.videoID = videoID }
+    private var recoveryURL: String? {
+        guard let videoID, videoID.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil else { return nil }
+        return "https://www.youtube.com/watch?v=" + videoID
+    }
+
 
     @MainActor private func refresh() async {
         guard visible, scenePhase == .active, !refreshing else { return }
@@ -35,7 +40,16 @@ struct VideoWorkflowView: View {
 
     var body: some View {
         List {
-            Section("Laptop connection") {
+            Section("Continue on this iPhone") {
+                NavigationLink {
+                    LocalVideoStudioView(initialSourceURL: recoveryURL)
+                } label: {
+                    Label("Open on-iPhone Video Voice Studio", systemImage: "iphone.gen3")
+                }.accessibilityIdentifier("workflow-on-iphone-recovery")
+                Text("No laptop or Tailscale is needed for the on-iPhone studio. This page only shows the separate optional laptop log. Opening the studio does not start a download or transfer permission; confirm your source there. Existing lists, jobs and voices are kept.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Optional laptop connection") {
                 if let host = VideoWorkflowConnectionDisplay.host(UserDefaults.standard.string(forKey: "laptopURL") ?? LaptopConnection.bundledURL) {
                     Text("Configured laptop host: \(host)")
                         .font(.caption).textSelection(.enabled)

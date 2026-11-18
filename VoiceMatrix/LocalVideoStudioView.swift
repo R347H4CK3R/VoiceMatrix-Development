@@ -10,6 +10,7 @@ struct LocalVideoStudioView: View {
     @State private var journalPage: LocalStudioJournal.Page?
     @State private var journalError: String?
     @State private var sourceURL = ""
+    @State private var mkvExport: URL?
     @State private var importing = false
     @State private var selected: URL?
     @State private var authorized = false
@@ -17,6 +18,10 @@ struct LocalVideoStudioView: View {
     @State private var retryRequest: FreshDownloadRequest?
     @State private var speakerDestination: CharacterStudioMode?
     @State private var selectionError: String?
+    init(initialSourceURL: String? = nil) {
+        let admitted = initialSourceURL.flatMap { try? LocalMediaURLPolicy.input($0).absoluteString }
+        _sourceURL = State(initialValue: admitted ?? "")
+    }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -55,6 +60,11 @@ struct LocalVideoStudioView: View {
                     .accessibilityIdentifier("local-video-download")
                 if let selectionError { Text(selectionError).foregroundStyle(.red) }
                 Text(local.notice).accessibilityIdentifier("local-video-status")
+                Text("Compatible H.264/AAC downloads also retain a genuine MKV export. Unsupported codecs, reordered frames or tight storage keep the verified MP4 fallback. Analysis uses the MP4 companion inside this app, not a laptop.").font(.footnote).foregroundStyle(.secondary)
+                if let mkvExport, !local.busy {
+                    ShareLink(item: mkvExport) { Label("Save or share retained MKV", systemImage: "square.and.arrow.up") }
+                        .accessibilityIdentifier("local-video-share-mkv")
+                }
                 if local.busy {
                     ProgressView("Working on this iPhone…")
                     Button("Pause and retain files") { local.cancel() }.buttonStyle(.bordered)
@@ -201,6 +211,10 @@ struct LocalVideoStudioView: View {
                   primaryButton: .default(Text("Download original source again")) {
                       local.retryAcquisition(jobID: request.id, authorized: true, library: library, audio: audio, speech: speech)
                   }, secondaryButton: .cancel())
+        }
+        .task(id: "\(local.current?.id.uuidString ?? "none")-\(local.busy)") {
+            mkvExport = nil
+            mkvExport = await local.verifiedMKVExport()
         }
         .onChange(of: local.current?.id) { _, _ in journalPage=nil; journalError=nil }
         .onChange(of: sourceURL) { _, _ in authorized = false }

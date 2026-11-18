@@ -1,6 +1,29 @@
 import XCTest
 import UIKit
 @MainActor final class LocalVideoStudioUITests: XCTestCase {
+    func testLegacyLaptopLogOffersStandaloneRecoveryWithoutStartingWork() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-tutorialSeen", "YES", "-laptopURL", "https://127.0.0.1:9"]
+        app.launch()
+        let optional = app.buttons["Optional laptop tools"]
+        for _ in 0..<8 where !optional.isHittable { app.swipeUp() }
+        XCTAssertTrue(optional.waitForExistence(timeout: 10)); optional.tap()
+        let list = app.buttons["saved-video-list"]
+        for _ in 0..<5 where !list.isHittable { app.swipeUp() }
+        XCTAssertTrue(list.exists); list.tap()
+        let log = app.buttons["live-video-workflow"]
+        for _ in 0..<10 where !log.isHittable { app.swipeUp() }
+        XCTAssertTrue(log.exists); log.tap()
+        let recover = app.buttons["workflow-on-iphone-recovery"]
+        XCTAssertTrue(recover.waitForExistence(timeout: 15)); recover.tap()
+        XCTAssertTrue(app.navigationBars["Video Voice Studio"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["local-video-import"].exists)
+        XCTAssertFalse(app.buttons["local-video-download"].isEnabled)
+        XCTAssertFalse(app.buttons["local-video-generate"].isEnabled)
+        app.navigationBars["Video Voice Studio"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["workflow-on-iphone-recovery"].waitForExistence(timeout: 10))
+    }
+
     func testExplicitPasteStagesURLWithoutStartingDownloadAndRejectsOversize() {
         UIPasteboard.general.string = "https://youtu.be/AAAAAAAAAAA"
         let app = XCUIApplication()

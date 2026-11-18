@@ -1,9 +1,70 @@
 import XCTest
 import AVFoundation
 import CoreVideo
+import CryptoKit
 @testable import VoiceMatrix
 
 final class LocalMediaAcquisitionTests: XCTestCase {
+    func testYouTubeAcquisitionUsesResolverPlanWithoutPagePreflight() async throws {
+        let plan = try await LocalMediaAcquisition.resolveYouTubePlan(
+            input: URL(string: "https://youtu.be/ZNFskLKrhx4?is=ignored")!, progress: { _ in }) { input in
+                XCTAssertEqual(input.absoluteString, "https://www.youtube.com/watch?v=ZNFskLKrhx4")
+                return [.init(url: URL(string: "https://r1.googlevideo.com/synthetic.mp4")!, kind: .combined, ext: "mp4")]
+            }
+        XCTAssertEqual(plan.count, 1)
+        XCTAssertEqual(plan[0].url.host, "r1.googlevideo.com")
+    }
+    func testResolverFirstAcquisitionPreservesAccessFailureAndRejectsForeignPlan() async throws {
+        let input = URL(string: "https://youtu.be/ZNFskLKrhx4")!
+        do {
+            _ = try await LocalMediaAcquisition.resolveYouTubePlan(input: input, progress: { _ in }) { _ in
+                throw LocalMediaURLPolicy.Failure.restricted
+            }
+            XCTFail("Restricted source must not become downloadable")
+        } catch LocalMediaURLPolicy.Failure.restricted { }
+        do {
+            _ = try await LocalMediaAcquisition.resolveYouTubePlan(input: input, progress: { _ in }) { _ in
+                [.init(url: URL(string: "https://example.com/video.mp4")!, kind: .combined, ext: "mp4")]
+            }
+            XCTFail("Foreign stream host must not become downloadable")
+        } catch LocalMediaURLPolicy.Failure.url { }
+    }
+    func testMKVReceiptVerificationBindsSourceAndRejectsCorruptionAndLegacyAbsence() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = Data([1,2,3,4]), mkv = Data([0x1a,0x45,0xdf,0xa3,5])
+        func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+        let sourceHash = hash(source)
+        try source.write(to: root.appendingPathComponent("source.mp4"))
+        try mkv.write(to: root.appendingPathComponent("copy.mkv"))
+        var receipt: [String:Any] = ["input":"https://www.youtube.com/watch?v=ZNFskLKrhx4", "parts":[], "files":[],
+            "merged":["file":"source.mp4","sha256":sourceHash,"bytes":source.count]]
+        func save() throws { try JSONSerialization.data(withJSONObject: receipt).write(to: root.appendingPathComponent("acquisition.json")) }
+        try save()
+        let legacy = try await LocalMediaAcquisition.verifiedMatroska(folder: root, sourceSHA256: sourceHash)
+        XCTAssertNil(legacy)
+        receipt["matroska"] = ["file":"copy.mkv","sha256":hash(mkv),"bytes":mkv.count]
+        try save()
+        let valid = try await LocalMediaAcquisition.verifiedMatroska(folder: root, sourceSHA256: sourceHash)
+        XCTAssertEqual(valid?.lastPathComponent, "copy.mkv")
+        let mismatch = try await LocalMediaAcquisition.verifiedMatroska(folder: root, sourceSHA256: String(repeating:"0",count:64))
+        XCTAssertNil(mismatch)
+        try Data([9]).write(to: root.appendingPathComponent("copy.mkv"))
+        do { _ = try await LocalMediaAcquisition.verifiedMatroska(folder: root, sourceSHA256: sourceHash); XCTFail("Changed MKV admitted") }
+        catch LocalMediaURLPolicy.Failure.changed { }
+        receipt["matroska"] = ["file":"../outside.mkv","sha256":hash(mkv),"bytes":mkv.count]
+        try save()
+        do { _ = try await LocalMediaAcquisition.verifiedMatroska(folder: root, sourceSHA256: sourceHash); XCTFail("Traversal admitted") }
+        catch LocalMediaURLPolicy.Failure.changed { }
+        let receiptURL = root.appendingPathComponent("acquisition.json")
+        let backup = root.appendingPathComponent("saved-receipt.json")
+        try FileManager.default.moveItem(at: receiptURL, to: backup)
+        try FileManager.default.createSymbolicLink(at: receiptURL, withDestinationURL: backup)
+        do { _ = try await LocalMediaAcquisition.verifiedMatroska(folder: root, sourceSHA256: sourceHash); XCTFail("Symlink receipt admitted") }
+        catch LocalMediaURLPolicy.Failure.changed { }
+        XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("source.mp4")), source)
+    }
     func testNoDirectURLPlayerResponseHasActionableFailure() throws {
         var metadata=progressive;metadata.removeValue(forKey:"url")
         do {

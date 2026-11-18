@@ -12,7 +12,7 @@ class VideoWorkflowReceiptSummaryTests(unittest.TestCase):
     def test_video_receipts_precede_the_voice_catalog(self):
         source = (ROOT / 'VoiceMatrix/VideoWorkflowView.swift').read_text(encoding='utf-8')
         catalog = source.index('if let catalog = snapshot.catalog')
-        self.assertLess(source.index('Section("Laptop connection")'), source.index('if snapshot.videos.isEmpty'))
+        self.assertLess(source.index('Section("Optional laptop connection")'), source.index('if snapshot.videos.isEmpty'))
         self.assertLess(source.index('if snapshot.videos.isEmpty'), catalog)
         self.assertLess(source.index('VideoWorkflowSummary(video: video)'), catalog)
         self.assertLess(source.index('if snapshot.hasMore == true'), catalog)

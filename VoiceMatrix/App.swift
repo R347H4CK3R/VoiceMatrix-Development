@@ -98,7 +98,7 @@ struct HomeView: View {
                         }.accessibilityIdentifier("laptop-rvc")
                         NavigationLink { VideoQueueView() } label: {
                             Label("Saved video list · optional laptop workflow", systemImage: "list.bullet.rectangle").font(.subheadline.weight(.semibold))
-                        }.padding(.vertical, 8)
+                        }.padding(.vertical, 8).accessibilityIdentifier("saved-video-list")
                     }
                 }
                 Label("Your saved voices work offline", systemImage: "lock.shield")

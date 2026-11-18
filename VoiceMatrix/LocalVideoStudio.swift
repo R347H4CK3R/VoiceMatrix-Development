@@ -130,6 +130,13 @@ import CryptoKit
         try snapshot.data.write(to: folder.appendingPathComponent("job.json"), options: .atomic)
         current = snapshot.value; notice = text
     }
+    func verifiedMKVExport() async -> URL? {
+        guard !busy, let job = current, let digest = job.sourceSHA256 else { return nil }
+        let directory = root.appendingPathComponent(job.id.uuidString.lowercased(), isDirectory: true)
+        let export = try? await LocalMediaAcquisition.verifiedMatroska(folder: directory, sourceSHA256: digest)
+        guard !Task.isCancelled, current?.id == job.id, !busy else { return nil }
+        return export
+    }
     func journalPage(offset: Int = 0) throws -> LocalStudioJournal.Page {
         guard offset>=0,let current else { throw LocalStudioJournal.Failure.unsafe }
         let file=folder.appendingPathComponent(LocalStudioJournal.filename)
@@ -305,7 +312,7 @@ import CryptoKit
                     let result = try await LocalMediaAcquisition.acquire(input: input, folder: jobFolder) { [weak self] message in
                         Task { @MainActor in
                             guard let self, self.runToken == run, self.busy, self.current?.stage == "Acquiring source" else { return }
-                            try? self.update("Acquiring source", message, log: !message.hasPrefix("Received ") && !message.hasPrefix("Merging tracks:"))
+                            try? self.update("Acquiring source", message, log: (!message.hasPrefix("Received ") || message.hasPrefix("Received the ")) && !message.hasPrefix("Merging tracks:"))
                         }
                     }
                     try check()

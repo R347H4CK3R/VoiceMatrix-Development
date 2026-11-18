@@ -1,7 +1,7 @@
 name: On-device resolver full-app integration (no release)
 on:
   push:
-    branches: [fix/build17-dependency-recovery, feature/voicematrix-ondevice-ytdlp, feature/voicematrix-fresh-acquisition, feature/voicematrix-speaker-handoff, feature/voicematrix-download-diagnostics]
+    branches: [fix/standalone-mkv-recovery, fix/build17-dependency-recovery, feature/voicematrix-ondevice-ytdlp, feature/voicematrix-fresh-acquisition, feature/voicematrix-speaker-handoff, feature/voicematrix-download-diagnostics]
     paths:
       - 'tests/fixtures/adaptive-*'
       - 'tests/test_adaptive_merge_fixture.py'

@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import CoreMedia
+import Darwin
 import CryptoKit
 @preconcurrency import CoreML
 import FluidAudio
@@ -17,12 +18,14 @@ enum LocalSpeakerDiarization {
     }
     enum Failure: LocalizedError {
         case bundleUnavailable, invalidBundle, invalidAudio, invalidTimeline, resourceBound
+        case invalidRetainedPCMFrames(actual: Int, expected: Int)
         var errorDescription: String? {
             switch self {
             case .bundleUnavailable: return "Bundled speaker analysis is missing. Install a complete standalone build. No laptop or server fallback was used."
             case .invalidBundle: return "Bundled speaker analysis failed its integrity check. Existing voices and media were retained."
             case .invalidAudio: return "Speaker analysis needs one readable audio track in local media. No speakers were invented."
             case .invalidTimeline: return "The audio timeline has a gap or offset over 50 milliseconds, which could select the wrong speaker. Export the media with a continuous audio track and import it again. Your original and existing voices were retained."
+            case .invalidRetainedPCMFrames: return "Speaker analysis could not decode the complete retained clip. No review was saved."
             case .resourceBound: return "Speaker analysis exceeded this app's safety limit. Retained media and voices are unchanged."
             }
         }
@@ -57,7 +60,7 @@ enum LocalSpeakerDiarization {
             return LocalSpeakerPolicy.Speaker(speaker:speaker.speaker,windows:safe)
         }
     }
-    static func analyze(source: URL, bundle: URL? = Bundle.main.url(forResource:"Diarization",withExtension:nil), progress: @escaping @Sendable (String) -> Void) async throws -> Analysis {
+    static func analyze(source: URL, bundle: URL? = Bundle.main.url(forResource:"Diarization",withExtension:nil), retainedClipFrames: Int? = nil, progress: @escaping @Sendable (String) -> Void) async throws -> Analysis {
         guard let bundle else { throw Failure.bundleUnavailable }
         let worker = Task.detached(priority:.userInitiated) {
             try Task.checkCancellation()
@@ -65,7 +68,12 @@ enum LocalSpeakerDiarization {
             try verify(bundle)
             progress("Decoding local audio for speaker analysis.")
             let sourceHash=try sourceDigest(source)
-            let samples = try await decode(source,progress:progress)
+            let samples: [Float]
+            if let retainedClipFrames {
+                samples = try decodeRetainedClip(source, frames: retainedClipFrames, sourceSHA256: sourceHash)
+            } else {
+                samples = try await decode(source,progress:progress)
+            }
             try Task.checkCancellation()
             progress("Loading bundled speaker-analysis models. No network is used.")
             let start = Date()
@@ -140,6 +148,118 @@ enum LocalSpeakerDiarization {
         for name in ["Segmentation","FBank","Embedding","PldaRho"] {
             guard lock.files[name+".mlmodelc/weights/weight.bin"] != nil else { throw Failure.invalidBundle }
         }
+    }
+    /// Only the canonical Float32 stereo WAV produced by retained clip handoff.
+    /// AVAssetReader's implicit resampling may drop tail frames. Read the bounded
+    /// canonical PCM, then use normal converter priming and explicitly drain EOF.
+    static func decodeRetainedClip(_ source: URL, frames: Int, sourceSHA256: String) throws -> [Float] {
+        try Task.checkCancellation()
+        guard (132_300...441_000).contains(frames) else { throw Failure.resourceBound }
+        guard source.isFileURL else { throw Failure.invalidAudio }
+        let byteCount = 44 + frames * 8
+        let fd = open(source.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard fd >= 0 else { throw Failure.invalidAudio }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        defer { try? handle.close() }
+        var info = stat()
+        guard fstat(fd, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+              info.st_size == off_t(byteCount) else { throw Failure.invalidAudio }
+        var bytes = Data()
+        bytes.reserveCapacity(byteCount)
+        while bytes.count < byteCount {
+            try Task.checkCancellation()
+            guard let block = try handle.read(upToCount: min(65_536, byteCount - bytes.count)), !block.isEmpty else {
+                throw Failure.invalidAudio
+            }
+            bytes.append(block)
+        }
+        guard (try handle.read(upToCount: 1))?.isEmpty ?? true,
+              SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == sourceSHA256 else {
+            throw Failure.invalidAudio
+        }
+        let canonical = bytes.withUnsafeBytes { raw -> Bool in
+            func u32(_ offset: Int) -> UInt32 { UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt32.self)) }
+            func u16(_ offset: Int) -> UInt16 { UInt16(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt16.self)) }
+            return u32(0) == 0x46464952 && u32(4) == UInt32(byteCount - 8)  // RIFF
+                && u32(8) == 0x45564157 && u32(12) == 0x20746d66 && u32(16) == 16  // WAVEfmt
+                && u16(20) == 3 && u16(22) == 2 && u32(24) == 44_100 && u32(28) == 352_800
+                && u16(32) == 8 && u16(34) == 32 && u32(36) == 0x61746164 && u32(40) == UInt32(frames * 8) // data
+        }
+        guard canonical,
+              let native = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 44_100, channels: 1, interleaved: false),
+              let output = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false),
+              let inputPCM = AVAudioPCMBuffer(pcmFormat: native, frameCapacity: 8192),
+              let outputPCM = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: 4096),
+              let converter = AVAudioConverter(from: native, to: output) else { throw Failure.invalidAudio }
+        converter.primeMethod = .normal
+        // Quantize the source duration to the nearest 16 kHz sample; never pad or crop.
+        let expected = (frames * 16_000 + 22_050) / 44_100
+        let pcm = bytes
+        var samples: [Float] = []
+        samples.reserveCapacity(expected)
+        var cursor = 0, empty = 0, sourceEOF = false
+        var inputError: Error?
+        for _ in 0..<256 {
+            try Task.checkCancellation()
+            outputPCM.frameLength = 0
+            var error: NSError?
+            let status = converter.convert(to: outputPCM, error: &error) { requested, state in
+                do {
+                    try Task.checkCancellation()
+                    if cursor == frames {
+                        sourceEOF = true
+                        state.pointee = .endOfStream
+                        return nil
+                    }
+                    let count = min(Int(requested), Int(inputPCM.frameCapacity), frames - cursor)
+                    guard count > 0, let mono = inputPCM.floatChannelData?[0] else { throw Failure.invalidAudio }
+                    try pcm.withUnsafeBytes { raw in
+                        for i in 0..<count {
+                            if i % 2048 == 0 { try Task.checkCancellation() }
+                            let offset = 44 + (cursor + i) * 8
+                            let left = Float(bitPattern: UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
+                            let right = Float(bitPattern: UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: offset + 4, as: UInt32.self)))
+                            guard left.isFinite, right.isFinite, abs(left) <= 1.000001, abs(right) <= 1.000001 else {
+                                throw Failure.invalidAudio
+                            }
+                            mono[i] = 0.5 * left + 0.5 * right
+                        }
+                    }
+                    cursor += count
+                    inputPCM.frameLength = AVAudioFrameCount(count)
+                    state.pointee = .haveData
+                    return inputPCM
+                } catch {
+                    inputError = error
+                    state.pointee = .noDataNow
+                    return nil
+                }
+            }
+            try Task.checkCancellation()
+            if let inputError { throw inputError }
+            guard error == nil, status != .error,
+                  let data = outputPCM.floatChannelData?[0] else { throw Failure.invalidAudio }
+            let count = Int(outputPCM.frameLength)
+            guard count <= expected - samples.count else {
+                throw Failure.invalidRetainedPCMFrames(actual: samples.count + count, expected: expected)
+            }
+            for i in 0..<count {
+                if i % 2048 == 0 { try Task.checkCancellation() }
+                let value = data[i]
+                guard value.isFinite, abs(value) <= 1.01 else { throw Failure.invalidAudio }
+                samples.append(value)
+            }
+            if status == .endOfStream {
+                guard sourceEOF, cursor == frames else { throw Failure.invalidAudio }
+                guard samples.count == expected else {
+                    throw Failure.invalidRetainedPCMFrames(actual: samples.count, expected: expected)
+                }
+                return samples
+            }
+            empty = count == 0 ? empty + 1 : 0
+            guard empty < 3 else { throw Failure.invalidAudio }
+        }
+        throw Failure.resourceBound
     }
     private static func decode(_ source: URL, progress: @Sendable (String)->Void) async throws -> [Float] {
         guard source.isFileURL else { throw Failure.invalidAudio }

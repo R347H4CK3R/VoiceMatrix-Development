@@ -38,3 +38,14 @@ class ClipSpeakerReviewSurfaceTests(unittest.TestCase):
         self.assertIn(".onChange(of: local.retainedSeparationSource)", view)
         self.assertEqual(view.count("review.start("), 1)
         self.assertIn("review.cancel()", view)
+
+    def test_canonical_pcm_reader_drains_only_the_retained_clip_route(self):
+        decoder = source("LocalSpeakerDiarization")
+        coordinator = source("ClipSpeakerReviewCoordinator")
+        self.assertIn("retainedClipFrames: clip.frames", coordinator)
+        self.assertIn("func decodeRetainedClip(", decoder)
+        canonical = decoder.split("func decodeRetainedClip(", 1)[1].split("private static func decode(", 1)[0]
+        for required in (".primeMethod = .normal", ".endOfStream", "samples.count == expected", "SHA256.hash(data:"):
+            self.assertIn(required, canonical)
+        self.assertIn("if let retainedClipFrames", decoder)
+        self.assertIn("try await decode(source,progress:progress)", decoder)

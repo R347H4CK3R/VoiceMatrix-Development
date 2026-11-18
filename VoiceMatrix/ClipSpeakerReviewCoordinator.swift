@@ -7,7 +7,7 @@ enum ClipSpeakerReviewAnalyzer {
                         progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> LocalSpeakerDiarization.Analysis {
         let snapshot = try store.snapshot(for: clip)
         defer { try? FileManager.default.removeItem(at: snapshot) } // Only this request's private scratch copy.
-        let analysis = try await LocalSpeakerDiarization.analyze(source: snapshot, bundle: bundle, progress: progress)
+        let analysis = try await LocalSpeakerDiarization.analyze(source: snapshot, bundle: bundle, retainedClipFrames: clip.frames, progress: progress)
         try Task.checkCancellation()
         try store.verify(clip)
         try store.validate(analysis, for: clip)

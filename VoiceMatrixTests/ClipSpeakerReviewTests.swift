@@ -1,6 +1,7 @@
 import XCTest
 import Foundation
 import CryptoKit
+import AVFoundation
 @testable import VoiceMatrix
 
 final class ClipSpeakerReviewTests: XCTestCase {
@@ -36,7 +37,7 @@ final class ClipSpeakerReviewTests: XCTestCase {
         }
     }
 
-    private func fixture(frames: Int = 176_400) throws -> Fixture {
+    private func fixture(frames: Int = 176_400, samples: [Float]? = nil) throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         addTeardownBlock { try FileManager.default.removeItem(at: root) }
         let clips = SeparationStore(root: root.appendingPathComponent("clips"))
@@ -49,7 +50,7 @@ final class ClipSpeakerReviewTests: XCTestCase {
         let folder = clips.root.appendingPathComponent("Clip-" + id.uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         let wave = folder.appendingPathComponent("clip.wav")
-        try SeparationStore.writeWAV(Array(repeating: 0.03, count: frames * 2), gain: 1, to: wave)
+        try SeparationStore.writeWAV(samples ?? Array(repeating: 0.03, count: frames * 2), gain: 1, to: wave)
         let clipBytes = try Data(contentsOf: wave), hash = digest(clipBytes)
         let receipt = folder.appendingPathComponent("receipt.json")
         let receiptBytes = try JSONEncoder().encode(SeparationClipHandoff.Receipt(id: id, sourceJobID: sourceID,
@@ -185,6 +186,102 @@ final class ClipSpeakerReviewTests: XCTestCase {
         let noEvidence = try quiet.store.publish(quiet.analysis(counts: [0,0,0,0]), for: quiet.clip)
         XCTAssertTrue(noEvidence.groups.isEmpty)
         XCTAssertFalse(noEvidence.hasOverlap)
+    }
+
+    // Independent native file reading plus different converter buffer sizes checks
+    // the actual boundary and channel balance, not just duration.
+    private func referencePCM(_ url: URL, frames: Int) throws -> [Float] {
+        let wav = try AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false)
+        let filePCM = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: wav.processingFormat, frameCapacity: AVAudioFrameCount(frames)))
+        try wav.read(into: filePCM)
+        XCTAssertEqual(Int(filePCM.frameLength), frames)
+        let channels = try XCTUnwrap(filePCM.floatChannelData)
+        let mono = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 44_100, channels: 1, interleaved: false))
+        let target = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false))
+        let input = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: 1_537))
+        let output = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: target, frameCapacity: 1_024))
+        let converter = try XCTUnwrap(AVAudioConverter(from: mono, to: target))
+        converter.primeMethod = .normal
+        var offset = 0, result: [Float] = []
+        for _ in 0..<200 {
+            output.frameLength = 0
+            var error: NSError?
+            let status = converter.convert(to: output, error: &error) { requested, state in
+                guard offset < frames else { state.pointee = .endOfStream; return nil }
+                let count = min(frames - offset, Int(requested), Int(input.frameCapacity))
+                guard count > 0 else { state.pointee = .noDataNow; return nil }
+                let monoData = input.floatChannelData![0]
+                for i in 0..<count {
+                    monoData[i] = 0.5 * channels[0][offset + i] + 0.5 * channels[1][offset + i]
+                }
+                offset += count
+                input.frameLength = AVAudioFrameCount(count)
+                state.pointee = .haveData
+                return input
+            }
+            XCTAssertNil(error)
+            XCTAssertNotEqual(status, .error)
+            result.append(contentsOf: UnsafeBufferPointer(start: output.floatChannelData![0], count: Int(output.frameLength)))
+            if status == .endOfStream {
+                XCTAssertEqual(offset, frames)
+                return result
+            }
+        }
+        XCTFail("Reference AVAudioConverter did not drain")
+        return result
+    }
+
+    func testRetainedCanonicalPCMDecodesExactThreeEightAndTenSecondsWithAVAudioFileParity() throws {
+        for seconds in [3, 8, 10] {
+            let frames = seconds * 44_100
+            var stereo: [Float] = []
+            stereo.reserveCapacity(frames * 2)
+            for i in 0..<frames {
+                stereo.append(i + 20 >= frames ? 0.7 : Float(i % 229 - 114) / 500)
+                stereo.append(i < 40 ? -0.4 : Float(i % 101 - 50) / 300)
+            }
+            let f = try fixture(frames: frames, samples: stereo)
+            let samples = try LocalSpeakerDiarization.decodeRetainedClip(f.clip.url, frames: frames, sourceSHA256: f.clip.sha256)
+            let oracle = try referencePCM(f.clip.url, frames: frames)
+            XCTAssertEqual(samples.count, seconds * 16_000)
+            XCTAssertEqual(oracle.count, seconds * 16_000)
+            let largestDifference = zip(samples, oracle).map { abs($0.0 - $0.1) }.max() ?? .infinity
+            XCTAssertLessThan(largestDifference, 1e-6)
+            try f.assertOriginalsUnchanged()
+        }
+    }
+
+    func testRetainedCanonicalPCMRejectsWrongSizeHashAndHeaderWithoutWriting() throws {
+        let f = try fixture()
+        XCTAssertThrowsError(try LocalSpeakerDiarization.decodeRetainedClip(f.clip.url, frames: 132_299, sourceSHA256: f.clip.sha256))
+        XCTAssertThrowsError(try LocalSpeakerDiarization.decodeRetainedClip(f.clip.url, frames: f.clip.frames - 1, sourceSHA256: f.clip.sha256))
+        XCTAssertThrowsError(try LocalSpeakerDiarization.decodeRetainedClip(f.clip.url, frames: f.clip.frames, sourceSHA256: String(repeating: "f", count: 64)))
+        var invalid = f.clipBytes
+        invalid[24] ^= 0x01 // Corrupt sample rate even with a matching raw digest.
+        let malformed = f.clip.url.deletingLastPathComponent().appendingPathComponent("wrong-rate.wav")
+        try invalid.write(to: malformed)
+        XCTAssertThrowsError(try LocalSpeakerDiarization.decodeRetainedClip(malformed, frames: f.clip.frames, sourceSHA256: digest(invalid)))
+        XCTAssertEqual(try Data(contentsOf: malformed), invalid)
+        try f.assertOriginalsUnchanged()
+    }
+
+    @MainActor
+    func testRetainedCanonicalPCMDoesNotReturnSamplesAfterCancellation() async throws {
+        let f = try fixture(), gate = ModelGate()
+        let clip = f.clip
+        let task = Task.detached {
+            await gate.pause()
+            return try LocalSpeakerDiarization.decodeRetainedClip(clip.url, frames: clip.frames, sourceSHA256: clip.sha256)
+        }
+        let started = await waitUntil { await gate.waiting }
+        XCTAssertTrue(started)
+        task.cancel()
+        await gate.finish()
+        do {
+            _ = try await task.value
+            XCTFail("A cancelled decode returned audio")
+        } catch is CancellationError { }
+        try f.assertOriginalsUnchanged()
     }
 
     private actor ModelGate {

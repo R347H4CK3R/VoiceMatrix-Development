@@ -29,6 +29,8 @@ class SeparationSurfaceTests(unittest.TestCase):
         self.assertIn('settings:disk.settings,commonFormat:.pcmFormatFloat32,interleaved:false',probe)
         self.assertIn('FAIL separation import probe:',probe)
         self.assertIn('stage("resampled decode")',probe)
+        self.assertIn('file.processingFormat.channelCount==3 && file.length==4410',probe)
+        self.assertIn('catch SeparationStore.Failure.invalid',probe)
 
 class SeparationImportTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('swiftc') and __import__('sys').platform=='darwin','Apple audio framework required')

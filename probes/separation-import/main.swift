@@ -67,8 +67,30 @@ let exactLimit=try stage("resampled exact ten second boundary") {try SeparationA
 precondition(exactLimit.left.count==441000 && exactLimit.right.count==441000)
 let long=try fixture("long",rate:44100,channels:2,frames:441001)
 do {_=try SeparationAudioImport.decode(long);fatalError("overlong input accepted")}catch{}
-let multichannel=try fixture("surround",rate:44100,channels:3,frames:4410)
-do {_=try SeparationAudioImport.decode(multichannel);fatalError("multichannel accepted")}catch{}
+// A three-channel AVAudioFormat needs an explicit channel layout. Build a
+// standard WAVE_FORMAT_EXTENSIBLE PCM fixture with the front-left/right/center
+// speaker mask instead of force-unwrapping the channel-count-only initializer.
+let multichannel=root.appendingPathComponent("surround.wav")
+try stage("create explicit-layout three-channel PCM WAV") {
+    var data=Data()
+    func word<T:FixedWidthInteger>(_ x:T) {var value=x.littleEndian;withUnsafeBytes(of:&value){data.append(contentsOf:$0)}}
+    let byteCount=4410*3*2
+    data.append(contentsOf:"RIFF".utf8);word(UInt32(60+byteCount));data.append(contentsOf:"WAVEfmt ".utf8)
+    word(UInt32(40));word(UInt16(0xfffe));word(UInt16(3));word(UInt32(44100));word(UInt32(44100*6))
+    word(UInt16(6));word(UInt16(16));word(UInt16(22));word(UInt16(16));word(UInt32(7))
+    data.append(contentsOf:[UInt8](arrayLiteral:1,0,0,0,0,0,16,0,128,0,0,170,0,56,155,113))
+    data.append(contentsOf:"data".utf8);word(UInt32(byteCount))
+    for _ in 0..<4410 {word(Int16(4096));word(Int16(-8192));word(Int16(2048))}
+    try data.write(to:multichannel,options:.withoutOverwriting)
+}
+try stage("verify valid three-channel source before policy rejection") {
+    let file=try AVAudioFile(forReading:multichannel,commonFormat:.pcmFormatFloat32,interleaved:false)
+    precondition(file.processingFormat.channelCount==3 && file.length==4410)
+}
+try stage("reject supported-decoder but unsupported-policy channel count") {
+    do {_=try SeparationAudioImport.decode(multichannel);throw ProbeFailure(description:"multichannel accepted")}
+    catch SeparationStore.Failure.invalid {} // Reject by our channel policy, not an unreadable fixture.
+}
 print("Stereo, mono, resampling, source preservation and full-length bounds passed")
 
 }

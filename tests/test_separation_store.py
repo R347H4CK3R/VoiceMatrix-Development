@@ -21,6 +21,10 @@ class SeparationSurfaceTests(unittest.TestCase):
         self.assertNotIn('URLSession',view)
         self.assertNotIn('VideoQueue',view)
         self.assertIn('Both stems use the same gain',view)
+        probe=(ROOT/'probes/separation-import/main.swift').read_text()
+        self.assertIn('settings:disk.settings,commonFormat:.pcmFormatFloat32,interleaved:false',probe)
+        self.assertIn('FAIL separation import probe:',probe)
+        self.assertIn('stage("resampled decode")',probe)
 
 class SeparationImportTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('swiftc') and __import__('sys').platform=='darwin','Apple audio framework required')

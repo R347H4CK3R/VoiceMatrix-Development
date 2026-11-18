@@ -12,7 +12,16 @@ class SetupTests(unittest.TestCase):
         path=root/'build.zip'
         with zipfile.ZipFile(path,'w') as z:
             for name in ('ffmpeg.exe','ffprobe.exe'):z.writestr(setup.ROOT+'/bin/'+name,b'MZsynthetic-test-not-executable')
-            if extra: z.writestr(*extra)
+            if extra:
+                entry, payload = extra
+                if isinstance(entry, str):
+                    # ZipInfo normalizes native backslashes on Windows construction.
+                    # Preserve the malicious raw ZIP name so the reader is exercised.
+                    info = zipfile.ZipInfo('placeholder')
+                    info.filename = entry
+                    info.orig_filename = entry
+                    entry = info
+                z.writestr(entry, payload)
         return path
     def test_verified_extraction_and_exclusive_destination(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -1,0 +1,52 @@
+name: Independent durable RVC history IPA inspection (no release)
+'on':
+  push:
+    branches: [verification/rvc-history-ipa-inspection]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: verifier
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
+        ref: 3783d72ce5798bd8230784c806eebe06dfa87ccb
+        path: target
+        persist-credentials: false
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Verify inspection regressions
+      working-directory: verifier
+      run: python3 -m unittest tests.test_independent_rvc_history_inspection -v
+    - name: Authenticate exact artifact and run before downloading
+      env:
+        GH_TOKEN: ${{ github.token }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 verifier/tools/verification/inspect_rvc_history_artifact.py pins
+        mkdir evidence
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14416303934 > evidence/artifact-metadata.json
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/runs/44278998797 > evidence/run-metadata.json
+        python3 verifier/tools/verification/inspect_rvc_history_artifact.py metadata evidence/artifact-metadata.json evidence/run-metadata.json
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14416303934/zip > original-artifact.zip
+    - name: Verify and inspect original IPA without rebuilding or publishing
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 verifier/tools/verification/inspect_rvc_history_artifact.py inspect original-artifact.zip target evidence
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Independent-RVC-history-IPA-inspection
+        path: evidence
+        if-no-files-found: error
+        retention-days: 14

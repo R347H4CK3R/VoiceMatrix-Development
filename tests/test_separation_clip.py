@@ -22,7 +22,7 @@ class NativeClipTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp=tempfile.TemporaryDirectory();cls.addClassCleanup(cls.temp.cleanup)
         cls.root=Path(cls.temp.name);cls.exe=cls.root/'clip'
-        subprocess.run(['swiftc','-O','-parse-as-library',*[str(ROOT/'VoiceMatrix'/name) for name in ['RetainedMediaReader.swift','VocalSeparationAssets.swift','SeparationStore.swift','SeparationClipExtractor.swift','SeparationClipHandoff.swift']],str(ROOT/'probes/separation-clip/main.swift'),'-o',str(cls.exe)],check=True,timeout=120)
+        subprocess.run(['swiftc','-O','-parse-as-library',*[str(ROOT/'VoiceMatrix'/name) for name in ['RetainedMediaReader.swift','VocalSeparationAssets.swift','SeparationStore.swift','SeparationAudioImport.swift','SeparationClipExtractor.swift','SeparationClipHandoff.swift']],str(ROOT/'probes/separation-clip/main.swift'),'-o',str(cls.exe)],check=True,timeout=120)
         if not shutil.which('ffmpeg'):raise RuntimeError('ffmpeg fixture tool required')
         cls.wav=cls.root/'stereo.wav'
         with wave.open(str(cls.wav),'wb') as w:
@@ -30,7 +30,7 @@ class NativeClipTests(unittest.TestCase):
             w.writeframes(b''.join(struct.pack('<hh',5000+(i%101),-9000-(i%73)) for i in range(44100*2)))
         cls.mono=cls.root/'mono.wav'
         with wave.open(str(cls.mono),'wb') as w:
-            w.setparams((1,2,48000,0,'NONE','not compressed'));w.writeframes(struct.pack('<h',4000)*96000)
+            w.setparams((1,2,48000,0,'NONE','not compressed'));w.writeframes(b''.join(struct.pack('<h',4000+(i%997)) for i in range(96000)))
         cls.surround=cls.root/'surround.wav'
         with wave.open(str(cls.surround),'wb') as w:
             w.setparams((6,2,44100,0,'NONE','not compressed'));w.writeframes(struct.pack('<hhhhhh',1,2,3,4,5,6)*44100)
@@ -129,9 +129,18 @@ class NativeClipTests(unittest.TestCase):
     def test_resampled_full_endpoint_and_tail_match_full_decode(self):
         full,whole=self.extract(self.mono,0,2)
         tail,selected=self.extract(self.mono,1.25,.75)
-        self.assertLessEqual(abs(full['frames']-88200),1)
-        self.assertLessEqual(abs(tail['frames']-33075),1)
+        self.assertEqual(full['frames'],88200)
+        self.assertEqual(tail['frames'],33075)
         expected=whole[55125*2:55125*2+len(selected)]
         self.assertEqual(len(selected),len(expected))
         self.assertLess(max(abs(a-b) for a,b in zip(selected,expected)),3e-5,
                         'Resampler tail must match full-source decoder state')
+
+    def test_native_rate_stream_matches_independent_audiofile_converter(self):
+        info,actual=self.extract(self.mono,0,2)
+        reference,expected=self.extract(self.mono,0,2,mode='reference-import')
+        self.assertEqual(info['frames'],88200)
+        self.assertEqual(reference['frames'],88200)
+        self.assertEqual(len(actual),len(expected))
+        self.assertLess(max(abs(a-b) for a,b in zip(actual,expected)),3e-5,
+                        'Streaming native PCM must align with independent whole-file converter')

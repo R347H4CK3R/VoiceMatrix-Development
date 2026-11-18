@@ -59,16 +59,18 @@ enum SeparationClipExtractor {
         guard tracks.count==1,let track=tracks.first else {throw Failure.unsupportedAudio}
         let descriptions=try await track.load(.formatDescriptions)
         guard !descriptions.isEmpty else {throw Failure.unsupportedAudio}
-        var channels:Int?
+        var channels:Int?, nativeRate:Double?
         for description in descriptions {
             guard let format=CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee,
                   format.mSampleRate.isFinite,(8000...192000).contains(format.mSampleRate),
                   format.mChannelsPerFrame==1 || format.mChannelsPerFrame==2 else {throw Failure.unsupportedAudio}
             let count=Int(format.mChannelsPerFrame)
             if let channels,channels != count {throw Failure.unsupportedAudio}
+            if let nativeRate,nativeRate != format.mSampleRate {throw Failure.unsupportedAudio}
+            nativeRate=format.mSampleRate
             channels=count
         }
-        guard let channels else {throw Failure.unsupportedAudio}
+        guard let channels,let nativeRate else {throw Failure.unsupportedAudio}
         let range=try await track.load(.timeRange)
         let trackStart=range.start.seconds,trackEnd=CMTimeRangeGetEnd(range).seconds
         diagnostic("clip channels=\(channels) selectedStart=\(selectedStart) selectedEnd=\(selectedEnd) trackStart=\(trackStart) trackEnd=\(trackEnd)")
@@ -95,7 +97,7 @@ enum SeparationClipExtractor {
         // real stream beginning and retain only timestamp-mapped selected frames.
         let output=AVAssetReaderTrackOutput(track:track,outputSettings:[
             AVFormatIDKey:kAudioFormatLinearPCM,
-            AVSampleRateKey:rate,
+            AVSampleRateKey:nativeRate,
             AVNumberOfChannelsKey:channels,
             AVLinearPCMBitDepthKey:32,
             AVLinearPCMIsFloatKey:true,
@@ -107,88 +109,153 @@ enum SeparationClipExtractor {
         reader.add(output)
         guard reader.startReading() else {throw Failure.unreadable}
         defer {if reader.status == .reading {reader.cancelReading()}}
+        // AVAssetReader decodes at the source rate only. Explicit conversion owns
+        // priming and EOF draining; reader-side resampling loses tail frames on
+        // some PCM sources. See Apple TN3136, streaming conversion input protocol.
+        guard let nativeFormat=AVAudioFormat(commonFormat:.pcmFormatFloat32,sampleRate:nativeRate,channels:2,interleaved:false),
+              let targetFormat=AVAudioFormat(commonFormat:.pcmFormatFloat32,sampleRate:Double(rate),channels:2,interleaved:false),
+              let input=AVAudioPCMBuffer(pcmFormat:nativeFormat,frameCapacity:8192),
+              let converted=AVAudioPCMBuffer(pcmFormat:targetFormat,frameCapacity:8192),
+              let converter=AVAudioConverter(from:nativeFormat,to:targetFormat) else {throw Failure.unsupportedAudio}
+        converter.primeMethod = .normal
         var samples:[Float]=[]
         samples.reserveCapacity(wantedFrames*2)
-        var decodedFrames=0,previousPTS:Double?,bufferIndex=0
-        var originFrame:Int64?,intervalComplete=false
+        var nativeFrames=0,convertedFrames=0,bufferIndex=0,conversionIndex=0,empty=0
+        var previousPTS:Double?,originPTS:Double?,originFrame:Int64?
+        var pending=Data(),pendingOffset=0,pendingFrames=0
+        var readerEOF=false,intervalComplete=false,converterEOF=false
+        var inputError:Error?
         let selectedEndFrame=startFrame+Int64(wantedFrames)
-        while let sample=output.copyNextSampleBuffer() {
+        let nativeTolerance=1.0/nativeRate+1e-9
+
+        func readNativeBuffer() throws -> Bool {
             try Task.checkCancellation()
+            guard let sample=output.copyNextSampleBuffer() else {
+                guard reader.status == .completed else {throw Failure.unreadable}
+                readerEOF=true
+                return false
+            }
             guard CMSampleBufferDataIsReady(sample),
                   let description=CMSampleBufferGetFormatDescription(sample),
                   let format=CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee,
-                  format.mFormatID==kAudioFormatLinearPCM,format.mSampleRate==Double(rate),
+                  format.mFormatID==kAudioFormatLinearPCM,format.mSampleRate==nativeRate,
                   format.mChannelsPerFrame==UInt32(channels),format.mBitsPerChannel==32,
                   format.mBytesPerFrame==UInt32(channels*4),
                   format.mFormatFlags & kAudioFormatFlagIsFloat != 0,
                   format.mFormatFlags & kAudioFormatFlagIsBigEndian == 0,
                   format.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0,
                   let block=CMSampleBufferGetDataBuffer(sample) else {throw Failure.invalidPCM}
-            let frameCount=CMSampleBufferGetNumSamples(sample)
+            let count=CMSampleBufferGetNumSamples(sample)
             let bytes=CMBlockBufferGetDataLength(block)
-            guard frameCount>0,frameCount<=1_048_576,
-                  bytes==frameCount*channels*4,
-                  decodedFrames+frameCount<=1800*rate+1,bufferIndex<1_000_000 else {throw Failure.bounds}
+            guard count>0,count<=1_048_576,bytes==count*channels*4,
+                  Double(nativeFrames+count)<=1800*nativeRate+1,bufferIndex<1_000_000 else {throw Failure.bounds}
             let pts=CMSampleBufferGetPresentationTimeStamp(sample).seconds
-            let sampleDuration=CMSampleBufferGetDuration(sample).seconds
-            guard pts.isFinite,pts>=(-sampleTolerance),pts<=1800 else {throw Failure.invalidTimeline}
-            if originFrame==nil {
-                let firstFrame=Int64((pts*Double(rate)).rounded())
-                guard firstFrame<=startFrame else {throw Failure.invalidTimeline}
-                originFrame=firstFrame
+            let duration=CMSampleBufferGetDuration(sample).seconds
+            guard pts.isFinite,pts>=(-nativeTolerance),pts<=1800 else {throw Failure.invalidTimeline}
+            if originPTS==nil {
+                originPTS=pts
+                originFrame=Int64((pts*Double(rate)).rounded())
+                guard let originFrame,originFrame<=startFrame else {throw Failure.invalidTimeline}
             }
-            guard let originFrame else {throw Failure.invalidTimeline}
-            let bufferStart=originFrame+Int64(decodedFrames)
-            let expectedPTS=Double(bufferStart)/Double(rate)
-            if bufferIndex<4 {diagnostic("clip buffer=\(bufferIndex) frames=\(frameCount) pts=\(pts) expectedPTS=\(expectedPTS) duration=\(sampleDuration)")}
-            bufferIndex += 1
-            guard pts.isFinite,abs(pts-expectedPTS)<=sampleTolerance,
-                  sampleDuration.isFinite,sampleDuration>0,
-                  abs(sampleDuration-Double(frameCount)/Double(rate))<=sampleTolerance else {throw Failure.invalidTimeline}
+            guard let originPTS else {throw Failure.invalidTimeline}
+            let expected=originPTS+Double(nativeFrames)/nativeRate
+            if bufferIndex<4 {diagnostic("clip nativeBuffer=\(bufferIndex) frames=\(count) pts=\(pts) expectedPTS=\(expected) duration=\(duration)")}
+            guard abs(pts-expected)<=nativeTolerance,duration.isFinite,duration>0,
+                  abs(duration-Double(count)/nativeRate)<=nativeTolerance else {throw Failure.invalidTimeline}
             if let previousPTS,pts<=previousPTS {throw Failure.invalidTimeline}
             previousPTS=pts
-            let keepStart=max(bufferStart,startFrame)
-            let keepEnd=min(bufferStart+Int64(frameCount),selectedEndFrame)
-            if keepEnd>keepStart {
-                // Exact consecutive selected samples only. There is no gap fill,
-                // padding, or arbitrary seek-preroll compensation.
-                guard keepStart==startFrame+Int64(samples.count/2) else {throw Failure.invalidTimeline}
-                let keptFrames=Int(keepEnd-keepStart)
-                let byteOffset=Int(keepStart-bufferStart)*channels*4
-                let keptBytes=keptFrames*channels*4
-                guard samples.count/2+keptFrames<=wantedFrames else {throw Failure.bounds}
-                var data=Data(count:keptBytes)
-                let status=data.withUnsafeMutableBytes {buffer in
-                    CMBlockBufferCopyDataBytes(block,atOffset:byteOffset,dataLength:keptBytes,destination:buffer.baseAddress!)
+            pending=Data(count:bytes)
+            let copyStatus=pending.withUnsafeMutableBytes {
+                CMBlockBufferCopyDataBytes(block,atOffset:0,dataLength:bytes,destination:$0.baseAddress!)
+            }
+            guard copyStatus==kCMBlockBufferNoErr else {throw Failure.unreadable}
+            pendingOffset=0;pendingFrames=count
+            nativeFrames += count;bufferIndex += 1
+            return true
+        }
+        while true {
+            try Task.checkCancellation()
+            guard conversionIndex<1_000_000 else {throw Failure.bounds}
+            conversionIndex += 1
+            converted.frameLength=0
+            var conversionError:NSError?
+            let status=converter.convert(to:converted,error:&conversionError) {requested,state in
+                do {
+                    try Task.checkCancellation()
+                    if pendingOffset==pendingFrames {
+                        if readerEOF {state.pointee = .endOfStream;return nil}
+                        guard try readNativeBuffer() else {state.pointee = .endOfStream;return nil}
+                    }
+                    guard requested>0,let destination=input.floatChannelData else {throw Failure.invalidPCM}
+                    let count=min(Int(requested),8192,pendingFrames-pendingOffset)
+                    guard count>0 else {throw Failure.invalidPCM}
+                    input.frameLength=AVAudioFrameCount(count)
+                    try pending.withUnsafeBytes {raw in
+                        for frame in 0..<count {
+                            if frame%4096==0 {try Task.checkCancellation()}
+                            for channel in 0..<2 {
+                                let sourceChannel=channels==1 ? 0:channel
+                                let offset=((pendingOffset+frame)*channels+sourceChannel)*4
+                                let value=Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:offset,as:UInt32.self)))
+                                guard value.isFinite else {throw Failure.invalidPCM}
+                                destination[channel][frame]=value
+                            }
+                        }
+                    }
+                    pendingOffset += count
+                    state.pointee = .haveData
+                    return input
+                } catch {
+                    inputError=error
+                    // This status is not EOF authorization: the captured error is
+                    // rethrown before any converter output can be retained.
+                    state.pointee = .noDataNow
+                    return nil
                 }
-                guard status==kCMBlockBufferNoErr else {throw Failure.unreadable}
-                try data.withUnsafeBytes {raw in
-                    for frame in 0..<keptFrames {
+            }
+            try Task.checkCancellation()
+            if let inputError {throw inputError}
+            guard conversionError==nil,status != .error,
+                  reader.status != .failed,reader.status != .cancelled,
+                  let pcm=converted.floatChannelData else {throw Failure.unreadable}
+            let count=Int(converted.frameLength)
+            guard count<=8192,convertedFrames+count<=1800*rate+8192 else {throw Failure.bounds}
+            if count>0 {
+                guard let originFrame else {throw Failure.invalidTimeline}
+                let bufferStart=originFrame+Int64(convertedFrames)
+                let keepStart=max(bufferStart,startFrame)
+                let keepEnd=min(bufferStart+Int64(count),selectedEndFrame)
+                if keepEnd>keepStart {
+                    guard keepStart==startFrame+Int64(samples.count/2) else {throw Failure.invalidTimeline}
+                    for frame in Int(keepStart-bufferStart)..<Int(keepEnd-bufferStart) {
                         if frame%4096==0 {try Task.checkCancellation()}
-                        let offset=frame*channels*4
-                        let left=Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:offset,as:UInt32.self)))
-                        let right=channels==1 ? left : Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:offset+4,as:UInt32.self)))
+                        let left=pcm[0][frame],right=pcm[1][frame]
                         guard left.isFinite,right.isFinite else {throw Failure.invalidPCM}
                         samples.append(left);samples.append(right)
                     }
                 }
             }
-            decodedFrames += frameCount
+            convertedFrames += count
+            empty=count==0 ? empty+1:0
             if samples.count==wantedFrames*2 {
                 try Task.checkCancellation()
                 intervalComplete=true
-                // Deliberately stop only after all requested actual samples exist.
-                // Nothing after the selected interval is part of this handoff.
                 if reader.status == .reading {reader.cancelReading()}
                 break
             }
+            if status == .endOfStream {
+                guard readerEOF,pendingOffset==pendingFrames else {throw Failure.unreadable}
+                converterEOF=true
+                break
+            }
+            guard empty<3 else {throw Failure.invalidPCM}
         }
         try Task.checkCancellation()
         let retainedFrames=samples.count/2
-        diagnostic("clip readerStatus=\(reader.status.rawValue) prefixDecodedFrames=\(decodedFrames) retainedFrames=\(retainedFrames) wantedFrames=\(wantedFrames) intervalComplete=\(intervalComplete)")
-        guard intervalComplete || reader.status == .completed else {throw Failure.unreadable}
-        // At the true stream endpoint resampling rounding may differ by one frame.
-        // A short result is accepted only at EOF, never padded or called complete.
+        diagnostic("clip nativeRate=\(nativeRate) nativeFrames=\(nativeFrames) convertedFrames=\(convertedFrames) readerEOF=\(readerEOF) converterEOF=\(converterEOF) retainedFrames=\(retainedFrames) wantedFrames=\(wantedFrames) intervalComplete=\(intervalComplete)")
+        guard intervalComplete || converterEOF else {throw Failure.unreadable}
+        // Only actual converted samples are returned; never synthesize a missing
+        // endpoint. Preserve the original at-most-one-frame rounding allowance.
         guard retainedFrames>0,wantedFrames-retainedFrames<=1,
               samples.count==retainedFrames*2 else {throw Failure.invalidTimeline}
         return Clip(samples:samples,frames:retainedFrames,sampleRate:rate,start:selectedStart)

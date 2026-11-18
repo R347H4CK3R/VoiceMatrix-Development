@@ -117,6 +117,19 @@ import Darwin
                 try await handoff(mode:args[1],source:URL(fileURLWithPath:args[2]),start:start,seconds:duration,root:URL(fileURLWithPath:args[5],isDirectory:true))
                 return
             }
+            if args[1]=="reference-import" {
+                let audio=try SeparationAudioImport.decode(URL(fileURLWithPath:args[2]))
+                var data=Data(capacity:audio.left.count*8)
+                for i in audio.left.indices {
+                    for sample in [audio.left[i],audio.right[i]] {
+                        var bits=sample.bitPattern.littleEndian
+                        withUnsafeBytes(of:&bits){data.append(contentsOf:$0)}
+                    }
+                }
+                try data.write(to:URL(fileURLWithPath:args[5]),options:.withoutOverwriting)
+                print("{\"frames\":\(audio.left.count),\"sampleRate\":44100}")
+                return
+            }
             if args[1]=="cancel" {withUnsafeCurrentTask {$0?.cancel()}}
             let result=try await SeparationClipExtractor.extract(source:URL(fileURLWithPath:args[2]),start:start,seconds:duration,diagnostic:{message in
                 FileHandle.standardError.write(Data((message+"\n").utf8))

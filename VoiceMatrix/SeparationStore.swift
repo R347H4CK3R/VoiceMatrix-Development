@@ -9,7 +9,7 @@ import Glibc
 /// Private app-owned storage. Inputs and committed pairs are never automatically removed.
 struct SeparationStore {
     enum Failure: Error { case invalid, bounds, unsafe, storage }
-    struct Receipt: Codable {
+    struct Receipt: Codable, Equatable {
         let id: UUID
         let date: Date
         let inputName: String
@@ -29,6 +29,67 @@ struct SeparationStore {
         var vocals: URL { directory.appendingPathComponent("Vocals-"+id.uuidString+".wav") }
         var accompaniment: URL { directory.appendingPathComponent("Accompaniment-"+id.uuidString+".wav") }
     }
+    /// Only a verified handoff constructor supplies the expected consumed bytes.
+    struct ReferenceInput {
+        let url: URL
+        let sha256: String
+        let bytes: Int
+        let resultID: UUID
+        /// Exclusive downstream job copy; fail before a caller commits sourceFile.
+        func copyVerified(to destination: URL) throws -> String {
+            try Data().write(to:destination,options:.withoutOverwriting)
+            let output=try FileHandle(forWritingTo:destination)
+            defer { try? output.close() }
+            var hash=SHA256(), count=0
+            try RetainedMediaReader.read(url,maximumBytes:Int64(bytes)) { block in
+                count += block.count
+                hash.update(data:block)
+                try output.write(contentsOf:block)
+            }
+            try output.synchronize()
+            let digest=hash.finalize().map { String(format:"%02x",$0) }.joined()
+            try validateCopied(digest:digest,bytes:count)
+            try Task.checkCancellation()
+            return digest
+        }
+        func validateCopied(digest: String, bytes count: Int) throws {
+            guard count == bytes, digest == sha256 else { throw Failure.unsafe }
+        }
+    }
+    func referenceInput(for selected: Result) throws -> ReferenceInput {
+        guard let current = try results().first(where: { $0.id == selected.id }),
+              current.directory == selected.directory, current.receipt == selected.receipt,
+              current.receipt.modelSHA256 == VocalSeparationAssets.models.mapValues({ $0.sha256 }),
+              current.receipt.inputSHA256.count == 64,
+              current.receipt.inputSHA256.allSatisfy({ $0.isHexDigit }) else { throw Failure.unsafe }
+        let expected = 44 + current.frames * 8
+        let snapshot = root.appendingPathComponent("Reference-"+current.id.uuidString+"-"+current.receipt.vocalsSHA256+".wav")
+        let reference = ReferenceInput(url:snapshot,sha256:current.receipt.vocalsSHA256,
+                                       bytes:expected,resultID:current.id)
+        var info=stat()
+        if lstat(snapshot.path,&info)==0 {
+            guard try Self.validWAV(snapshot,frames:current.frames,sha:reference.sha256) else {throw Failure.unsafe}
+            try Task.checkCancellation()
+            return reference // Reuse does not spend another admission slot.
+        }
+        guard errno == ENOENT else {throw Failure.unsafe}
+        try admit()
+        let staging=root.appendingPathComponent(".reference-staging-"+UUID().uuidString+".wav")
+        defer {try? FileManager.default.removeItem(at:staging)} // Only this call's uncommitted file.
+        let original=ReferenceInput(url:current.vocals,sha256:reference.sha256,bytes:expected,resultID:current.id)
+        _=try original.copyVerified(to:staging)
+        guard try Self.validWAV(staging,frames:current.frames,sha:reference.sha256),
+              let fresh=try results().first(where:{$0.id==current.id}),
+              fresh.receipt==current.receipt else {throw Failure.unsafe}
+        try Task.checkCancellation()
+#if canImport(Darwin)
+        guard renamex_np(staging.path,snapshot.path,UInt32(RENAME_EXCL))==0 else {throw Failure.storage}
+#else
+        throw Failure.unsafe
+#endif
+        return reference // Atomic promotion wins late cancellation; never delete committed snapshots.
+    }
+
     let root: URL
     static var standard: SeparationStore {
         SeparationStore(root:FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("VocalSeparation",isDirectory:true))

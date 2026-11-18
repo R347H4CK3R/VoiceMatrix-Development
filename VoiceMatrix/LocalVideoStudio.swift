@@ -246,7 +246,8 @@ import CryptoKit
         }
         catch { notice = LocalMediaURLPolicy.Failure.url.errorDescription! }
     }
-    func start(_ source: URL, authorized: Bool, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio) {
+    func start(_ source: URL, authorized: Bool, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio, referenceInput: SeparationStore.ReferenceInput? = nil) {
+        guard referenceInput == nil || (source.isFileURL && referenceInput?.url == source) else { return }
         guard authorized, !busy, active else { return }
         guard !audio.processingInUse, !audio.microphoneInUse else { notice = "Stop the other recording or speech job first."; return }
         do {
@@ -259,7 +260,7 @@ import CryptoKit
             if !source.isFileURL { current?.acquisitionURL = try LocalMediaURLPolicy.input(source.absoluteString); current?.originalAcquisitionURL = source }
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
             try update("Received", source.isFileURL ? "App received the selected local media. Nothing is uploaded." : "App received the URL. Downloading directly from its website; no laptop or conversion service. The private URL is not shown in this log.")
-            run(source: source.isFileURL ? source : nil, library: library, audio: audio, speech: speech)
+            run(source: source.isFileURL ? source : nil, library: library, audio: audio, speech: speech, referenceInput: referenceInput)
         } catch { notice = "Could not start a local job. Check free storage; existing voices were kept." }
     }
     var freshAcquisitionURL: URL? {
@@ -294,7 +295,7 @@ import CryptoKit
         try Task.checkCancellation()
         if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical { throw LocalError.thermal }
     }
-    private func run(source: URL?, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio) {
+    private func run(source: URL?, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio, referenceInput: SeparationStore.ReferenceInput? = nil) {
         guard let lease = audio.claimProcessing() else { notice = "Stop the other recording or speech job first."; return }
         busy = true
         let run = UUID(); runToken = run
@@ -326,6 +327,7 @@ import CryptoKit
                     let destination = jobFolder.appendingPathComponent("source." + ext)
                     try update("Copying source", "Keeping a private source copy for recovery.")
                     let copy = Task.detached { () throws -> String in
+                        if let referenceInput { return try referenceInput.copyVerified(to: destination) }
                         let v = try source.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
                         guard v.isRegularFile == true, v.isSymbolicLink != true, let size = v.fileSize, size > 0, size <= 536_870_912 else { throw LocalError.source }
                         guard FileManager.default.createFile(atPath: destination.path, contents: nil) else { throw LocalError.storage }
@@ -350,6 +352,12 @@ import CryptoKit
                         return hash.finalize().map { String(format: "%02x", $0) }.joined()
                     }
                     let digest = try await withTaskCancellationHandler { try await copy.value } onCancel: { copy.cancel() }
+                    if let referenceInput {
+                        // Bind the actual retained bytes, not just a pre-navigation check.
+                        let copiedBytes = try destination.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? -1
+                        try referenceInput.validateCopied(digest: digest, bytes: copiedBytes)
+                    }
+                    try check()
                     current?.sourceFile = destination.lastPathComponent; current?.sourceSHA256 = digest
                     try update("Source retained", "Private source copy committed. It will not be deleted automatically.")
                 }

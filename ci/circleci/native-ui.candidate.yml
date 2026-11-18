@@ -109,7 +109,7 @@ jobs:
           -only-testing:VoiceMatrixTests/LocalSoundQualityTests -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests
           -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests
           -only-testing:VoiceMatrixTests/AppUpdateTests -only-testing:VoiceMatrixTests/SpeechControlsTests
-          -only-testing:VoiceMatrixTests/AudioHistorySaveTests -only-testing:VoiceMatrixUITests/VocalSeparationUITests
+          -only-testing:VoiceMatrixTests/AudioHistorySaveTests -only-testing:VoiceMatrixUITests/VocalSeparationUITests/testSeparationRequiresExplicitInputAndKeepsExistingRoutes
           -only-testing:VoiceMatrixUITests/SpeechFeatureUITests -only-testing:VoiceMatrixUITests/RVCOnlineUITests
           -only-testing:VoiceMatrixUITests/RVCHistoryUITests/testHistoryRemainsReachableWithoutInstalledModelsAcrossRelaunch
           > character-ui.log 2>&1 || { tail -160 character-ui.log; exit 1; }
@@ -196,6 +196,8 @@ jobs:
 
           python3 tools/seed_rvc_history_ui.py seed "$CONTAINER"
 
+          python3 -m tools.seed_separation_handoff_ui seed "$CONTAINER"
+
           '
         no_output_timeout: 20m
     - run:
@@ -206,12 +208,15 @@ jobs:
           Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build -resultBundlePath
           rvc-history.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO
           -only-testing:VoiceMatrixUITests/RVCHistoryUITests/testSeededHistorySelectsVerifiedCopyAcrossRelaunch
+          -only-testing:VoiceMatrixUITests/VocalSeparationUITests/testSeededVocalsHandoffRequiresFreshAuthorizationAcrossNavigation
           > rvc-history.log 2>&1 || { tail -160 rvc-history.log; exit 1; }
 
           CONTAINER=$(xcrun simctl get_app_container "$SIMULATOR_ID" com.voicematrix.app
           data)
 
           python3 tools/seed_rvc_history_ui.py check "$CONTAINER" | tee rvc-history-copy-evidence.log
+
+          python3 -m tools.seed_separation_handoff_ui check "$CONTAINER" | tee separation-handoff-evidence.log
 
           '
         no_output_timeout: 20m
@@ -236,6 +241,8 @@ jobs:
         path: rvc-history.log
     - store_artifacts:
         path: rvc-history-copy-evidence.log
+    - store_artifacts:
+        path: separation-handoff-evidence.log
     - store_artifacts:
         path: rvc-history.xcresult
     - store_artifacts:

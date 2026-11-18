@@ -126,6 +126,9 @@ struct VocalSeparationView: View {
                     if result.gain<1 {Text("Both stems use the same gain of \(result.gain,specifier:"%.5f") to prevent clipping.").font(.caption)}
                     Text("Vocals").font(.headline)
                     AudioActions(url:result.vocals,accessibilityPrefix:"separation-vocals-"+result.id.uuidString).disabled(unavailable)
+                    NavigationLink("Use vocals for speaker references") {
+                        LocalVideoStudioView(initialSeparatedVocals: result)
+                    }.disabled(unavailable).accessibilityIdentifier("separation-reference-"+result.id.uuidString)
                     Text("Accompaniment").font(.headline)
                     AudioActions(url:result.accompaniment,accessibilityPrefix:"separation-backing-"+result.id.uuidString).disabled(unavailable)
                 }

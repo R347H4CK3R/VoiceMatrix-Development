@@ -18,7 +18,12 @@ struct LocalVideoStudioView: View {
     @State private var retryRequest: FreshDownloadRequest?
     @State private var speakerDestination: CharacterStudioMode?
     @State private var selectionError: String?
-    init(initialSourceURL: String? = nil) {
+    private let initialSeparatedVocals: SeparationStore.Result?
+    @State private var separatedInput: SeparationStore.ReferenceInput?
+    @State private var checkingSeparatedInput = false
+    @State private var preparedSeparatedInput = false
+    init(initialSourceURL: String? = nil, initialSeparatedVocals: SeparationStore.Result? = nil) {
+        self.initialSeparatedVocals = initialSeparatedVocals
         let admitted = initialSourceURL.flatMap { try? LocalMediaURLPolicy.input($0).absoluteString }
         _sourceURL = State(initialValue: admitted ?? "")
     }
@@ -29,13 +34,20 @@ struct LocalVideoStudioView: View {
                 Text("Import a local video or recording, or acquire supported public website media directly. Extraction, English transcription, reference-conditioned preview and voice registration run inside this app. No laptop or server fallback.")
                 Text("Bundled analysis groups speakers and excludes detected overlap. Local sound screening rejects likely music, singing or insufficient speech. It does not identify characters, remove music or train RVC models. Every accepted reference must pass a word check; resemblance needs listening review.").font(.footnote).foregroundStyle(.secondary)
                 Button(selected == nil ? "Choose video or audio" : "Choose a different file") { importing = true }
-                    .buttonStyle(.bordered).disabled(local.busy).accessibilityIdentifier("local-video-import")
+                    .buttonStyle(.bordered).disabled(local.busy || checkingSeparatedInput).accessibilityIdentifier("local-video-import")
                 if selected != nil { Label("Local media selected", systemImage: "doc.fill") }
+                if separatedInput != nil {
+                    Text("Separated vocals selected. Separation is not identity verification, voice cloning or training. Artifacts or remaining music can still fail the existing speech and reference checks.")
+                        .font(.footnote).accessibilityIdentifier("local-video-separated-source")
+                }
+                if checkingSeparatedInput { ProgressView("Verifying saved vocals…") }
                 TextField("YouTube or supported HTTPS media URL", text: $sourceURL)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    .textFieldStyle(.roundedBorder).disabled(local.busy).accessibilityIdentifier("local-video-url")
+                    .textFieldStyle(.roundedBorder).disabled(local.busy || checkingSeparatedInput).accessibilityIdentifier("local-video-url")
                 PasteButton(payloadType: String.self) { values in
                     authorized = false
+                    if separatedInput != nil { selected = nil }
+                    separatedInput = nil
                     guard values.count == 1, let raw = values.first, raw.utf8.count <= 16_384 else {
                         selectionError = "Clipboard must contain one supported video URL of at most 16,384 bytes."
                         return
@@ -45,14 +57,14 @@ struct LocalVideoStudioView: View {
                         selected = nil
                         selectionError = nil
                     } catch { selectionError = error.localizedDescription }
-                }.buttonStyle(.bordered).disabled(local.busy)
+                }.buttonStyle(.bordered).disabled(local.busy || checkingSeparatedInput)
                     .accessibilityLabel("Paste video URL from Clipboard")
                     .accessibilityIdentifier("local-video-paste")
                 Text("URL acquisition needs internet to contact the source website. YouTube link support is limited: many public pages provide no downloadable media URLs. Direct media on upload.wikimedia.org or archive.org are supported candidates. A bundled resolver can try standard public streams on this iPhone. Sign-in, age/access verification and DRM are not bypassed; those sources need authorized local-file import.").font(.footnote).foregroundStyle(.secondary)
-                Toggle("I am authorized to use this media and its voices", isOn: $authorized).disabled(local.busy)
+                Toggle("I am authorized to use this media and its voices", isOn: $authorized).disabled(local.busy || checkingSeparatedInput).accessibilityIdentifier("local-video-authorization")
                 Button("Generate speaker references") {
-                    if let selected { local.start(selected, authorized: authorized, library: library, audio: audio, speech: speech) }
-                }.buttonStyle(.borderedProminent).disabled(selected == nil || !authorized || local.busy)
+                    if let selected { local.start(selected, authorized: authorized, library: library, audio: audio, speech: speech, referenceInput: separatedInput) }
+                }.buttonStyle(.borderedProminent).disabled(selected == nil || !authorized || local.busy || checkingSeparatedInput)
                     .accessibilityIdentifier("local-video-generate")
                 Button("Download URL and generate references") {
                     local.startURL(sourceURL, authorized: authorized, library: library, audio: audio, speech: speech)
@@ -76,7 +88,7 @@ struct LocalVideoStudioView: View {
                             Text("Resume reuses the retained download plan. A fresh attempt asks the original website again, which can help if its media links expired. It may still fail for unsupported or restricted sources.").font(.footnote).foregroundStyle(.secondary)
                         }
                         Button("Import an authorized local file instead") { importing = true }
-                            .buttonStyle(.borderedProminent).accessibilityIdentifier("local-video-import-fallback")
+                            .buttonStyle(.borderedProminent).disabled(checkingSeparatedInput).accessibilityIdentifier("local-video-import-fallback")
                         Text("Choose a video or audio file you already have permission to use in Files, then enable authorization and tap Generate speaker references. The earlier job and its partial files remain retained.").font(.footnote).foregroundStyle(.secondary)
                     }
                     Button("Resume retained job") { local.resume(library: library, audio: audio, speech: speech) }.buttonStyle(.bordered)
@@ -216,12 +228,36 @@ struct LocalVideoStudioView: View {
             mkvExport = nil
             mkvExport = await local.verifiedMKVExport()
         }
+        .task {
+            guard !preparedSeparatedInput, let result = initialSeparatedVocals else { return }
+            preparedSeparatedInput = true
+            authorized = false
+            guard !local.busy, let lease = audio.claimProcessing() else {
+                selectionError = "Stop the other audio job and reopen the saved vocals."
+                return
+            }
+            checkingSeparatedInput = true
+            defer { checkingSeparatedInput = false; audio.releaseProcessing(lease) }
+            do {
+                let worker = Task.detached { try SeparationStore.standard.referenceInput(for: result) }
+                let input = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                try Task.checkCancellation()
+                separatedInput = input; selected = input.url; selectionError = nil
+            } catch {
+                selected = nil; separatedInput = nil
+                selectionError = "Saved vocals are missing, changed, or could not be verified. No generation started; original audio and stems were kept."
+            }
+        }
         .onChange(of: local.current?.id) { _, _ in journalPage=nil; journalError=nil }
-        .onChange(of: sourceURL) { _, _ in authorized = false }
+        .onChange(of: sourceURL) { _, _ in
+            authorized = false
+            if separatedInput != nil { selected = nil; separatedInput = nil }
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.movie, .audio]) { result in
             switch result {
             case .success(let url):
                 authorized = false
+                separatedInput = nil
                 do {
                     _ = try LocalMediaImportPolicy.fileExtension(url)
                     selected = url; selectionError = nil

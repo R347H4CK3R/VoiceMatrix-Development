@@ -14,7 +14,7 @@ class AdaptiveMergeFixture(unittest.TestCase):
   for name in ['ondevice-resolver-app','character-ui-smoke']:
    self.assertIn("'tests/fixtures/adaptive-*'",(ROOT/'.github/workflows'/(name+'.yml')).read_text())
  def test_pinned_synthetic_fixture_bytes(self):
-  expected={'adaptive-video.mp4':'b0710067fc17fdad4b0d1ad426f4105a64139ab62f41d05f0572dcd3a14b087e','adaptive-audio.m4a':'d036c62ef5470befe9d5f82ce1655074a33c665323476ffb92121edb50fe2c77'}
+  expected={'adaptive-video.mp4':'b0710067fc17fdad4b0d1ad426f4105a64139ab62f41d05f0572dcd3a14b087e','adaptive-audio.m4a':'40834af6eb24a2e0fb751703f65c003215960f44abf05ef7e134d2ca69104516'}
   for name,digest in expected.items():self.assertEqual(hashlib.sha256((ROOT/'tests/fixtures'/name).read_bytes()).hexdigest(),digest)
  def test_real_separate_tracks_are_complete_three_second_inputs(self):
   for name,kind in [('adaptive-video.mp4','video'),('adaptive-audio.m4a','audio')]:
@@ -24,3 +24,10 @@ class AdaptiveMergeFixture(unittest.TestCase):
    self.assertEqual(len(j['streams']),1);self.assertEqual(j['streams'][0]['codec_type'],kind)
    self.assertAlmostEqual(float(j['format']['duration']),3,delta=.01)
    self.assertLess(path.stat().st_size,100_000)
+
+ def test_audio_fixture_has_no_lossy_encoder_priming(self):
+  if not shutil.which('ffprobe'): self.skipTest('ffprobe unavailable')
+  j=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_packets','-of','json',str(ROOT/'tests/fixtures/adaptive-audio.m4a')]))
+  self.assertEqual(j['streams'][0]['codec_name'],'alac')
+  self.assertEqual(float(j['packets'][0]['pts_time']),0)
+  self.assertFalse(any(s.get('skip_samples',0) for p in j['packets'] for s in p.get('side_data_list',[])))

@@ -11,6 +11,7 @@ final class MatroskaWriter {
         let height: UInt64
         let sampleRate: Double
         let channels: UInt64
+        var seekPreRollNanoseconds: UInt64 = 0
     }
     private let handle: FileHandle
     private let limit: Int64
@@ -52,6 +53,7 @@ final class MatroskaWriter {
         var entries = Data()
         for t in tracks {
             var entry = Self.uint(0xD7,t.number) + Self.uint(0x73C5,t.number) + Self.uint(0x83,t.number == 1 ? 1 : 2) + Self.uint(0x9C,0) + Self.string(0x86,t.codec) + Self.element(0x63A2,t.configuration)
+            if t.seekPreRollNanoseconds > 0 { entry += Self.uint(0x56BB,t.seekPreRollNanoseconds) }
             if t.number == 1 {
                 entry += Self.element(0xE0, Self.uint(0xB0,t.width) + Self.uint(0xBA,t.height))
             } else {

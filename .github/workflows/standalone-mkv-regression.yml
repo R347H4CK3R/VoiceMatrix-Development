@@ -23,7 +23,7 @@ jobs:
         command -v swiftc
         command -v ffmpeg
         command -v ffprobe
-        python3 -m unittest tests.test_mkv_export -v 2>&1 | tee mkv-native-results.log
+        python3 -m unittest tests.test_mp4_sample_table tests.test_mkv_export tests.test_mkv_sample_tables -v 2>&1 | tee mkv-native-results.log
     - uses: actions/upload-artifact@v4
       if: always()
       with:

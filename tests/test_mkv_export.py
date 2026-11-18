@@ -20,7 +20,7 @@ class MKVExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             d = pathlib.Path(td)
             binary, source, dest = d/'probe', d/'input.mp4', d/'output.mkv'
-            subprocess.run(['swiftc', '-parse-as-library', str(ROOT/'VoiceMatrix/MatroskaWriter.swift'), str(ROOT/'VoiceMatrix/LocalMKVExport.swift'), str(ROOT/'probes/mkv-export/main.swift'), '-o', str(binary)], check=True)
+            subprocess.run(['swiftc', '-parse-as-library', str(ROOT/'VoiceMatrix/MP4SampleTable.swift'), str(ROOT/'VoiceMatrix/MatroskaWriter.swift'), str(ROOT/'VoiceMatrix/LocalMKVExport.swift'), str(ROOT/'probes/mkv-export/main.swift'), '-o', str(binary)], check=True)
             subprocess.run([str(binary), '--aac-policy'], check=True)
             subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=160x120:rate=25','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','3','-c:v','libx264','-bf','0','-pix_fmt','yuv420p','-c:a','aac','-use_editlist','0',str(source)],check=True)
             original = source.read_bytes()

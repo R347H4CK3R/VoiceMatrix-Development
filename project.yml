@@ -204,6 +204,7 @@ targets:
     - path: VoiceMatrix/RetainedMediaReader.swift
     - path: VoiceMatrix/LocalMediaAcquisition.swift
     - path: VoiceMatrix/LocalMKVExport.swift
+    - path: VoiceMatrix/MP4SampleTable.swift
     - path: VoiceMatrix/MatroskaWriter.swift
     - path: VoiceMatrix/LocalMediaURLPolicy.swift
     - path: VoiceMatrix/LocalVideoAudio.swift

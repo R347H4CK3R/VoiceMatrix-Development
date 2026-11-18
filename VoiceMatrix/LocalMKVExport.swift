@@ -1,42 +1,13 @@
 import Foundation
-import AVFoundation
-import AudioToolbox
 
-/// Additional export only. Retain the validated MP4 as AVFoundation's decoder companion.
-/// No URL/network access, codecs, credentials, or fallback transcoding are introduced here.
+/// Additional bounded export only. The MP4 decoder companion is always retained.
+/// Reads original compressed sample tables, not AVFoundation's edited/grouped buffers.
 enum LocalMKVExport {
     enum Failure: LocalizedError {
         case unsupported(String)
         var errorDescription: String? {
             switch self { case .unsupported(let reason): return "MKV export unavailable: \(reason). Your original MP4 is unchanged." }
         }
-    }
-    /// Parse the actual MPEG-4 ES descriptor. Never guess AAC extensions or scan payload bytes.
-    private static func audioSpecificConfig(_ esds: Data) throws -> Data {
-        let bytes = [UInt8](esds)
-        func descriptor(_ offset: Int, _ end: Int) throws -> (UInt8, Int, Int) {
-            guard offset < end else { throw Failure.unsupported("truncated AAC descriptor") }
-            let tag = bytes[offset]
-            var cursor = offset + 1
-            var size = 0
-            var terminated = false
-            for _ in 0..<4 {
-                guard cursor < end else { throw Failure.unsupported("truncated AAC length") }
-                let byte = bytes[cursor]; cursor += 1
-                size = (size << 7) | Int(byte & 127)
-                if byte & 128 == 0 { terminated = true; break }
-            }
-            guard terminated, size <= end - cursor else { throw Failure.unsupported("invalid AAC length") }
-            return (tag,cursor,cursor+size)
-        }
-        guard bytes.count >= 4, bytes.prefix(4).allSatisfy({ $0 == 0 }) else { throw Failure.unsupported("AAC esds version") }
-        let (esTag, esStart, esEnd) = try descriptor(4,bytes.count)
-        guard esTag == 3, esEnd - esStart >= 3, bytes[esStart+2] == 0 else { throw Failure.unsupported("AAC ES flags") }
-        let (decoderTag, decoderStart, decoderEnd) = try descriptor(esStart+3,esEnd)
-        guard decoderTag == 4, decoderEnd-decoderStart >= 13, bytes[decoderStart] == 0x40 else { throw Failure.unsupported("AAC object type") }
-        let (configTag, configStart, configEnd) = try descriptor(decoderStart+13,decoderEnd)
-        guard configTag == 5 else { throw Failure.unsupported("missing AAC initialization") }
-        return Data(bytes[configStart..<configEnd])
     }
     /// The actual AudioSpecificConfig is authoritative. ASBD flags may be unspecified (0),
     /// but explicit contradictory object types are rejected rather than overwritten.
@@ -54,23 +25,6 @@ enum LocalMKVExport {
             throw Failure.unsupported("AAC configuration is not the supported explicit LC configuration")
         }
     }
-    /// Apple documents EmptyMedia as a marker for an empty edit, not a codec packet.
-    /// Only a zero-duration marker at time zero can be ignored here; nonzero edits,
-    /// permanent empty media and unknown zero-sample buffers remain unsupported.
-    /// https://developer.apple.com/documentation/coremedia/kcmsamplebufferattachmentkey_emptymedia
-    static func isInitialEmptyMarker(_ sample: CMSampleBuffer) -> Bool {
-        guard CMSampleBufferGetNumSamples(sample) == 0,
-              CMSampleBufferGetDataBuffer(sample) == nil,
-              CMSampleBufferGetImageBuffer(sample) == nil,
-              CMSampleBufferGetFormatDescription(sample) == nil,
-              CMTimeCompare(CMSampleBufferGetPresentationTimeStamp(sample), .zero) == 0,
-              CMSampleBufferGetDuration(sample).seconds == 0,
-              (CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_EmptyMedia,attachmentModeOut:nil) as? Bool) == true,
-              (CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_PermanentEmptyMedia,attachmentModeOut:nil) as? Bool) != true,
-              CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_TrimDurationAtStart,attachmentModeOut:nil) == nil,
-              CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_TrimDurationAtEnd,attachmentModeOut:nil) == nil else { return false }
-        return true
-    }
     static func export(input: URL, destination: URL, maxBytes: Int64,
                        progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> URL {
         try Task.checkCancellation()
@@ -78,126 +32,47 @@ enum LocalMKVExport {
         guard input.isFileURL, destination.isFileURL, input.standardizedFileURL != destination.standardizedFileURL,
               destination.pathExtension.lowercased() == "mkv", maxBytes > 0, maxBytes <= 536_870_912,
               !FileManager.default.fileExists(atPath: destination.path) else { throw Failure.unsupported("invalid destination or budget") }
-        let inputSize = try input.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
-        guard inputSize.isRegularFile == true, let size = inputSize.fileSize, size > 0, size <= 536_870_912 else { throw Failure.unsupported("input size") }
         let parent = destination.deletingLastPathComponent()
-        let free = try parent.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
-        guard let free, free >= maxBytes + 800_000_000 else { throw Failure.unsupported("insufficient free storage") }
-        let asset = AVURLAsset(url: input)
-        let duration = try await asset.load(.duration).seconds
-        let video = try await asset.loadTracks(withMediaType: .video)
-        let audio = try await asset.loadTracks(withMediaType: .audio)
-        guard video.count == 1, audio.count == 1, duration.isFinite, (3...1800).contains(duration) else { throw Failure.unsupported("expected one video and one audio track, 3–1800 seconds") }
-        let vf = try await video[0].load(.formatDescriptions)
-        let af = try await audio[0].load(.formatDescriptions)
-        guard vf.count == 1, af.count == 1 else { throw Failure.unsupported("changing track format descriptions") }
-        guard CMFormatDescriptionGetMediaSubType(vf[0]) == kCMVideoCodecType_H264 else { throw Failure.unsupported("video codec is not AVC") }
-        guard CMFormatDescriptionGetMediaSubType(af[0]) == kAudioFormatMPEG4AAC,
-              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(af[0])?.pointee else { throw Failure.unsupported("audio codec is not MPEG-4 AAC") }
-        guard let atoms = CMFormatDescriptionGetExtension(vf[0], extensionKey: kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms) as? [String: Any],
-              let avcc = atoms["avcC"] as? Data, avcc.count >= 7, avcc[0] == 1 else { throw Failure.unsupported("missing AVC configuration") }
-        let audioAtoms = CMFormatDescriptionGetExtension(af[0], extensionKey: kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms) as? [String: Any]
-        var esds = audioAtoms?["esds"] as? Data
-        if esds == nil {
-            var cookieSize = 0
-            if let cookie = CMAudioFormatDescriptionGetMagicCookie(af[0], sizeOut: &cookieSize), cookieSize > 0, cookieSize <= 65536 {
-                let data = Data(bytes:cookie,count:cookieSize)
-                esds = data.first == 3 ? Data(repeating:0,count:4) + data : data
-            }
+        let values = try parent.resourceValues(forKeys:[.isDirectoryKey,.isSymbolicLinkKey,.volumeAvailableCapacityForImportantUsageKey])
+        guard values.isDirectory == true, values.isSymbolicLink != true,
+              let free = values.volumeAvailableCapacityForImportantUsage, free >= maxBytes + 800_000_000 else {
+            throw Failure.unsupported("unsafe destination or insufficient free storage")
         }
-        guard let esds else { throw Failure.unsupported("missing AAC initialization") }
-        let aac = try audioSpecificConfig(esds)
-        try validateAACConfiguration(aac, sampleRate: asbd.mSampleRate, channels: asbd.mChannelsPerFrame,
-                                     formatFlags: asbd.mFormatFlags, framesPerPacket: asbd.mFramesPerPacket)
-        let dimensions = CMVideoFormatDescriptionGetDimensions(vf[0])
-        guard dimensions.width > 0, dimensions.height > 0, dimensions.width <= 1280, dimensions.height <= 720,
-              try await video[0].load(.preferredTransform) == .identity else { throw Failure.unsupported("dimensions or rotation") }
-        let temporary = parent.appendingPathComponent(".mkv-export-" + UUID().uuidString, isDirectory:true)
+        let source = try MP4SampleTable(url:input)
+        let video = source.video, audio = source.audio
+        guard video.width > 0, video.height > 0, video.width <= 1280, video.height <= 720 else {
+            throw Failure.unsupported("video dimensions exceed supported export")
+        }
+        try validateAACConfiguration(audio.configuration,sampleRate:audio.sampleRate,channels:UInt32(audio.channels),formatFlags:0,framesPerPacket:1024)
+        let temporary = parent.appendingPathComponent(".mkv-export-" + UUID().uuidString,isDirectory:true)
         try FileManager.default.createDirectory(at:temporary,withIntermediateDirectories:false)
         defer { try? FileManager.default.removeItem(at:temporary) }
         let output = temporary.appendingPathComponent("export.mkv")
-        let reader = try AVAssetReader(asset:asset)
-        let outputs = [AVAssetReaderTrackOutput(track:video[0],outputSettings:nil), AVAssetReaderTrackOutput(track:audio[0],outputSettings:nil)]
-        for o in outputs { o.alwaysCopiesSampleData = false; guard reader.canAdd(o) else { throw Failure.unsupported("compressed reader") }; reader.add(o) }
-        guard reader.startReading() else { throw reader.error ?? Failure.unsupported("reader start") }
-        defer { reader.cancelReading() }
         let writer = try MatroskaWriter(url:output,maxBytes:maxBytes,tracks:[
-            .init(number:1,codec:"V_MPEG4/ISO/AVC",configuration:avcc,width:UInt64(dimensions.width),height:UInt64(dimensions.height),sampleRate:0,channels:0),
-            .init(number:2,codec:"A_AAC",configuration:aac,width:0,height:0,sampleRate:asbd.mSampleRate,channels:UInt64(asbd.mChannelsPerFrame))],duration:duration)
-        var pending = outputs.map { $0.copyNextSampleBuffer() }
-        var previous: [Double] = [-1,-1]
-        var counts = [0,0]
-        var initialMarkers = [0,0]
-        while pending.contains(where: { $0 != nil }) {
+            .init(number:1,codec:"V_MPEG4/ISO/AVC",configuration:video.configuration,width:UInt64(video.width),height:UInt64(video.height),sampleRate:0,channels:0),
+            .init(number:2,codec:"A_AAC",configuration:audio.configuration,width:0,height:0,sampleRate:audio.sampleRate,channels:UInt64(audio.channels),seekPreRollNanoseconds:UInt64((audio.seekPreRoll*1_000_000_000).rounded()))],duration:source.duration)
+        let tracks = [video,audio]
+        var positions = [0,0]
+        var packets = 0
+        while positions[0] < video.samples.count || positions[1] < audio.samples.count {
             try Task.checkCancellation()
-            guard Date() < deadline, counts.reduce(0,+) < 300_000 else { throw Failure.unsupported("export work limit") }
-            let index = pending[0] == nil ? 1 : pending[1] == nil ? 0 : (CMSampleBufferGetPresentationTimeStamp(pending[0]!).seconds <= CMSampleBufferGetPresentationTimeStamp(pending[1]!).seconds ? 0 : 1)
-            let sample = pending[index]!
-            if counts[index] == 0, initialMarkers[index] == 0, isInitialEmptyMarker(sample) {
-                initialMarkers[index] += 1 // At most one marker per track, never an unbounded drain loop.
-                pending[index] = outputs[index].copyNextSampleBuffer()
-                continue
-            }
-            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-            let dts = CMSampleBufferGetDecodeTimeStamp(sample)
-            let length = CMSampleBufferGetDuration(sample).seconds
-            let sampleCount = CMSampleBufferGetNumSamples(sample)
-            let format = CMSampleBufferGetFormatDescription(sample)
-            let formatMatches = format.map { CFEqual($0,index == 0 ? vf[0] : af[0]) } ?? false
-            let block = CMSampleBufferGetDataBuffer(sample)
-            var violations: [String] = []
-            if sampleCount != 1 { violations.append("sample-count") }
-            if !pts.seconds.isFinite || pts.seconds < 0 { violations.append("invalid-pts") }
-            if pts.seconds < previous[index] { violations.append("nonmonotonic-pts") }
-            if !length.isFinite || length <= 0 { violations.append("invalid-duration") }
-            if pts.seconds + length > duration + 0.1 { violations.append("past-asset-end") }
-            if dts.isValid && CMTimeCompare(pts,dts) != 0 { violations.append("dts-pts-reorder") }
-            if block == nil { violations.append("missing-block") }
-            if !formatMatches { violations.append("changed-format") }
-            guard violations.isEmpty, let block else {
-                // Numeric metadata only: no source URLs, sample payloads, titles or paths.
-                // Include first/last per-sample timing to diagnose grouped compressed AAC
-                // without assuming that a CMSampleBuffer is one codec packet.
-                func time(_ t: CMTime) -> String { "\(t.value)/\(t.timescale):flags=\(t.flags.rawValue):epoch=\(t.epoch)" }
-                func timing(_ offset: Int) -> String {
-                    var info = CMSampleTimingInfo()
-                    let status = CMSampleBufferGetSampleTimingInfo(sample, at: offset, timingInfoOut: &info)
-                    return "status=\(status),pts=\(time(info.presentationTimeStamp)),dts=\(time(info.decodeTimeStamp)),duration=\(time(info.duration)),bytes=\(CMSampleBufferGetSampleSize(sample,at:offset))"
-                }
-                let empty = CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_EmptyMedia,attachmentModeOut:nil) as? Bool
-                let permanent = CMGetAttachment(sample,key:kCMSampleBufferAttachmentKey_PermanentEmptyMedia,attachmentModeOut:nil) as? Bool
-                let markerFlags = "empty=\(String(describing:empty)),permanent=\(String(describing:permanent)),initialMarkers=\(initialMarkers[index])"
-                let first = sampleCount > 0 ? timing(0) : "none"
-                let last = sampleCount > 1 ? timing(sampleCount-1) : first
-                throw Failure.unsupported("sample-policy [\(violations.joined(separator:","))] \(markerFlags),track=\(index+1),buffer=\(counts[index]),samples=\(sampleCount),pts=\(time(pts)),dts=\(time(dts)),duration=\(length),previousPTS=\(previous[index]),assetDuration=\(duration),formatMatches=\(formatMatches),bytes=\(block.map { CMBlockBufferGetDataLength($0) } ?? -1),first={\(first)},last={\(last)}")
-            }
-            // Edit-list priming/padding needs an independently verified mapping. Fail closed rather than shift audio.
-            for key in [kCMSampleBufferAttachmentKey_TrimDurationAtStart,kCMSampleBufferAttachmentKey_TrimDurationAtEnd] {
-                if let attachment = CMGetAttachment(sample,key:key,attachmentModeOut:nil) {
-                    guard let trim = attachment as? [String:Any],
-                          CMTimeMakeFromDictionary(trim as CFDictionary).seconds == 0 else {
-                        throw Failure.unsupported("AAC priming/padding requires the MP4 companion")
-                    }
-                }
-            }
-            let byteCount = CMBlockBufferGetDataLength(block)
-            guard byteCount > 0, byteCount <= 16_777_216 else { throw Failure.unsupported("sample size") }
-            var bytes = Data(count:byteCount)
-            let status = bytes.withUnsafeMutableBytes { CMBlockBufferCopyDataBytes(block,atOffset:0,dataLength:byteCount,destination:$0.baseAddress!) }
-            guard status == kCMBlockBufferNoErr else { throw Failure.unsupported("sample copy") }
-            let attachments = CMSampleBufferGetSampleAttachmentsArray(sample,createIfNecessary:false) as? [[String:Any]]
-            let key = (attachments?.first?[kCMSampleAttachmentKey_NotSync as String] as? Bool) != true
-            try writer.append(track:UInt64(index+1),milliseconds:Int64((pts.seconds*1000).rounded()),durationMS:UInt64(max(1,(length*1000).rounded())),key:key,bytes:bytes)
-            previous[index] = pts.seconds
-            counts[index] += 1
-            progress(min(0.99,pts.seconds/duration))
-            pending[index] = outputs[index].copyNextSampleBuffer()
-            if counts.reduce(0,+) % 256 == 0 { await Task.yield() }
+            guard Date() < deadline, packets < 300_000 else { throw Failure.unsupported("export work limit") }
+            let index: Int
+            if positions[0] == video.samples.count { index = 1 }
+            else if positions[1] == audio.samples.count { index = 0 }
+            else { index = video.samples[positions[0]].timestamp <= audio.samples[positions[1]].timestamp ? 0 : 1 }
+            let sample = tracks[index].samples[positions[index]]
+            let bytes = try source.read(sample)
+            try writer.append(track:UInt64(index+1),milliseconds:Int64((sample.timestamp*1000).rounded()),
+                              durationMS:UInt64(max(1,(sample.duration*1000).rounded())),key:sample.key,bytes:bytes)
+            positions[index] += 1
+            packets += 1
+            progress(min(0.99,sample.timestamp/source.duration))
+            if packets % 256 == 0 { await Task.yield() }
         }
-        guard reader.status == .completed, counts.allSatisfy({ $0 > 0 }) else { throw reader.error ?? Failure.unsupported("incomplete read") }
+        try source.verifyUnchanged()
         try writer.finish()
         try Task.checkCancellation()
-        // moveItem fails if destination already exists, preserving concurrent/user-created files.
         try FileManager.default.moveItem(at:output,to:destination)
         progress(1)
         return destination

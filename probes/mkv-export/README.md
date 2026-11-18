@@ -29,3 +29,6 @@ the additional export in the existing 2 GB retained-storage budget and leave the
 MP4 decoder companion available. The exporter independently enforces a 512 MiB
 output ceiling and 800 MB free-space reserve. It does not enforce the caller's
 library-wide retained budget, which is an acquisition/storage-layer responsibility.
+
+## Current candidate architecture
+The export now reads bounded original MP4 sample tables, not AVFoundation compressed buffers. Supports only self-contained unfragmented AVC/AAC with identity timeline edits, zero composition offsets, square pixels and validated AAC roll recovery. SeekPreRoll preserves the one-packet roll requirement. All other structures fall back to MP4. Native packet/timing, decoded parity and hostile-container rejection tests must pass before shipping. No new external dependency or license is introduced.

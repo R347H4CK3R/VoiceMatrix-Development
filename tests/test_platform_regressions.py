@@ -34,15 +34,18 @@ class PlatformRegressionTests(unittest.TestCase):
   self.assertLess(workflow.index('core.autocrlf false'),workflow.index('actions/checkout@v4'))
   self.assertIn("PYTHONUTF8: '1'",workflow)
   self.assertIn('Git\\bin',workflow)
- def test_windows_media_setup_retries_and_requires_real_binaries(self):
+ def test_windows_media_setup_pins_archive_and_requires_real_binaries(self):
   import yaml
   workflow=yaml.safe_load((p.ROOT/'.github/workflows/queue-processor.yml').read_text())
-  step=next(s for s in workflow['jobs']['source']['steps'] if s.get('name')=='Install Windows media test dependency')
-  self.assertEqual(step['shell'],'pwsh')
-  run=step['run']
-  self.assertIn('$attempt -le 3',run)
-  self.assertIn("Get-Command ffmpeg -ErrorAction SilentlyContinue",run)
-  self.assertIn("Get-Command ffprobe -ErrorAction SilentlyContinue",run)
-  self.assertIn('ffmpeg -version',run);self.assertIn('ffprobe -version',run)
-  self.assertIn('if ($LASTEXITCODE -ne 0)',run)
-  self.assertIn('throw "FFmpeg and FFprobe are required',run)
+  steps=workflow['jobs']['source']['steps']
+  setup=next(s for s in steps if s.get('name')=='Install Windows media test dependency')
+  verify=next(s for s in steps if s.get('name')=='Require both pinned Windows media executables')
+  self.assertEqual(setup['shell'],'pwsh');self.assertEqual(verify['shell'],'pwsh')
+  self.assertIn('python tools/setup_windows_ffmpeg.py --destination',setup['run'])
+  self.assertIn('if ($LASTEXITCODE -ne 0)',setup['run'])
+  self.assertIn('Get-Command ffmpeg -ErrorAction Stop',verify['run'])
+  self.assertIn('Get-Command ffprobe -ErrorAction Stop',verify['run'])
+  self.assertIn('ffmpeg -version',verify['run']);self.assertIn('ffprobe -version',verify['run'])
+  self.assertEqual(verify['run'].count('if ($LASTEXITCODE -ne 0)'),2)
+  self.assertLess(steps.index(setup),steps.index(verify))
+  self.assertLess(steps.index(verify),next(i for i,s in enumerate(steps) if s.get('name')=='Run source, real queue/files, transport and cancellation regressions'))

@@ -199,6 +199,20 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: "mkdir -p frozen\n gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14171746105/zip > frozen.zip\n echo '42472557ab8e854fcfd8e3f858da8a7fe06f1fa5d2e8a4962d7e34cd8ed446d5  frozen.zip' | shasum -a 256 -c -\n python3 - <<'PYCODE'\nimport zipfile,pathlib\nwith zipfile.ZipFile('frozen.zip') as z:\n assert z.namelist()==['Package.resolved']\n pathlib.Path('frozen/Package.resolved').write_bytes(z.read('Package.resolved'))\nPYCODE\ncp frozen/Package.resolved Package.resolved\n"
+    - name: Migrate only obsolete remote ONNX pin to verified vendored source
+      run: |
+        python3 -m unittest tests.test_frozen_vendored_graph -v
+        python3 -m tools.frozen_vendored_graph frozen/Package.resolved
+        cp frozen/Package.resolved Package.resolved
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Frozen-vendored-graph-receipt
+        path: |
+          frozen/Package.original.resolved
+          frozen/Package.resolved
+          frozen/vendored-graph-receipt.json
+        if-no-files-found: error
+        retention-days: 14
     - uses: actions/upload-artifact@v4
       with:
         name: Character-frozen-dependencies

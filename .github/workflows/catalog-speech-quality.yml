@@ -28,6 +28,20 @@ jobs:
         PYCODE\n gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14177206631/zip\
         \ > retained.zip\n echo '1c9c3c29e36a23e7d62bc58a0afcfd8ef66c62c6bc7ba1a087114151be85758f\
         \  retained.zip' | shasum -a 256 -c -\n"
+    - name: Migrate only obsolete remote ONNX pin to verified vendored source
+      run: |
+        python3 -m unittest tests.test_frozen_vendored_graph -v
+        python3 -m tools.frozen_vendored_graph frozen/Package.resolved
+        cp frozen/Package.resolved Package.resolved
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Frozen-vendored-graph-receipt
+        path: |
+          frozen/Package.original.resolved
+          frozen/Package.resolved
+          frozen/vendored-graph-receipt.json
+        if-no-files-found: error
+        retention-days: 14
     - uses: actions/cache@v4
       with:
         path: character-cache

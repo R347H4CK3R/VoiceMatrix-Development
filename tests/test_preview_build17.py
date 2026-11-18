@@ -52,7 +52,7 @@ class FrozenDependencyGraphTests(unittest.TestCase):
   self.assertNotIn('xcodegen',runs)
   fetch=next(s for s in resolve['steps'] if 'gh api '+artifact in s.get('run',''))
   self.assertEqual(fetch['env']['GH_TOKEN'],'${{ github.token }}')
-  upload=next(s for s in resolve['steps'] if s.get('uses')=='actions/upload-artifact@v4')
+  upload=next(s for s in resolve['steps'] if s.get('uses')=='actions/upload-artifact@v4' and s['with']['name']=='Character-frozen-dependencies')
   self.assertEqual(upload['with']['name'],'Character-frozen-dependencies')
   self.assertEqual(upload['with']['path'],'Package.resolved')
   for step in resolve['steps']:

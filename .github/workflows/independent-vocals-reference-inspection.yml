@@ -1,0 +1,54 @@
+name: Independent vocals reference handoff IPA inspection (no release)
+'on':
+  push:
+    branches: [verification/vocals-reference-ipa-inspection]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: verifier
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
+        ref: cd235ec71960a3586a267dcdfd8a94d8a4e69d0f
+        path: target
+        persist-credentials: false
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Verify inspection regressions
+      working-directory: verifier
+      run: |
+        python3 -m pip install PyYAML==6.0.3
+        python3 -m unittest tests.test_independent_vocals_reference_inspection tests.test_vocals_reference_preview_package -v
+    - name: Authenticate exact artifact and run before downloading
+      env:
+        GH_TOKEN: ${{ github.token }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 verifier/tools/verification/inspect_vocals_reference_artifact.py pins
+        mkdir evidence
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14448482512 > evidence/artifact-metadata.json
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/runs/44347908623 > evidence/run-metadata.json
+        python3 verifier/tools/verification/inspect_vocals_reference_artifact.py metadata evidence/artifact-metadata.json evidence/run-metadata.json
+        gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14448482512/zip > original-artifact.zip
+    - name: Verify and inspect original IPA without rebuilding or publishing
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 verifier/tools/verification/inspect_vocals_reference_artifact.py inspect original-artifact.zip target evidence
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Independent-vocals-reference-IPA-inspection
+        path: evidence
+        if-no-files-found: error
+        retention-days: 14

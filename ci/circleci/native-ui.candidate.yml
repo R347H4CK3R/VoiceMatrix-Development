@@ -76,10 +76,10 @@ jobs:
           -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests
           -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests -only-testing:VoiceMatrixTests/AppUpdateTests
           -only-testing:VoiceMatrixTests/SpeechControlsTests -only-testing:VoiceMatrixTests/AudioHistorySaveTests
-          -only-testing:VoiceMatrixUITests/VocalSeparationUITests -only-testing:VoiceMatrixUITests/SpeechFeatureUITests
-          -only-testing:VoiceMatrixUITests/RVCOnlineUITests -only-testing:VoiceMatrixUITests/RVCHistoryUITests
-          > character-ui-build.log 2>&1 || { tail -160 character-ui-build.log; exit
-          1; }
+          -only-testing:VoiceMatrixUITests/RetainedClipUITests -only-testing:VoiceMatrixUITests/VocalSeparationUITests
+          -only-testing:VoiceMatrixUITests/SpeechFeatureUITests -only-testing:VoiceMatrixUITests/RVCOnlineUITests
+          -only-testing:VoiceMatrixUITests/RVCHistoryUITests > character-ui-build.log
+          2>&1 || { tail -160 character-ui-build.log; exit 1; }
 
           '
         no_output_timeout: 20m
@@ -196,6 +196,8 @@ jobs:
 
           python3 tools/seed_rvc_history_ui.py seed "$CONTAINER"
 
+          python3 -m tools.seed_retained_clip_ui seed "$CONTAINER"
+
           python3 -m tools.seed_separation_handoff_ui seed "$CONTAINER"
 
           '
@@ -209,14 +211,18 @@ jobs:
           rvc-history.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO
           -only-testing:VoiceMatrixUITests/RVCHistoryUITests/testSeededHistorySelectsVerifiedCopyAcrossRelaunch
           -only-testing:VoiceMatrixUITests/VocalSeparationUITests/testSeededVocalsHandoffRequiresFreshAuthorizationAcrossNavigation
-          > rvc-history.log 2>&1 || { tail -160 rvc-history.log; exit 1; }
+          -only-testing:VoiceMatrixUITests/RetainedClipUITests > rvc-history.log 2>&1
+          || { tail -160 rvc-history.log; exit 1; }
 
           CONTAINER=$(xcrun simctl get_app_container "$SIMULATOR_ID" com.voicematrix.app
           data)
 
           python3 tools/seed_rvc_history_ui.py check "$CONTAINER" | tee rvc-history-copy-evidence.log
 
-          python3 -m tools.seed_separation_handoff_ui check "$CONTAINER" | tee separation-handoff-evidence.log
+          python3 -m tools.seed_separation_handoff_ui check "$CONTAINER" --allow-retained-clips
+          | tee separation-handoff-evidence.log
+
+          python3 -m tools.seed_retained_clip_ui check "$CONTAINER" | tee retained-clip-evidence.log
 
           '
         no_output_timeout: 20m
@@ -243,6 +249,8 @@ jobs:
         path: rvc-history-copy-evidence.log
     - store_artifacts:
         path: separation-handoff-evidence.log
+    - store_artifacts:
+        path: retained-clip-evidence.log
     - store_artifacts:
         path: rvc-history.xcresult
     - store_artifacts:

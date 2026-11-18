@@ -137,6 +137,12 @@ import CryptoKit
         guard !Task.isCancelled, current?.id == job.id, !busy else { return nil }
         return export
     }
+    var retainedSeparationSource: SeparationClipHandoff.Source? {
+        guard !busy, let job=current, let name=job.sourceFile, let sha=job.sourceSHA256,
+              name.range(of:"^[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]+)*$",options:.regularExpression) != nil,
+              sha.range(of:"^[0-9a-f]{64}$",options:.regularExpression) != nil else {return nil}
+        return SeparationClipHandoff.Source(jobID:job.id,url:folder.appendingPathComponent(name),sha256:sha)
+    }
     func journalPage(offset: Int = 0) throws -> LocalStudioJournal.Page {
         guard offset>=0,let current else { throw LocalStudioJournal.Failure.unsafe }
         let file=folder.appendingPathComponent(LocalStudioJournal.filename)

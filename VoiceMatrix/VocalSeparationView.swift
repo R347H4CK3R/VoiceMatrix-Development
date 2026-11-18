@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
     @Published private(set) var busy=false
     @Published private(set) var cancelling=false
     @Published private(set) var inputName=""
+    @Published private(set) var acceptedClipID:UUID?
     @Published private(set) var message="Choose an audio clip of 10 seconds or less. Nothing is uploaded."
     @Published private(set) var results:[SeparationStore.Result]=[]
     private var input:URL?
@@ -55,6 +56,28 @@ import UniformTypeIdentifiers
             catch {message="Could not import this clip. Use a complete audio file up to 10 seconds and 64 MiB, mono or stereo. No original was changed."}
         }
     }
+    @discardableResult func acceptClip(_ clip:SeparationClipHandoff.Input,audio:AudioStore) -> Bool {
+        guard !busy,active,let lease=audio.claimProcessing() else{return false}
+        busy=true;cancelling=false
+        message="Checking the selected retained-media clip…"
+        work=Task {
+            defer {audio.releaseProcessing(lease);busy=false;cancelling=false;work=nil}
+            do {
+                let worker=Task.detached {
+                    try SeparationClipHandoff.validate(clip)
+                    let decoded=try SeparationAudioImport.decode(clip.url)
+                    guard decoded.left.count==clip.frames else {throw SeparationStore.Failure.unsafe}
+                    try SeparationClipHandoff.validate(clip)
+                }
+                try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
+                try Task.checkCancellation();guard active else{return}
+                input=clip.url;inputSHA=clip.sha256;acceptedClipID=clip.id
+                inputName=String(format:"Retained clip %.3f–%.3f s",clip.start,clip.start+Double(clip.frames)/44100)
+                message="Selected short clip ready. Tap Separate to run experimental separation. The entire source is not being processed."
+            } catch {message="Selected clip could not be verified. No separation started; original files were kept."}
+        }
+        return true
+    }
     func run(audio:AudioStore) {
         guard !busy,active,let source=input,let models,modelsPresent,let lease=audio.claimProcessing() else{return}
         busy=true;cancelling=false;audio.stop();message="Separating vocals and accompaniment on this iPhone…"
@@ -100,6 +123,9 @@ struct VocalSeparationView: View {
     @Environment(\.scenePhase) private var scene
     @StateObject private var studio=VocalSeparationStudio()
     @State private var importing=false
+    private let initialClip:SeparationClipHandoff.Input?
+    @State private var loadedInitialClip=false
+    init(initialClip:SeparationClipHandoff.Input? = nil) {self.initialClip=initialClip}
     private var unavailable:Bool {studio.busy || audio.processingInUse || audio.microphoneInUse}
     var body: some View {
         Form {
@@ -137,9 +163,23 @@ struct VocalSeparationView: View {
         .fileImporter(isPresented:$importing,allowedContentTypes:[.audio]) {result in
             if case .success(let url)=result {studio.importAudio(url,audio:audio)}
         }
-        .onAppear{studio.setActive(scene == .active);studio.refresh(audio:audio)}
-        .onDisappear{studio.setActive(false)}
-        .onChange(of:scene){_,value in studio.setActive(value == .active)}
+        .onAppear{
+            studio.setActive(scene == .active)
+            if initialClip != nil {loadInitialClipIfReady()}
+            else {studio.refresh(audio:audio)}
+        }
+        .onDisappear{studio.setActive(false);if studio.acceptedClipID != initialClip?.id {loadedInitialClip=false}}
+        .onChange(of:scene){_,value in
+            studio.setActive(value == .active)
+            if value != .active,studio.acceptedClipID != initialClip?.id {loadedInitialClip=false}
+            if value == .active {loadInitialClipIfReady()}
+        }
+        .onChange(of:studio.busy){_,busy in if !busy {loadInitialClipIfReady()}}
+        .onChange(of:audio.processingInUse){_,busy in if !busy {loadInitialClipIfReady()}}
+    }
+    private func loadInitialClipIfReady() {
+        guard scene == .active,!loadedInitialClip,!studio.busy,let initialClip else{return}
+        loadedInitialClip=studio.acceptClip(initialClip,audio:audio)
     }
 }
 #endif

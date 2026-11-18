@@ -3,6 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LocalVideoStudioView: View {
+    @Environment(\.scenePhase) private var clipScene
     @EnvironmentObject private var local: LocalVideoStudio
     @EnvironmentObject private var library: CharacterLibrary
     @EnvironmentObject private var audio: AudioStore
@@ -18,6 +19,14 @@ struct LocalVideoStudioView: View {
     @State private var retryRequest: FreshDownloadRequest?
     @State private var speakerDestination: CharacterStudioMode?
     @State private var selectionError: String?
+    @State private var clipStart = "0"
+    @State private var clipSeconds = "5"
+    @State private var clipAuthorized = false
+    @State private var clipPreparing = false
+    @State private var clipMessage = ""
+    @State private var clipWork: Task<Void,Never>?
+    @State private var clipRequest: UUID?
+    @State private var clipDestination: SeparationClipHandoff.Input?
     private let initialSeparatedVocals: SeparationStore.Result?
     @State private var separatedInput: SeparationStore.ReferenceInput?
     @State private var checkingSeparatedInput = false
@@ -34,7 +43,7 @@ struct LocalVideoStudioView: View {
                 Text("Import a local video or recording, or acquire supported public website media directly. Extraction, English transcription, reference-conditioned preview and voice registration run inside this app. No laptop or server fallback.")
                 Text("Bundled analysis groups speakers and excludes detected overlap. Local sound screening rejects likely music, singing or insufficient speech. It does not identify characters, remove music or train RVC models. Every accepted reference must pass a word check; resemblance needs listening review.").font(.footnote).foregroundStyle(.secondary)
                 Button(selected == nil ? "Choose video or audio" : "Choose a different file") { importing = true }
-                    .buttonStyle(.bordered).disabled(local.busy || checkingSeparatedInput).accessibilityIdentifier("local-video-import")
+                    .buttonStyle(.bordered).disabled(local.busy || checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-import")
                 if selected != nil { Label("Local media selected", systemImage: "doc.fill") }
                 if separatedInput != nil {
                     Text("Separated vocals selected. Separation is not identity verification, voice cloning or training. Artifacts or remaining music can still fail the existing speech and reference checks.")
@@ -43,7 +52,7 @@ struct LocalVideoStudioView: View {
                 if checkingSeparatedInput { ProgressView("Verifying saved vocals…") }
                 TextField("YouTube or supported HTTPS media URL", text: $sourceURL)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    .textFieldStyle(.roundedBorder).disabled(local.busy || checkingSeparatedInput).accessibilityIdentifier("local-video-url")
+                    .textFieldStyle(.roundedBorder).disabled(local.busy || checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-url")
                 PasteButton(payloadType: String.self) { values in
                     authorized = false
                     if separatedInput != nil { selected = nil }
@@ -57,18 +66,18 @@ struct LocalVideoStudioView: View {
                         selected = nil
                         selectionError = nil
                     } catch { selectionError = error.localizedDescription }
-                }.buttonStyle(.bordered).disabled(local.busy || checkingSeparatedInput)
+                }.buttonStyle(.bordered).disabled(local.busy || checkingSeparatedInput || clipPreparing)
                     .accessibilityLabel("Paste video URL from Clipboard")
                     .accessibilityIdentifier("local-video-paste")
                 Text("URL acquisition needs internet to contact the source website. YouTube link support is limited: many public pages provide no downloadable media URLs. Direct media on upload.wikimedia.org or archive.org are supported candidates. A bundled resolver can try standard public streams on this iPhone. Sign-in, age/access verification and DRM are not bypassed; those sources need authorized local-file import.").font(.footnote).foregroundStyle(.secondary)
-                Toggle("I am authorized to use this media and its voices", isOn: $authorized).disabled(local.busy || checkingSeparatedInput).accessibilityIdentifier("local-video-authorization")
+                Toggle("I am authorized to use this media and its voices", isOn: $authorized).disabled(local.busy || checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-authorization")
                 Button("Generate speaker references") {
                     if let selected { local.start(selected, authorized: authorized, library: library, audio: audio, speech: speech, referenceInput: separatedInput) }
-                }.buttonStyle(.borderedProminent).disabled(selected == nil || !authorized || local.busy || checkingSeparatedInput)
+                }.buttonStyle(.borderedProminent).disabled(selected == nil || !authorized || local.busy || checkingSeparatedInput || clipPreparing)
                     .accessibilityIdentifier("local-video-generate")
                 Button("Download URL and generate references") {
                     local.startURL(sourceURL, authorized: authorized, library: library, audio: audio, speech: speech)
-                }.buttonStyle(.borderedProminent).disabled(sourceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !authorized || local.busy)
+                }.buttonStyle(.borderedProminent).disabled(sourceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !authorized || local.busy || clipPreparing)
                     .accessibilityIdentifier("local-video-download")
                 if let selectionError { Text(selectionError).foregroundStyle(.red) }
                 Text(local.notice).accessibilityIdentifier("local-video-status")
@@ -88,10 +97,32 @@ struct LocalVideoStudioView: View {
                             Text("Resume reuses the retained download plan. A fresh attempt asks the original website again, which can help if its media links expired. It may still fail for unsupported or restricted sources.").font(.footnote).foregroundStyle(.secondary)
                         }
                         Button("Import an authorized local file instead") { importing = true }
-                            .buttonStyle(.borderedProminent).disabled(checkingSeparatedInput).accessibilityIdentifier("local-video-import-fallback")
+                            .buttonStyle(.borderedProminent).disabled(checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-import-fallback")
                         Text("Choose a video or audio file you already have permission to use in Files, then enable authorization and tap Generate speaker references. The earlier job and its partial files remain retained.").font(.footnote).foregroundStyle(.secondary)
                     }
-                    Button("Resume retained job") { local.resume(library: library, audio: audio, speech: speech) }.buttonStyle(.bordered)
+                    Button("Resume retained job") { local.resume(library: library, audio: audio, speech: speech) }.buttonStyle(.bordered).disabled(clipPreparing)
+                }
+                if local.retainedSeparationSource != nil {
+                    GroupBox("Separate a short clip from retained media") {
+                        VStack(alignment:.leading,spacing:10) {
+                            Text("Choose 0.5–10 seconds from the retained source. This prepares only the selected clip, not the entire video. Experimental separation still needs a separate tap; it does not verify voice identity.").font(.footnote)
+                            TextField("Start in seconds",text:$clipStart).keyboardType(.decimalPad)
+                                .disabled(clipPreparing).accessibilityIdentifier("retained-clip-start")
+                            TextField("Duration in seconds (0.5–10)",text:$clipSeconds).keyboardType(.decimalPad)
+                                .disabled(clipPreparing).accessibilityIdentifier("retained-clip-seconds")
+                            Toggle("I am authorized to use this selected clip and its voices",isOn:$clipAuthorized)
+                                .disabled(clipPreparing).accessibilityIdentifier("retained-clip-authorization")
+                            Button("Prepare selected clip for separation") {prepareSeparationClip()}
+                                .disabled(!clipAuthorized || !clipIntervalValid || clipPreparing || audio.processingInUse || audio.microphoneInUse)
+                                .accessibilityIdentifier("retained-clip-prepare")
+                            if clipPreparing {
+                                ProgressView("Verifying retained source and extracting selected clip…")
+                                Button("Cancel clip preparation") {clipRequest=nil;clipWork?.cancel()}
+                                    .accessibilityIdentifier("retained-clip-cancel")
+                            }
+                            Text(clipMessage).accessibilityIdentifier("retained-clip-status")
+                        }
+                    }
                 }
                 if let reference = local.reference { Button("Listen to reference") { audio.play(reference) }.disabled(local.busy) }
                 if let preview = local.preview { Button("Listen to generated preview") { audio.play(preview) }.disabled(local.busy) }
@@ -208,12 +239,30 @@ struct LocalVideoStudioView: View {
                                 Text(job.created.formatted(date: .abbreviated, time: .shortened))
                                 Text(job.stage).font(.caption)
                             }
-                        }.disabled(local.busy)
+                        }.disabled(local.busy).accessibilityIdentifier("local-video-history-"+job.id.uuidString)
                     }
                 }
             }.padding(20)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement:.keyboard) {
+                Spacer()
+                Button("Done") {UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),to:nil,from:nil,for:nil)}
+                    .accessibilityIdentifier("local-video-keyboard-done")
+            }
+        }
         .navigationTitle("Video Voice Studio")
+        .navigationDestination(item: $clipDestination) { input in
+            VocalSeparationView(initialClip: input)
+        }
+        .onDisappear {clipRequest=nil;clipWork?.cancel();clipAuthorized=false}
+        .onChange(of: clipScene) { _, value in
+            if value != .active {clipRequest=nil;clipWork?.cancel();clipAuthorized=false}
+        }
+        .onChange(of: clipStart) {_,_ in clipAuthorized=false}
+        .onChange(of: clipSeconds) {_,_ in clipAuthorized=false}
+        .onChange(of: local.current?.id) {_,_ in clipRequest=nil;clipWork?.cancel();clipAuthorized=false}
         .navigationDestination(item: $speakerDestination) { mode in
             CharacterLibraryView(mode: mode)
         }
@@ -250,6 +299,7 @@ struct LocalVideoStudioView: View {
         }
         .onChange(of: local.current?.id) { _, _ in journalPage=nil; journalError=nil }
         .onChange(of: sourceURL) { _, _ in
+            clipRequest=nil;clipWork?.cancel();clipAuthorized=false
             authorized = false
             if separatedInput != nil { selected = nil; separatedInput = nil }
         }
@@ -264,6 +314,34 @@ struct LocalVideoStudioView: View {
                 } catch { selected = nil; selectionError = error.localizedDescription }
             case .failure: selectionError = "The selected file could not be opened. No job was started."
             }
+        }
+    }
+    private var clipIntervalValid:Bool {
+        guard let start=Double(clipStart),let seconds=Double(clipSeconds) else{return false}
+        return start.isFinite && seconds.isFinite && start>=0 && (0.5...10).contains(seconds) && start+seconds<=1800
+    }
+    private func prepareSeparationClip() {
+        guard clipAuthorized, !clipPreparing, clipScene == .active,
+              let source=local.retainedSeparationSource,
+              let start=Double(clipStart), let seconds=Double(clipSeconds),
+              start.isFinite, seconds.isFinite, start>=0, (0.5...10).contains(seconds),start+seconds<=1800 else {
+            clipMessage="Enter a valid start and a duration from 0.5 to 10 seconds, then authorize this interval."
+            return
+        }
+        guard let lease=audio.claimProcessing() else {clipMessage="Stop the other audio job first.";return}
+        audio.stop();clipPreparing=true;clipMessage="Checking the retained source. Nothing is uploaded."
+        let request=UUID();clipRequest=request
+        clipWork=Task {
+            defer {audio.releaseProcessing(lease);clipPreparing=false;clipWork=nil}
+            do {
+                let worker=Task.detached {try await SeparationClipHandoff.prepare(source:source,start:start,seconds:seconds)}
+                let input=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
+                try Task.checkCancellation()
+                guard clipRequest==request,clipScene == .active,local.retainedSeparationSource==source else {return}
+                clipAuthorized=false;clipMessage="Selected short clip ready. Separation has not started."
+                clipDestination=input
+            } catch is CancellationError {clipMessage="Stopped. Original source and previous results were kept."}
+            catch {clipMessage="Could not prepare this interval. The source may have changed, the interval may exceed its audio, or the track/timeline may be unsupported. Original files were kept."}
         }
     }
     private func openSpeaker(_ speaker: String, jobID: UUID, mode: CharacterStudioMode) {

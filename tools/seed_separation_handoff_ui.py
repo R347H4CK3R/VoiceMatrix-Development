@@ -39,12 +39,15 @@ def seed(container):
     baseline=dict(files=inventory(root),jobs=inventory(jobs))
     with (container/'separation-handoff-baseline.json').open('x') as f:json.dump(baseline,f,sort_keys=True)
 
-def check(container):
+def check(container,allow_retained_clips=False):
     root,jobs=paths(container)
     baseline=json.loads((container/'separation-handoff-baseline.json').read_text())
     current=inventory(root)
     for name,digest in baseline['files'].items():assert current.get(name)==digest,'Original or stem changed: '+name
     added=set(current)-set(baseline['files'])
+    if allow_retained_clips:
+        from tools.seed_retained_clip_ui import verify_clips
+        added -= verify_clips(container)
     assert len(added)==1 and all(Path(p).name.startswith('Reference-') for p in added),'Expected one reused verified handoff copy only'
     expected=fixture(VALID)[2]['vocalsSHA256']
     assert all(current[p]==expected for p in added),'Handoff copies differ from verified vocals'
@@ -54,4 +57,7 @@ def check(container):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode',choices=['seed','check']);parser.add_argument('container',type=Path)
-    args=parser.parse_args();{'seed':seed,'check':check}[args.mode](args.container)
+    parser.add_argument('--allow-retained-clips',action='store_true')
+    args=parser.parse_args()
+    if args.mode=='seed':seed(args.container)
+    else:check(args.container,allow_retained_clips=args.allow_retained_clips)

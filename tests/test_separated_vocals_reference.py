@@ -20,7 +20,8 @@ class HandoffSurfaceTests(unittest.TestCase):
   source=(ROOT/'VoiceMatrix/LocalVideoStudio.swift').read_text()
   self.assertIn('if let referenceInput { return try referenceInput.copyVerified(to: destination) }',source)
   view=(ROOT/'VoiceMatrix/LocalVideoStudioView.swift').read_text()
-  task=view[view.index('guard !preparedSeparatedInput'):view.index('.onChange(of: local.current?.id)')]
+  start=view.index('guard !preparedSeparatedInput')
+  task=view[start:view.index('.onChange(of: local.current?.id)',start)]
   self.assertNotIn('local.start(',task)
   self.assertIn('authorized = false',task)
   self.assertIn('withTaskCancellationHandler',task)

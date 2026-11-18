@@ -2,7 +2,7 @@ name: Bounded actual vocal separation diagnostic
 on:
   workflow_dispatch:
   push:
-    branches: [feature/standalone-vocal-separation, feature/separated-vocals-reference]
+    branches: [feature/standalone-vocal-separation, feature/separated-vocals-reference, feature/retained-separation-clip]
     paths:
       - 'VoiceMatrix/VocalSeparation*.swift'
       - 'VoiceMatrix/Separation*.swift'
@@ -10,6 +10,9 @@ on:
       - 'VoiceMatrix/LocalVideoStudio*.swift'
       - 'tests/test_separated_vocals_reference.py'
       - 'tests/test_separation_store.py'
+      - 'tests/test_separation_clip.py'
+      - 'tests/test_retained_separation_clip.py'
+      - 'probes/separation-clip/**'
       - 'probes/separation-store/**'
       - 'probes/separation-import/**'
       - 'tools/*vocal_separation*.py'
@@ -33,7 +36,7 @@ jobs:
           brew install xcodegen ffmpeg
           python3 -m pip install numpy==2.2.6 onnxruntime==1.24.2 PyYAML==6.0.3
       - name: Check pinned model preparation and real DSP parity
-        run: python3 -m unittest tests.test_vocal_separation_models tests.test_vocal_separation_dsp tests.test_separation_store tests.test_separated_vocals_reference -v
+        run: python3 -m unittest tests.test_vocal_separation_models tests.test_vocal_separation_dsp tests.test_separation_store tests.test_separated_vocals_reference tests.test_separation_clip tests.test_retained_separation_clip -v
       - name: Prepare fixed licensed known-mixture reference with actual pinned models
         run: |
           python3 tools/vendored_onnx.py

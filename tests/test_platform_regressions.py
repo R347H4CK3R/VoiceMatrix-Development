@@ -34,3 +34,15 @@ class PlatformRegressionTests(unittest.TestCase):
   self.assertLess(workflow.index('core.autocrlf false'),workflow.index('actions/checkout@v4'))
   self.assertIn("PYTHONUTF8: '1'",workflow)
   self.assertIn('Git\\bin',workflow)
+ def test_windows_media_setup_retries_and_requires_real_binaries(self):
+  import yaml
+  workflow=yaml.safe_load((p.ROOT/'.github/workflows/queue-processor.yml').read_text())
+  step=next(s for s in workflow['jobs']['source']['steps'] if s.get('name')=='Install Windows media test dependency')
+  self.assertEqual(step['shell'],'pwsh')
+  run=step['run']
+  self.assertIn('$attempt -le 3',run)
+  self.assertIn("Get-Command ffmpeg -ErrorAction SilentlyContinue",run)
+  self.assertIn("Get-Command ffprobe -ErrorAction SilentlyContinue",run)
+  self.assertIn('ffmpeg -version',run);self.assertIn('ffprobe -version',run)
+  self.assertIn('if ($LASTEXITCODE -ne 0)',run)
+  self.assertIn('throw "FFmpeg and FFprobe are required',run)

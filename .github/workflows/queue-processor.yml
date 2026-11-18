@@ -38,7 +38,31 @@ jobs:
         run: python -m pip install -r tests/requirements-native.txt
       - name: Install Windows media test dependency
         if: runner.os == 'Windows'
-        run: choco install ffmpeg -y --no-progress
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $ready = $false
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            if ((Get-Command ffmpeg -ErrorAction SilentlyContinue) -and (Get-Command ffprobe -ErrorAction SilentlyContinue)) {
+              $ready = $true
+              break
+            }
+            choco install ffmpeg -y --no-progress --execution-timeout=180
+            $installExit = $LASTEXITCODE
+            Write-Host "FFmpeg install attempt $attempt returned $installExit; verifying executables"
+            if ((Get-Command ffmpeg -ErrorAction SilentlyContinue) -and (Get-Command ffprobe -ErrorAction SilentlyContinue)) {
+              $ready = $true
+              break
+            }
+            if ($attempt -lt 3) { Start-Sleep -Seconds 10 }
+          }
+          if (-not $ready) { throw "FFmpeg and FFprobe are required; media regression tests will not run without them." }
+          ffmpeg -version
+          if ($LASTEXITCODE -ne 0) { throw "FFmpeg executable failed its version check" }
+          ffprobe -version
+          if ($LASTEXITCODE -ne 0) { throw "FFprobe executable failed its version check" }
+
       - name: Install Linux media test dependency
         if: runner.os == 'Linux'
         run: |

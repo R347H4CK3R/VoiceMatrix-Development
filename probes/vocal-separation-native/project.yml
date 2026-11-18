@@ -20,6 +20,8 @@ targets:
       - ../../VoiceMatrix/VocalSeparationAssets.swift
       - ../../VoiceMatrix/VocalSeparationDSP.swift
       - ../../VoiceMatrix/VocalSeparationEngine.swift
+      - ../../VoiceMatrix/SeparationAudioImport.swift
+      - ../../VoiceMatrix/SeparationStore.swift
     dependencies:
       - package: ONNXRuntime
         product: onnxruntime

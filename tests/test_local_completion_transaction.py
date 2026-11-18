@@ -6,7 +6,11 @@ class CompletionTransactionTests(unittest.TestCase):
  @unittest.skipUnless(shutil.which('swiftc'), 'Swift compiler required')
  def test_completion_commits_only_with_persisted_status(self):
   source = (ROOT/'VoiceMatrix/LocalVideoStudio.swift').read_text()
-  update = source[source.index('    private func update('):source.index('    func journalPage(')]
+  start = source.index('    private func update(')
+  end = source.index('\n    }', start) + len('\n    }')
+  update = source[start:end]
+  self.assertNotIn('verifiedMKVExport', update)
+  self.assertIn('LocalStudioSnapshot.encode', update)
   finish = re.search(r'(?:current\?\.completed = saved[^\n]*\n\s*)?try update\(unresolved == 0[^\n]*', source).group(0)
   harness = '''import Foundation
 final class StatusHarness {

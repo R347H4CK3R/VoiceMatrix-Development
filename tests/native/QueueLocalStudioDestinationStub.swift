@@ -4,6 +4,7 @@
 #if QUEUE_BOUNDARY_TYPECHECK
 import SwiftUI
 struct LocalVideoStudioView: View {
+    init(initialSourceURL: String? = nil) {}
     var body: some View { EmptyView() }
 }
 #endif

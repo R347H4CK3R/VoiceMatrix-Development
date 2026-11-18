@@ -38,6 +38,22 @@ enum LocalMKVExport {
         guard configTag == 5 else { throw Failure.unsupported("missing AAC initialization") }
         return Data(bytes[configStart..<configEnd])
     }
+    /// The actual AudioSpecificConfig is authoritative. ASBD flags may be unspecified (0),
+    /// but explicit contradictory object types are rejected rather than overwritten.
+    static func validateAACConfiguration(_ configuration: Data, sampleRate: Double, channels: UInt32,
+                                         formatFlags: UInt32, framesPerPacket: UInt32) throws {
+        let rates: [Double] = [96000,88200,64000,48000,44100,32000,24000,22050,16000,12000,11025,8000,7350]
+        guard let index = rates.firstIndex(of: sampleRate), (1...2).contains(channels),
+              formatFlags == 0 || formatFlags == 2, framesPerPacket == 1024 else {
+            throw Failure.unsupported("unsupported AAC description flags=\(formatFlags), frames=\(framesPerPacket), channels=\(channels), rate=\(sampleRate)")
+        }
+        let asc = UInt16((2 << 11) | (index << 7) | (Int(channels) << 3))
+        let expected = Data([UInt8(asc >> 8), UInt8(asc & 255)])
+        // Optional standard sync-extension 0x2b7: AAC/SBR type 5, sbrPresentFlag=0.
+        guard configuration == expected || configuration == expected + Data([0x56,0xe5,0x00]) else {
+            throw Failure.unsupported("AAC configuration is not the supported explicit LC configuration")
+        }
+    }
     static func export(input: URL, destination: URL, maxBytes: Int64,
                        progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> URL {
         try Task.checkCancellation()
@@ -57,17 +73,12 @@ enum LocalMKVExport {
         guard video.count == 1, audio.count == 1, duration.isFinite, (3...1800).contains(duration) else { throw Failure.unsupported("expected one video and one audio track, 3–1800 seconds") }
         let vf = try await video[0].load(.formatDescriptions)
         let af = try await audio[0].load(.formatDescriptions)
-        guard vf.count == 1, af.count == 1, CMFormatDescriptionGetMediaSubType(vf[0]) == kCMVideoCodecType_H264,
-              CMFormatDescriptionGetMediaSubType(af[0]) == kAudioFormatMPEG4AAC,
-              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(af[0])?.pointee,
-              asbd.mFormatFlags == 2, asbd.mFramesPerPacket == 1024, (1...2).contains(asbd.mChannelsPerFrame) else { throw Failure.unsupported("only AVC and AAC-LC mono/stereo are supported") }
-        let rates: [Double] = [96000,88200,64000,48000,44100,32000,24000,22050,16000,12000,11025,8000,7350]
-        guard let rateIndex = rates.firstIndex(of: asbd.mSampleRate),
-              let atoms = CMFormatDescriptionGetExtension(vf[0], extensionKey: kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms) as? [String: Any],
-              let avcc = atoms["avcC"] as? Data, avcc.count >= 7, avcc[0] == 1 else { throw Failure.unsupported("missing AVC/AAC configuration") }
-        // AAC-LC (object type 2), standard frequency index, explicit mono/stereo configuration.
-        let asc = UInt16((2 << 11) | (rateIndex << 7) | (Int(asbd.mChannelsPerFrame) << 3))
-        let expectedAAC = Data([UInt8(asc >> 8), UInt8(asc & 255)])
+        guard vf.count == 1, af.count == 1 else { throw Failure.unsupported("changing track format descriptions") }
+        guard CMFormatDescriptionGetMediaSubType(vf[0]) == kCMVideoCodecType_H264 else { throw Failure.unsupported("video codec is not AVC") }
+        guard CMFormatDescriptionGetMediaSubType(af[0]) == kAudioFormatMPEG4AAC,
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(af[0])?.pointee else { throw Failure.unsupported("audio codec is not MPEG-4 AAC") }
+        guard let atoms = CMFormatDescriptionGetExtension(vf[0], extensionKey: kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms) as? [String: Any],
+              let avcc = atoms["avcC"] as? Data, avcc.count >= 7, avcc[0] == 1 else { throw Failure.unsupported("missing AVC configuration") }
         let audioAtoms = CMFormatDescriptionGetExtension(af[0], extensionKey: kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms) as? [String: Any]
         var esds = audioAtoms?["esds"] as? Data
         if esds == nil {
@@ -79,8 +90,8 @@ enum LocalMKVExport {
         }
         guard let esds else { throw Failure.unsupported("missing AAC initialization") }
         let aac = try audioSpecificConfig(esds)
-        // Optional standard sync-extension 0x2b7: AAC/SBR type 5, sbrPresentFlag=0.
-        guard aac == expectedAAC || aac == expectedAAC + Data([0x56,0xe5,0x00]) else { throw Failure.unsupported("AAC configuration is not the supported explicit LC configuration") }
+        try validateAACConfiguration(aac, sampleRate: asbd.mSampleRate, channels: asbd.mChannelsPerFrame,
+                                     formatFlags: asbd.mFormatFlags, framesPerPacket: asbd.mFramesPerPacket)
         let dimensions = CMVideoFormatDescriptionGetDimensions(vf[0])
         guard dimensions.width > 0, dimensions.height > 0, dimensions.width <= 1280, dimensions.height <= 720,
               try await video[0].load(.preferredTransform) == .identity else { throw Failure.unsupported("dimensions or rotation") }

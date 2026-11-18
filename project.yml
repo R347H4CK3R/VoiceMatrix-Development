@@ -104,6 +104,10 @@ targets:
     - VoiceMatrixTests
     - path: tests/fixtures/conversion-reference.wav
       buildPhase: resources
+    - path: tests/fixtures/adaptive-video.mp4
+      buildPhase: resources
+    - path: tests/fixtures/adaptive-audio.m4a
+      buildPhase: resources
     dependencies:
     - target: VoiceMatrix
     settings:

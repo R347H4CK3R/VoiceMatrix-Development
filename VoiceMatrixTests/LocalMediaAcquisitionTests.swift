@@ -103,40 +103,23 @@ final class LocalMediaAcquisitionTests: XCTestCase {
         let folder=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
         defer { try? FileManager.default.removeItem(at:folder) }
-        let video=folder.appendingPathComponent("video.mp4"),pcm=folder.appendingPathComponent("tone.caf"),audio=folder.appendingPathComponent("audio.m4a")
-        let writer=try AVAssetWriter(outputURL:video,fileType:.mp4)
-        let input=AVAssetWriterInput(mediaType:.video,outputSettings:[AVVideoCodecKey:AVVideoCodecType.h264,AVVideoWidthKey:32,AVVideoHeightKey:32])
-        let adaptor=AVAssetWriterInputPixelBufferAdaptor(assetWriterInput:input,sourcePixelBufferAttributes:[kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32ARGB,kCVPixelBufferWidthKey as String:32,kCVPixelBufferHeightKey as String:32])
-        writer.add(input);XCTAssertTrue(writer.startWriting());writer.startSession(atSourceTime:.zero)
-        var pixel:CVPixelBuffer?
-        XCTAssertEqual(CVPixelBufferCreate(kCFAllocatorDefault,32,32,kCVPixelFormatType_32ARGB,nil,&pixel),kCVReturnSuccess)
-        let buffer=try XCTUnwrap(pixel)
-        CVPixelBufferLockBaseAddress(buffer,[])
-        if let base=CVPixelBufferGetBaseAddress(buffer) { memset(base,0,CVPixelBufferGetBytesPerRow(buffer)*32) }
-        CVPixelBufferUnlockBaseAddress(buffer,[])
-        print("ADAPTIVE_MERGE fixture video encoding started")
-        for frame in 0..<30 {
-            var waits=0
-            while !input.isReadyForMoreMediaData {
-                try await Task.sleep(nanoseconds:10_000_000);waits += 1
-                guard waits<500 else {
-                    let underlying=writer.error as NSError?
-                    throw NSError(domain:"VoiceMatrixSyntheticFixture",code:1,userInfo:[NSLocalizedDescriptionKey:
-                        "Video fixture writer readiness timeout before production merge; frame=\(frame), status=\(writer.status.rawValue), errorDomain=\(underlying?.domain ?? "none"), errorCode=\(underlying?.code ?? 0)"])
-                }
-            }
-            XCTAssertTrue(adaptor.append(buffer,withPresentationTime:CMTime(value:Int64(frame),timescale:10)))
+        // Fixed synthetic inputs avoid testing the simulator's unrelated H.264 encoder.
+        // The production merger and all original preservation checks still execute below.
+        let bundle=Bundle(for:LocalMediaAcquisitionTests.self)
+        let videoFixture=try XCTUnwrap(bundle.url(forResource:"adaptive-video",withExtension:"mp4"))
+        let audioFixture=try XCTUnwrap(bundle.url(forResource:"adaptive-audio",withExtension:"m4a"))
+        let video=folder.appendingPathComponent("video.mp4"),audio=folder.appendingPathComponent("audio.m4a")
+        try FileManager.default.copyItem(at:videoFixture,to:video)
+        try FileManager.default.copyItem(at:audioFixture,to:audio)
+        for (url,kind) in [(video,AVMediaType.video),(audio,AVMediaType.audio)] {
+            let source=AVURLAsset(url:url)
+            let sourceDuration=try await source.load(.duration)
+            let sourceTracks=try await source.loadTracks(withMediaType:kind)
+            let otherTracks=try await source.loadTracks(withMediaType:kind == .video ? .audio:.video)
+            XCTAssertEqual(sourceDuration.seconds,3,accuracy:0.01)
+            XCTAssertEqual(sourceTracks.count,1)
+            XCTAssertTrue(otherTracks.isEmpty)
         }
-        writer.endSession(atSourceTime:CMTime(seconds:3,preferredTimescale:600));input.markAsFinished()
-        await withCheckedContinuation { (c:CheckedContinuation<Void,Never>) in writer.finishWriting { c.resume() } }
-        XCTAssertEqual(writer.status,.completed)
-        print("ADAPTIVE_MERGE fixture video encoding completed")
-        let format=try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate:16_000,channels:1))
-        let samples=try XCTUnwrap(AVAudioPCMBuffer(pcmFormat:format,frameCapacity:48_000));samples.frameLength=48_000
-        for i in 0..<48_000 { samples.floatChannelData![0][i]=Float(sin(Double(i)*2*Double.pi*220/16_000))*0.03 }
-        do { let file=try AVAudioFile(forWriting:pcm,settings:format.settings);try file.write(from:samples) }
-        let encode=try XCTUnwrap(AVAssetExportSession(asset:AVURLAsset(url:pcm),presetName:AVAssetExportPresetAppleM4A))
-        try await encode.export(to:audio,as:.m4a)
         let originalVideo=try Data(contentsOf:video),originalAudio=try Data(contentsOf:audio)
         print("ADAPTIVE_MERGE entering production merge; videoBytes=\(originalVideo.count), audioBytes=\(originalAudio.count)")
         let merged=try await LocalMediaAcquisition.merge(video:video,audio:audio,folder:folder,maximumBytes:10_000_000) { _ in }

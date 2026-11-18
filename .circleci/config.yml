@@ -1,4 +1,4 @@
-# Native verification remains opt-in. No paid runner is enabled.
+# Native workflow remains disabled by default; activation requires explicit action.
 version: 2.1
 parameters:
   run-native:
@@ -76,8 +76,9 @@ jobs:
           -only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests
           -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests -only-testing:VoiceMatrixTests/AppUpdateTests
           -only-testing:VoiceMatrixTests/SpeechControlsTests -only-testing:VoiceMatrixUITests/SpeechFeatureUITests
-          -only-testing:VoiceMatrixUITests/RVCOnlineUITests > character-ui-build.log
-          2>&1 || { tail -160 character-ui-build.log; exit 1; }
+          -only-testing:VoiceMatrixUITests/RVCOnlineUITests -only-testing:VoiceMatrixUITests/RVCHistoryUITests
+          > character-ui-build.log 2>&1 || { tail -160 character-ui-build.log; exit
+          1; }
 
           '
         no_output_timeout: 20m
@@ -108,6 +109,7 @@ jobs:
           -only-testing:VoiceMatrixTests/LocalSoundQualityPolicyTests -only-testing:VoiceMatrixUITests/LocalVideoStudioUITests
           -only-testing:VoiceMatrixTests/AppUpdateTests -only-testing:VoiceMatrixTests/SpeechControlsTests
           -only-testing:VoiceMatrixUITests/SpeechFeatureUITests -only-testing:VoiceMatrixUITests/RVCOnlineUITests
+          -only-testing:VoiceMatrixUITests/RVCHistoryUITests/testHistoryRemainsReachableWithoutInstalledModelsAcrossRelaunch
           > character-ui.log 2>&1 || { tail -160 character-ui.log; exit 1; }
 
           '
@@ -186,6 +188,32 @@ jobs:
           '
         no_output_timeout: 20m
     - run:
+        name: Seed synthetic RVC history in this owned simulator
+        command: 'CONTAINER=$(xcrun simctl get_app_container "$SIMULATOR_ID" com.voicematrix.app
+          data)
+
+          python3 tools/seed_rvc_history_ui.py seed "$CONTAINER"
+
+          '
+        no_output_timeout: 20m
+    - run:
+        name: Select saved diagnostic copy and repeat after relaunch
+        command: 'xcodebuild test-without-building -test-timeouts-enabled YES -default-test-execution-time-allowance
+          120 -maximum-test-execution-time-allowance 300 -skipPackagePluginValidation
+          -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS
+          Simulator,id=$SIMULATOR_ID" -derivedDataPath ui-build -resultBundlePath
+          rvc-history.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO
+          -only-testing:VoiceMatrixUITests/RVCHistoryUITests/testSeededHistorySelectsVerifiedCopyAcrossRelaunch
+          > rvc-history.log 2>&1 || { tail -160 rvc-history.log; exit 1; }
+
+          CONTAINER=$(xcrun simctl get_app_container "$SIMULATOR_ID" com.voicematrix.app
+          data)
+
+          python3 tools/seed_rvc_history_ui.py check "$CONTAINER" | tee rvc-history-copy-evidence.log
+
+          '
+        no_output_timeout: 20m
+    - run:
         name: Export screenshots
         command: 'if [ -d character-ui.xcresult ]; then xcrun xcresulttool export
           attachments --path character-ui.xcresult --output-path ui-screenshots; fi
@@ -193,12 +221,23 @@ jobs:
           if [ -d character-workflow.xcresult ]; then xcrun xcresulttool export attachments
           --path character-workflow.xcresult --output-path workflow-screenshots; fi
 
+          if [ -d rvc-history.xcresult ]; then xcrun xcresulttool export attachments
+          --path rvc-history.xcresult --output-path rvc-history-screenshots; fi
+
           if [ -d character-naming.xcresult ]; then xcrun xcresulttool export attachments
           --path character-naming.xcresult --output-path naming-screenshots; fi
 
           '
         no_output_timeout: 20m
         when: always
+    - store_artifacts:
+        path: rvc-history.log
+    - store_artifacts:
+        path: rvc-history-copy-evidence.log
+    - store_artifacts:
+        path: rvc-history.xcresult
+    - store_artifacts:
+        path: rvc-history-screenshots
     - store_artifacts:
         path: character-workflow.log
     - store_artifacts:

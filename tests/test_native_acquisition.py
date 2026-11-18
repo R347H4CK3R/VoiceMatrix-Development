@@ -31,11 +31,12 @@ class NativeAcquisitionTests(unittest.TestCase):
   s=(ROOT/'.github/workflows/character-ui-smoke.yml').read_text()
   self.assertEqual(s.count('-only-testing:VoiceMatrixTests/LocalMediaAcquisitionTests'),2)
   runs=[line for line in s.splitlines() if 'xcodebuild test-without-building ' in line]
-  self.assertEqual(len(runs),3, 'unit/UI, import/relaunch and naming must each run')
+  self.assertEqual(len(runs),4, 'unit/UI, import/relaunch, naming and saved RVC history must each run')
   for run in runs:
    self.assertIn('-test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300',run)
   self.assertIn('-only-testing:VoiceMatrixUITests/CharacterWorkflowUITests/testImportSelectListenAndKeepVoicesAfterRelaunch',runs[1])
   self.assertIn('-only-testing:VoiceMatrixUITests/CharacterWorkflowUITests/testUserAssignedNamePersistsAndCanBeReset',runs[2])
+  self.assertIn('-only-testing:VoiceMatrixUITests/RVCHistoryUITests/testSeededHistorySelectsVerifiedCopyAcrossRelaunch',runs[3])
 
  def test_retention_scan_fails_closed(self):
   s=(ROOT/'VoiceMatrix/LocalMediaAcquisition.swift').read_text()

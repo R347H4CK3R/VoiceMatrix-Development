@@ -9,8 +9,9 @@ class CharacterWorkflowBudgetTests(unittest.TestCase):
   self.assertIn('XCTAssertGreaterThan((editor.value as? String ?? "").count, 500)',source)
   workflow=(ROOT/'.github/workflows/character-ui-smoke.yml').read_text()
   runs=[line for line in workflow.splitlines() if 'xcodebuild test-without-building ' in line]
-  self.assertEqual(len(runs),3, 'unit/UI, import/relaunch and naming must each run')
+  self.assertEqual(len(runs),4, 'unit/UI, import/relaunch, naming and saved RVC history must each run')
   for run in runs:
    self.assertIn('-test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300',run)
   self.assertIn('-only-testing:VoiceMatrixUITests/CharacterWorkflowUITests/testImportSelectListenAndKeepVoicesAfterRelaunch',runs[1])
   self.assertIn('-only-testing:VoiceMatrixUITests/CharacterWorkflowUITests/testUserAssignedNamePersistsAndCanBeReset',runs[2])
+  self.assertIn('-only-testing:VoiceMatrixUITests/RVCHistoryUITests/testSeededHistorySelectsVerifiedCopyAcrossRelaunch',runs[3])

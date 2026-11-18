@@ -1,6 +1,7 @@
 """Predeclared independent human ASR checks. Corpus text is evaluation only."""
 import hashlib,importlib.util,json,pathlib,re,subprocess,sys,urllib.request,urllib.error,wave,time
 ROOT=pathlib.Path(__file__).resolve().parents[2]
+FIXTURES=ROOT/'tests/fixtures/licensed-human-holdouts'
 def fetch(url,limit,stage,records):
  for attempt in range(1,4):
   try:
@@ -31,6 +32,24 @@ def validate_row(row,source):
 def validate_source(raw,source):
  if len(raw)!=source['sourceBytes'] or hashlib.sha256(raw).hexdigest()!=source['sourceSHA256']:raise ValueError('Full source checksum or size changed')
 
+def offline_source(source,attempts):
+ # Original source metadata and bytes recovered from the successful pinned CI
+ # artifact. A missing or changed cache fails closed, never substitutes a clip.
+ record=dict(stage='offline_source',attempt=1,ok=False,artifactID=14396650003)
+ attempts.append(record)
+ provenance_path=FIXTURES/'provenance.json'
+ if provenance_path.is_symlink() or not provenance_path.is_file() or provenance_path.stat().st_size>100000:raise ValueError('Invalid offline provenance file')
+ provenance=json.loads(provenance_path.read_text())
+ if provenance.get('artifactID')!=14396650003 or provenance.get('runID')!=44229678218 or provenance.get('artifactZIPSHA256')!='abf2e7b2966e439644dfd71e1765400a0fb962c90827371d8aca4f2212e0b2e1':raise ValueError('Changed recovery provenance')
+ matches=[row for row in provenance['sources'] if row['id']==source['id']]
+ if matches!=[source]:raise ValueError('Recovered source metadata differs from predeclared source')
+ path=FIXTURES/(source['id']+'.flac')
+ if path.is_symlink() or not path.is_file() or path.stat().st_size!=source['sourceBytes']:raise ValueError('Missing or changed complete offline FLAC')
+ raw=path.read_bytes()
+ validate_source(raw,source)
+ record.update(ok=True,bytes=len(raw),sha256=source['sourceSHA256'])
+ return raw
+
 def decode_complete(flac,dest,source):
  if pathlib.Path(dest).exists():raise FileExistsError(dest)
  subprocess.run(['ffmpeg','-v','error','-nostdin','-i',str(flac),'-map','0:a:0','-ac','1','-ar','24000','-c:a','pcm_s16le',str(dest)],check=True)
@@ -56,10 +75,7 @@ def main():
  for source in records:
   record=dict(id=source['id'],prepared=False,acquisitionAttempts=[]);attempts.append(record);save()
   try:
-   body=fetch(source['rowAPI'],1000000,'row',record['acquisitionAttempts'])
-   row=json.loads(body)['rows'][0]['row'];url=validate_row(row,source)
-   raw=fetch(url,10000000,'source',record['acquisitionAttempts'])
-   validate_source(raw,source)
+   raw=offline_source(source,record['acquisitionAttempts'])
    flac=out/(source['id']+'.flac');flac.write_bytes(raw)
    (out/(source['id']+'-corpus.txt')).write_text(source['referenceText']+'\n')
    decoded=decode_complete(flac,out/(source['id']+'-full.wav'),source)

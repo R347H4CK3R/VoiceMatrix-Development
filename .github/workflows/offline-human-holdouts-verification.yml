@@ -1,0 +1,84 @@
+name: Exact 0064 standalone human holdout recovery (no release)
+'on':
+  push:
+    branches:
+    - verification/offline-human-holdouts
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: 0064f4acba7d71a13e1730707fdd4cf683909c4c
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.sha }}
+        path: _harness
+        persist-credentials: false
+    - name: Overlay only exact-byte fixture acquisition harness
+      run: 'test "$(git rev-parse HEAD)" = 0064f4acba7d71a13e1730707fdd4cf683909c4c
+
+        cp _harness/probes/reference-context-human-holdouts/prepare.py probes/reference-context-human-holdouts/prepare.py
+
+        cp _harness/tests/test_offline_human_holdouts.py tests/
+
+        cp -R _harness/tests/fixtures/licensed-human-holdouts tests/fixtures/
+
+        test "$(git diff --name-only)" = probes/reference-context-human-holdouts/prepare.py
+
+        git diff --exit-code -- VoiceMatrix Vendors models project.yml probes/reference-context-human-holdouts/sources.json
+        probes/reference-context-human-holdouts/Sources
+
+        '
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install pinned test dependencies
+      run: python3 -m pip install -r tests/requirements-native.txt
+    - name: Verify immutable vendor and PCM transform regressions
+      run: 'python3 tools/vendored_fluid.py > vendor-before.json
+
+        python3 -m unittest tests.test_reference_context_gates tests.test_offline_human_holdouts
+        -v
+
+        '
+    - name: Recover four preselected complete licensed human holdouts
+      run: 'brew install ffmpeg
+
+        python3 probes/reference-context-human-holdouts/prepare.py padding-evidence
+
+        python3 tools/bundle_asr.py --destination "$RUNNER_TEMP/asr"
+
+        '
+    - name: Build unchanged recognizer against verified local vendor
+      run: "for source in OnDeviceTranscription BundledASRPolicy BundledASRAssets\
+        \ LocalStudioEvidence; do\n  cp \"VoiceMatrix/$source.swift\" probes/reference-context-human-holdouts/Sources/Probe/\n\
+        done\npython3 - <<'PY'\nimport hashlib,json,pathlib,os\np=pathlib.Path('VoiceMatrix')\n\
+        names=['OnDeviceTranscription','BundledASRPolicy','BundledASRAssets','LocalStudioEvidence']\n\
+        proof={'sourceCommit':'0064f4acba7d71a13e1730707fdd4cf683909c4c','harnessCommit':os.environ['GITHUB_SHA'],'productionSources':{n:hashlib.sha256((p/(n+'.swift')).read_bytes()).hexdigest()\
+        \ for n in names},'physicalDeviceVerified':False,'productionCandidate':True}\n\
+        pathlib.Path('padding-evidence/source-proof.json').write_text(json.dumps(proof,indent=2))\n\
+        PY\nswift build --package-path probes/reference-context-human-holdouts -c\
+        \ release > padding-evidence/build.log 2>&1 || { tail -100 padding-evidence/build.log;\
+        \ exit 1; }\npython3 tools/vendored_fluid.py > vendor-after.json\ncmp vendor-before.json\
+        \ vendor-after.json\ncp vendor-before.json vendor-after.json padding-evidence/\n"
+    - name: Measure all fixed cases with networking denied
+      run: 'set -o pipefail
+
+        sandbox-exec -p ''(version 1)(allow default)(deny network*)'' probes/reference-context-human-holdouts/.build/release/Probe
+        padding-evidence "$RUNNER_TEMP/asr" padding-evidence/results.json "0064f4acba7d71a13e1730707fdd4cf683909c4c"
+        2>&1 | tee padding-evidence/recognition.log
+
+        '
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Production-reference-context-human-holdouts
+        path: padding-evidence
+        if-no-files-found: error
+        retention-days: 14

@@ -61,3 +61,29 @@ class SetupTests(unittest.TestCase):
                 for name in ('ffmpeg.exe','ffprobe.exe'):z.writestr(setup.ROOT+'/bin/'+name,b'not a PE')
             with self.assertRaises(ValueError):setup.extract_checked(archive,root/'installed')
             self.assertFalse((root/'installed').exists())
+
+    def test_windows_read_normalization_does_not_hide_raw_backslash(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);raw=setup.ROOT+'\\evil'
+            archive=self.archive(root,(raw,b'bad'))
+            # Exercise real ZIP parsing with the separator values used on Windows.
+            # ZipInfo stores the raw central-directory name before normalizing filename.
+            with mock.patch.object(zipfile.os,'sep','\\'),mock.patch.object(zipfile.os,'altsep','/'):
+                with zipfile.ZipFile(archive) as bundle:
+                    entry=bundle.infolist()[-1]
+                    self.assertEqual(entry.orig_filename,raw)
+                    self.assertEqual(entry.filename,setup.ROOT+'/evil')
+                with self.assertRaisesRegex(ValueError,'Unsafe ZIP path'):
+                    setup.extract_checked(archive,root/'installed')
+            self.assertFalse((root/'installed').exists())
+
+    def test_raw_null_name_rejected_before_zipfile_truncation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);raw=setup.ROOT+'/note\x00hidden'
+            archive=self.archive(root,(raw,b'bad'))
+            with zipfile.ZipFile(archive) as bundle:
+                self.assertEqual(bundle.infolist()[-1].orig_filename,raw)
+                self.assertEqual(bundle.infolist()[-1].filename,setup.ROOT+'/note')
+            with self.assertRaisesRegex(ValueError,'Unsafe ZIP path'):
+                setup.extract_checked(archive,root/'installed')
+            self.assertFalse((root/'installed').exists())

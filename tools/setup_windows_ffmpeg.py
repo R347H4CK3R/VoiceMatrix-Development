@@ -53,7 +53,12 @@ def extract_checked(archive, destination):
             if len(members)>512: raise ValueError('Too many ZIP entries')
             total=0;seen=set()
             for member in members:
-                name=member.filename;parts=PurePosixPath(name).parts
+                # ZipInfo normalizes native separators and truncates NULs on read.
+                # Validate the original central-directory spelling, not only its alias.
+                name=member.orig_filename
+                if name != member.filename:
+                    raise ValueError('Unsafe ZIP path: normalized archive name')
+                parts=PurePosixPath(name).parts
                 if ('\\' in name or ':' in name or not parts or parts[0]!=ROOT or
                     any(p in ('..','.') or p.endswith((' ','.')) for p in parts) or
                     name.startswith('/') or '\x00' in name or '\n' in name or '\r' in name):

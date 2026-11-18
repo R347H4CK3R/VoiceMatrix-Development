@@ -22,7 +22,7 @@ jobs:
 
         python3 -m pip install -r tests/requirements-native.txt
 
-        python3 -m unittest tests.test_preview_build17 tests.test_speaker_handoff tests.test_fresh_acquisition_retry tests.test_reference_source_consent tests.test_standalone_queue_wiring tests.test_rvc_local_routes tests.test_acquisition_diagnostics tests.test_raw_overlap_policy tests.test_reference_candidate_pool tests.test_package_ipa tests.test_local_media_import
+        python3 -m unittest tests.test_offline_human_fixtures tests.test_preview_build17 tests.test_speaker_handoff tests.test_fresh_acquisition_retry tests.test_reference_source_consent tests.test_standalone_queue_wiring tests.test_rvc_local_routes tests.test_acquisition_diagnostics tests.test_raw_overlap_policy tests.test_reference_candidate_pool tests.test_package_ipa tests.test_local_media_import
         tests.test_vendored_fluid tests.test_character_package -v'
     - name: Create real media fixtures
       run: 'command -v ffmpeg >/dev/null || brew install ffmpeg

@@ -26,6 +26,8 @@ jobs:
     - name: Stage exact licensed recordings and pinned native models
       run: 'command -v ffmpeg >/dev/null || brew install ffmpeg
 
+        python3 -m unittest tests.test_offline_human_fixtures -v
+
         python3 probes/overlap-stress/prepare.py overlap-evidence
 
         python3 tools/bundle_diarization.py --destination "$RUNNER_TEMP/diarization-models"

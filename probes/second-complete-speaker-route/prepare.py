@@ -1,11 +1,9 @@
 """Recover complete hash-pinned licensed source, with no crop or injected speaker identity."""
-import pathlib,json,hashlib,urllib.request,subprocess,sys,wave
+import pathlib,json,hashlib,subprocess,sys,wave
 root=pathlib.Path(sys.argv[1]);root.mkdir(exist_ok=True)
 src=json.loads(pathlib.Path('probes/human-local-studio/sources.json').read_text())[1]
 assert src['id']=='4507-16021-0031'
-with urllib.request.urlopen(src['rowAPI'],timeout=45) as r:row=json.load(r)['rows'][0]['row']
-assert row['id']==src['id'];url=row['audio'][0]['src'];assert url.split('?')[0]==src['audioAssetPath']
-with urllib.request.urlopen(url,timeout=45) as r:raw=r.read(10000001)
+raw=(pathlib.Path(__file__).resolve().parents[2]/'tests/fixtures/licensed-human-source'/(src['id']+'.flac')).read_bytes()
 assert len(raw)<=10000000 and hashlib.sha256(raw).hexdigest()==src['sourceSHA256']
 flac=root/'complete-source.flac';flac.write_bytes(raw)
 subprocess.run(['ffmpeg','-v','error','-i',str(flac),'-ac','1','-ar','16000','-c:a','pcm_s16le',str(root/'complete-source.wav')],check=True)

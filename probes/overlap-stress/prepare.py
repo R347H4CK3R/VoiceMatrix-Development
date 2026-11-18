@@ -1,5 +1,5 @@
 """Predeclared synthetic mixing of pinned complete licensed human recordings."""
-import array,hashlib,importlib.util,json,pathlib,subprocess,sys,wave
+import array,hashlib,json,pathlib,subprocess,sys,wave
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 def read_pcm(path):
  with wave.open(str(path)) as w:
@@ -31,12 +31,12 @@ def write_pcm(path,pcm):
 
 def main(out):
  out=pathlib.Path(out);out.mkdir(parents=True,exist_ok=False)
- spec=importlib.util.spec_from_file_location('fetcher',ROOT/'probes/reference-context-human-holdouts/prepare.py');f=importlib.util.module_from_spec(spec);spec.loader.exec_module(f)
  sources=json.loads((ROOT/'probes/coreml-real-speakers/sources.json').read_text());pcms=[];attempts=[]
  for s in sources:
   logs=[];attempts.append({'id':s['id'],'requests':logs})
-  row=json.loads(f.fetch(s['rowAPI'],1000000,'row',logs))['rows'][0]['row'];assert row['id']==s['id'];url=row['audio'][0]['src'];assert url.split('?')[0]==s['audioAssetPath']
-  raw=f.fetch(url,2000000,'source',logs);assert hashlib.sha256(raw).hexdigest()==s['sourceSHA256']
+  raw=(ROOT/'tests/fixtures/licensed-human-source'/(s['id']+'.flac')).read_bytes()
+  assert len(raw)<=2000000 and hashlib.sha256(raw).hexdigest()==s['sourceSHA256']
+  logs.append({'source':'repository-pinned-fixture','sha256':s['sourceSHA256'],'bytes':len(raw)})
   flac=out/(s['id']+'.flac');flac.write_bytes(raw);wav=flac.with_suffix('.wav')
   subprocess.run(['ffmpeg','-v','error','-nostdin','-i',str(flac),'-ac','1','-ar','16000','-c:a','pcm_s16le',str(wav)],check=True);pcms.append(read_pcm(wav))
  a,b=pcms;cases=[]

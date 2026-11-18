@@ -203,6 +203,8 @@ targets:
     - path: VoiceMatrix/LocalStudioSnapshot.swift
     - path: VoiceMatrix/RetainedMediaReader.swift
     - path: VoiceMatrix/LocalMediaAcquisition.swift
+    - path: VoiceMatrix/LocalMKVExport.swift
+    - path: VoiceMatrix/MatroskaWriter.swift
     - path: VoiceMatrix/LocalMediaURLPolicy.swift
     - path: VoiceMatrix/LocalVideoAudio.swift
     - path: VoiceMatrix/LocalSpeakerDiarization.swift

@@ -118,11 +118,33 @@ enum LocalMKVExport {
             let pts = CMSampleBufferGetPresentationTimeStamp(sample)
             let dts = CMSampleBufferGetDecodeTimeStamp(sample)
             let length = CMSampleBufferGetDuration(sample).seconds
-            guard CMSampleBufferGetNumSamples(sample) == 1, pts.seconds.isFinite, pts.seconds >= 0, pts.seconds >= previous[index],
-                  length.isFinite, length > 0, pts.seconds + length <= duration + 0.1,
-                  (!dts.isValid || CMTimeCompare(pts,dts) == 0),
-                  let block = CMSampleBufferGetDataBuffer(sample),
-                  let format = CMSampleBufferGetFormatDescription(sample), CFEqual(format,index == 0 ? vf[0] : af[0]) else { throw Failure.unsupported("reordered, changing, or unsupported sample timing") }
+            let sampleCount = CMSampleBufferGetNumSamples(sample)
+            let format = CMSampleBufferGetFormatDescription(sample)
+            let formatMatches = format.map { CFEqual($0,index == 0 ? vf[0] : af[0]) } ?? false
+            let block = CMSampleBufferGetDataBuffer(sample)
+            var violations: [String] = []
+            if sampleCount != 1 { violations.append("sample-count") }
+            if !pts.seconds.isFinite || pts.seconds < 0 { violations.append("invalid-pts") }
+            if pts.seconds < previous[index] { violations.append("nonmonotonic-pts") }
+            if !length.isFinite || length <= 0 { violations.append("invalid-duration") }
+            if pts.seconds + length > duration + 0.1 { violations.append("past-asset-end") }
+            if dts.isValid && CMTimeCompare(pts,dts) != 0 { violations.append("dts-pts-reorder") }
+            if block == nil { violations.append("missing-block") }
+            if !formatMatches { violations.append("changed-format") }
+            guard violations.isEmpty, let block else {
+                // Numeric metadata only: no source URLs, sample payloads, titles or paths.
+                // Include first/last per-sample timing to diagnose grouped compressed AAC
+                // without assuming that a CMSampleBuffer is one codec packet.
+                func time(_ t: CMTime) -> String { "\(t.value)/\(t.timescale):flags=\(t.flags.rawValue):epoch=\(t.epoch)" }
+                func timing(_ offset: Int) -> String {
+                    var info = CMSampleTimingInfo()
+                    let status = CMSampleBufferGetSampleTimingInfo(sample, at: offset, timingInfoOut: &info)
+                    return "status=\(status),pts=\(time(info.presentationTimeStamp)),dts=\(time(info.decodeTimeStamp)),duration=\(time(info.duration)),bytes=\(CMSampleBufferGetSampleSize(sample,at:offset))"
+                }
+                let first = sampleCount > 0 ? timing(0) : "none"
+                let last = sampleCount > 1 ? timing(sampleCount-1) : first
+                throw Failure.unsupported("sample-policy [\(violations.joined(separator:","))] track=\(index+1),buffer=\(counts[index]),samples=\(sampleCount),pts=\(time(pts)),dts=\(time(dts)),duration=\(length),previousPTS=\(previous[index]),assetDuration=\(duration),formatMatches=\(formatMatches),bytes=\(block.map { CMBlockBufferGetDataLength($0) } ?? -1),first={\(first)},last={\(last)}")
+            }
             // Edit-list priming/padding needs an independently verified mapping. Fail closed rather than shift audio.
             for key in [kCMSampleBufferAttachmentKey_TrimDurationAtStart,kCMSampleBufferAttachmentKey_TrimDurationAtEnd] {
                 if let attachment = CMGetAttachment(sample,key:key,attachmentModeOut:nil) {

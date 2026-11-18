@@ -68,12 +68,73 @@ import AudioToolbox
             }
         }
     }
+    /// Bounded metadata-only diagnostics. Never prints attachment strings/URLs or payloads.
+    static func sampleStructureEvidence(_ sample: CMSampleBuffer) -> String {
+        let keys: [CFString] = [kCMSampleBufferAttachmentKey_EmptyMedia,
+            kCMSampleBufferAttachmentKey_PermanentEmptyMedia,
+            kCMSampleBufferAttachmentKey_DisplayEmptyMediaImmediately,
+            kCMSampleBufferAttachmentKey_TrimDurationAtStart,
+            kCMSampleBufferAttachmentKey_TrimDurationAtEnd,
+            kCMSampleBufferAttachmentKey_SampleReferenceURL,
+            kCMSampleBufferAttachmentKey_SampleReferenceByteOffset,
+            kCMSampleBufferAttachmentKey_ResetDecoderBeforeDecoding,
+            kCMSampleBufferAttachmentKey_DrainAfterDecoding,
+            kCMSampleBufferAttachmentKey_EndsPreviousSampleDuration,
+            kCMSampleBufferAttachmentKey_TransitionID,
+            kCMSampleBufferAttachmentKey_ResumeOutput,
+            kCMSampleBufferAttachmentKey_FillDiscontinuitiesWithSilence,
+            kCMSampleBufferAttachmentKey_DroppedFrameReason,
+            kCMSampleBufferAttachmentKey_DroppedFrameReasonInfo,
+            kCMSampleBufferAttachmentKey_PostNotificationWhenConsumed]
+        let attachments = keys.map { key -> String in
+            guard let value = CMGetAttachment(sample,key:key,attachmentModeOut:nil) else { return "\(key)=absent" }
+            let type = CFGetTypeID(value)
+            if type == CFBooleanGetTypeID() { return "\(key)=bool:\(String(describing:value as? Bool))" }
+            if type == CFNumberGetTypeID() { return "\(key)=number:\(String(describing:value as? NSNumber))" }
+            return "\(key)=present,type:\(type)"
+        }.joined(separator:";")
+        let entries = CMSampleBufferGetSampleAttachmentsArray(sample,createIfNecessary:false) as? [[String:Any]]
+        let perSampleKeys = [kCMSampleAttachmentKey_NotSync,kCMSampleAttachmentKey_DependsOnOthers,
+            kCMSampleAttachmentKey_IsDependedOnByOthers,kCMSampleAttachmentKey_PartialSync].map { $0 as String }
+        let firstKeys = perSampleKeys.filter { entries?.first?[$0] != nil }.joined(separator:",")
+        return "valid=\(CMSampleBufferIsValid(sample)),ready=\(CMSampleBufferDataIsReady(sample)),image=\(CMSampleBufferGetImageBuffer(sample) != nil),sampleAttachmentCount=\(entries?.count ?? 0),firstSampleKeys=[\(firstKeys)],attachments={\(attachments)}"
+    }
+    /// Diagnostic-only bounded experiment. No exported media or admission rules change.
+    /// Compare independent vs interleaved readers and copy ownership to isolate API setup.
+    static func readerEvidence(_ input: URL) async throws {
+        for copies in [false,true] {
+            for combined in [false,true] {
+                let asset = AVURLAsset(url:input)
+                let video = try await asset.loadTracks(withMediaType:.video)
+                let audio = try await asset.loadTracks(withMediaType:.audio)
+                let groups = combined ? [video + audio] : [video,audio]
+                for tracks in groups where !tracks.isEmpty {
+                    let reader = try AVAssetReader(asset:asset)
+                    let outputs = tracks.map { AVAssetReaderTrackOutput(track:$0,outputSettings:nil) }
+                    for output in outputs { output.alwaysCopiesSampleData = copies; reader.add(output) }
+                    guard reader.startReading() else { throw reader.error ?? NSError(domain:"probe-reader",code:1) }
+                    for round in 0..<3 {
+                        for (index,output) in outputs.enumerated() {
+                            guard let sample = output.copyNextSampleBuffer() else { continue }
+                            let structure = sampleStructureEvidence(sample)
+                            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                            let bytes = CMSampleBufferGetDataBuffer(sample).map { CMBlockBufferGetDataLength($0) } ?? -1
+                            let line = "MKV_READER_EXPERIMENT copies=\(copies),combined=\(combined),track=\(index),round=\(round),samples=\(CMSampleBufferGetNumSamples(sample)),pts=\(pts.value)/\(pts.timescale),bytes=\(bytes),status=\(reader.status.rawValue),errorCode=\((reader.error as NSError?)?.code ?? 0),\(structure)\n"
+                            FileHandle.standardError.write(Data(line.utf8))
+                        }
+                    }
+                    reader.cancelReading()
+                }
+            }
+        }
+    }
     static func main() async throws {
         let args = CommandLine.arguments
         if args.count == 2 && args[1] == "--aac-policy" { try aacPolicy(); try markerPolicy(); return }
         guard args.count == 3 || args.count == 4 else { fatalError("input.mp4 output.mkv") }
         let input = URL(fileURLWithPath: args[1])
         try await evidence(input)
+        try await readerEvidence(input)
         if args.count == 4 && args[3] == "cancel" { withUnsafeCurrentTask { $0?.cancel() } }
         _ = try await LocalMKVExport.export(input: input, destination: URL(fileURLWithPath: args[2]), maxBytes: args.count == 4 ? (Int64(args[3]) ?? 536_870_912) : 536_870_912) { _ in }
     }

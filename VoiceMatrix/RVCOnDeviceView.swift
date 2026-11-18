@@ -74,6 +74,19 @@ struct RVCOnDeviceView:View {
                 if !preview.assetsReady {Text("Install the encoder and voice packs. Add retrieval data, or set retrieval strength to zero.").font(.caption).foregroundStyle(.secondary)}
                 else if preview.input == nil {Text("Import audio to enable conversion.").font(.caption).foregroundStyle(.secondary)}
             }
+            Section("Saved diagnostic previews") {
+                Text(preview.historyNotice).font(.caption).accessibilityIdentifier("rvc-history-notice")
+                if preview.history.isEmpty {Text("No saved previews available.").accessibilityIdentifier("rvc-history-empty")}
+                ForEach(preview.history) {receipt in
+                    Button {preview.selectHistory(receipt,audio:audio)} label: {
+                        VStack(alignment:.leading) {
+                            Text(receipt.context.inputName)
+                            Text(receipt.createdAt,style:.date).font(.caption)
+                            Text(String(format:"Diagnostic · %.1fs processing · pitch %+.0f",receipt.elapsedSeconds,receipt.context.settings.semitones)).font(.caption)
+                        }
+                    }.disabled(unavailable).accessibilityIdentifier("rvc-history-"+receipt.id.uuidString)
+                }
+            }
             Section("4 · Listen, save or share") {
                 if let output=preview.output {
                     Text("Diagnostic preview of "+preview.outputName).font(.caption)
@@ -100,7 +113,7 @@ struct RVCOnDeviceView:View {
             case .failure:preview.importerFailed()
             }
         }
-        .onAppear {preview.refresh()}
+        .onAppear {preview.refresh();preview.refreshHistory()}
     }
 }
 #endif

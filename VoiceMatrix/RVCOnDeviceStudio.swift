@@ -1,6 +1,7 @@
 #if os(iOS)
 import Foundation
 import Combine
+import CryptoKit
 
 @MainActor final class RVCOnDeviceStudio:ObservableObject {
     @Published private(set) var voiceName="No voice model installed"
@@ -17,9 +18,13 @@ import Combine
     @Published private(set) var output:URL?
     @Published private(set) var outputName=""
     @Published private(set) var message="Install the encoder and diagnostic voice model, then import audio. Retrieval data is optional when its strength is zero."
+    @Published private(set) var history:[RVCResultHistory.Receipt]=[]
+    @Published private(set) var historyNotice=""
+    private var historyRefresh:Task<Void,Never>?
+    private enum HistoryFailure:Error {case completedButUnindexed}
     private var work:Task<Void,Never>?
     private var active=true
-    init() {refresh()}
+    init() {refresh();refreshHistory()}
     func refresh() {
         do {
             try RVCPreviewStore.prepare();installed=try RVCPreviewStore.locations()
@@ -68,8 +73,7 @@ import Combine
         performImport(.audioImport,audio:audio,label:"Copying and checking audio…",
                       operation:{try RVCPreviewStore.importAudio(url)},apply:{result in
             guard let result else {return}
-            let previous=self.input;self.input=result;self.inputName=name
-            if let previous {try? FileManager.default.removeItem(at:previous)}
+            self.input=result;self.inputName=name
         })
     }
     private func performImport(_ kind:RVCPreviewState.Kind,audio:AudioStore,label:String,
@@ -112,9 +116,17 @@ import Combine
         state.append(String(format:"Retrieval %.1f%% · pitch %+.0f semitones",Double(rate)*100,shift))
         work=Task {
             defer {audio.releaseProcessing(lease);work=nil}
-            var committed=false
             do {
                 let worker=Task.detached(priority:.userInitiated) {
+                    let started=Date()
+                    let inputIdentity=try RVCResultHistory.identity(source)
+                    var hashes=["hubert":try RVCSynthesisAssets.manifest(at:hubert).sha256,
+                                "synthesizer":try RVCSynthesisAssets.manifest(at:synth).sha256]
+                    if let retrieval {
+                        let pack=try RVCRetrievalAssets.descriptor(at:retrieval)
+                        let canonical=pack.profile+"\n"+pack.files.sorted{$0.name<$1.name}.map{"\($0.name):\($0.bytes):\($0.sha256)"}.joined(separator:"\n")
+                        hashes["retrieval"]=SHA256.hash(data:Data(canonical.utf8)).map{String(format:"%02x",$0)}.joined()
+                    }
                     let converter=try await RVCNativeWindowConverter.open(hubertRoot:hubert,synthesizerRoot:synth,retrievalRoot:retrieval,cache:RVCPreviewStore.cache)
                     do {
                         let result=try await converter.convertMediaExperimentalAutocorrelation(input:source,output:destination,scratch:RVCPreviewStore.cache,seed:347,semitones:shift,indexRate:rate,refinePitch:refine,progress:{fraction in
@@ -129,23 +141,83 @@ import Combine
                             }
                         })
                         await converter.close()
+                        do {
+                            let after=try RVCResultHistory.identity(source)
+                            guard after.bytes==inputIdentity.bytes,after.sha256==inputIdentity.sha256 else {throw RVCResultHistory.Failure.changed}
+                            let context=RVCResultHistory.Context(inputName:name,inputSHA256:inputIdentity.sha256,inputBytes:inputIdentity.bytes,
+                                modelSHA256:hashes,settings:.init(indexRate:rate,semitones:shift,refinePitch:refine),startedAt:started,completedAt:Date())
+                            _ = try RVCResultHistory(root:RVCPreviewStore.results).publish(output:destination,context:context)
+                        } catch {throw HistoryFailure.completedButUnindexed}
+                        // Publication is irreversible, including cancellation after this point.
                         return result
                     } catch {await converter.close();throw error}
                 }
                 let result=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
-                committed=true
-                try Task.checkCancellation()
-                guard state.ticket==ticket else {try? FileManager.default.removeItem(at:destination);return}
+                refreshHistory()
+                guard state.ticket==ticket else {return}
                 if result.inputGain<1 {
                     state.append(String(format:"Input level reduced to %.3f%% to preserve filter peaks without clipping (peak %.6f).",Double(result.inputGain)*100,Double(result.inputPeak)))
                 }
-                output=destination;outputName=name
-                state.finish(.succeeded,ticket:ticket)
-                message="Diagnostic preview complete · 100%. Listen and review the result."
+                state.finishCommitted(ticket:ticket)
+                message="Diagnostic preview saved · 100%. Select it in saved previews to verify, listen or share."
                 state.append(message)
             } catch {
-                if committed {try? FileManager.default.removeItem(at:destination)}
+                refreshHistory()
+                if error is HistoryFailure {
+                    state.finish(.failed,ticket:ticket)
+                    message="The completed audio was kept, but its history receipt could not be saved. It is not available for playback here; do not repeat conversion to recover it."
+                    state.append(message)
+                } else {finishFailure(error,ticket:ticket)}
+            }
+        }
+    }
+    func refreshHistory() {
+        historyRefresh?.cancel()
+        historyRefresh=Task {
+            do {
+                let worker=Task.detached(priority:.utility) {
+                    try FileManager.default.createDirectory(at:RVCPreviewStore.results,withIntermediateDirectories:true)
+                    return try RVCResultHistory(root:RVCPreviewStore.results).list()
+                }
+                let listing=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
+                try Task.checkCancellation()
+                history=listing.receipts
+                historyNotice="Saved previews are diagnostic, not quality-verified. Select one to verify its audio before use."
+                if listing.rejected>0 || listing.unindexed>0 {
+                    historyNotice += " \(listing.rejected) invalid records and \(listing.unindexed) audio files without a receipt were kept but cannot be opened here."
+                }
+            } catch is CancellationError {} catch RVCResultHistory.Failure.bounds {
+                history=[];historyNotice="History exceeds the safety limit of 200 records or 1,024 entries. Existing files were kept; no partial list is shown."
+            } catch {
+                history=[];historyNotice="Saved preview history could not be read safely. Existing files were kept."
+            }
+        }
+    }
+    func selectHistory(_ receipt:RVCResultHistory.Receipt,audio:AudioStore) {
+        guard !state.busy,active,let lease=audio.claimProcessing() else {return}
+        guard let ticket=try? state.begin(.historyLoad) else {audio.releaseProcessing(lease);return}
+        audio.stop();message="Verifying saved audio and preparing a private playback copy…"
+        work=Task {
+            var snapshot:URL?
+            defer {audio.releaseProcessing(lease);work=nil}
+            do {
+                let worker=Task.detached(priority:.userInitiated) {
+                    try FileManager.default.createDirectory(at:RVCPreviewStore.cache,withIntermediateDirectories:true)
+                    return try RVCResultHistory(root:RVCPreviewStore.results).snapshot(receipt,cache:RVCPreviewStore.cache)
+                }
+                snapshot=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
+                try Task.checkCancellation()
+                guard state.ticket==ticket else {throw CancellationError()}
+                // Only this owned verified copy is passed to AudioActions, never a history URL.
+                output=snapshot;outputName=receipt.context.inputName
+                state.finish(.succeeded,ticket:ticket);message="Saved diagnostic audio verified. Ready to listen or share."
+            } catch {
+                // Returned copies may be reused by an earlier share sheet. Never delete them.
                 finishFailure(error,ticket:ticket)
+                if case RVCResultHistory.Failure.bounds = error {
+                    message="Playback copy storage reached its safety limit (200 copies, 1.6 GB, or low free space). Saved results were kept."
+                    state.append(message)
+                }
             }
         }
     }

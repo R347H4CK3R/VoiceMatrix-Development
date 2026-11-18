@@ -1,7 +1,7 @@
 import Foundation
 
 struct RVCPreviewState {
-    enum Kind {case assetImport,audioImport,conversion}
+    enum Kind {case assetImport,audioImport,conversion,historyLoad}
     enum Phase {case idle,working,cancelling,succeeded,cancelled,failed}
     enum Outcome {case succeeded,cancelled,failed}
     enum Failure:Error {case busy}
@@ -33,6 +33,10 @@ struct RVCPreviewState {
         case .cancelled:phase = .cancelled
         case .failed:phase = .failed
         }
+    }
+    mutating func finishCommitted(ticket:UUID) {
+        guard self.ticket==ticket,busy,kind == .conversion else {return}
+        phase = .succeeded;percent=100
     }
     mutating func append(_ text:String) {
         events.append(Event(message:String(text.prefix(512))))

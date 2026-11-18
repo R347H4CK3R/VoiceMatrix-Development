@@ -199,6 +199,8 @@ targets:
     - path: VoiceMatrix/LocalVoiceProfilePackage.swift
     - path: VoiceMatrix/LocalVideoStudio.swift
     - path: VoiceMatrix/SeparationClipHandoff.swift
+    - path: VoiceMatrix/ClipSpeakerReviewStore.swift
+    - path: VoiceMatrix/ClipSpeakerReviewCoordinator.swift
     - path: VoiceMatrix/SeparationClipExtractor.swift
     - path: VoiceMatrix/SeparationStore.swift
     - path: VoiceMatrix/VocalSeparationAssets.swift

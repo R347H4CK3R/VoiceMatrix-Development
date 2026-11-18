@@ -27,6 +27,13 @@ struct LocalVideoStudioView: View {
     @State private var clipWork: Task<Void,Never>?
     @State private var clipRequest: UUID?
     @State private var clipDestination: SeparationClipHandoff.Input?
+    private struct ReviewDestination: Identifiable, Hashable {
+        let clip: SeparationClipHandoff.Input
+        let source: SeparationClipHandoff.Source
+        var id: UUID { clip.id }
+    }
+    @State private var clipReviewDestination: ReviewDestination?
+    @State private var preparedReviews: [ReviewDestination] = []
     private let initialSeparatedVocals: SeparationStore.Result?
     @State private var separatedInput: SeparationStore.ReferenceInput?
     @State private var checkingSeparatedInput = false
@@ -102,28 +109,7 @@ struct LocalVideoStudioView: View {
                     }
                     Button("Resume retained job") { local.resume(library: library, audio: audio, speech: speech) }.buttonStyle(.bordered).disabled(clipPreparing)
                 }
-                if local.retainedSeparationSource != nil {
-                    GroupBox("Separate a short clip from retained media") {
-                        VStack(alignment:.leading,spacing:10) {
-                            Text("Choose 0.5–10 seconds from the retained source. This prepares only the selected clip, not the entire video. Experimental separation still needs a separate tap; it does not verify voice identity.").font(.footnote)
-                            TextField("Start in seconds",text:$clipStart).keyboardType(.decimalPad)
-                                .disabled(clipPreparing).accessibilityIdentifier("retained-clip-start")
-                            TextField("Duration in seconds (0.5–10)",text:$clipSeconds).keyboardType(.decimalPad)
-                                .disabled(clipPreparing).accessibilityIdentifier("retained-clip-seconds")
-                            Toggle("I am authorized to use this selected clip and its voices",isOn:$clipAuthorized)
-                                .disabled(clipPreparing).accessibilityIdentifier("retained-clip-authorization")
-                            Button("Prepare selected clip for separation") {prepareSeparationClip()}
-                                .disabled(!clipAuthorized || !clipIntervalValid || clipPreparing || audio.processingInUse || audio.microphoneInUse)
-                                .accessibilityIdentifier("retained-clip-prepare")
-                            if clipPreparing {
-                                ProgressView("Verifying retained source and extracting selected clip…")
-                                Button("Cancel clip preparation") {clipRequest=nil;clipWork?.cancel()}
-                                    .accessibilityIdentifier("retained-clip-cancel")
-                            }
-                            Text(clipMessage).accessibilityIdentifier("retained-clip-status")
-                        }
-                    }
-                }
+                if let source = local.retainedSeparationSource { retainedClipControls(source) }
                 if let reference = local.reference { Button("Listen to reference") { audio.play(reference) }.disabled(local.busy) }
                 if let preview = local.preview { Button("Listen to generated preview") { audio.play(preview) }.disabled(local.busy) }
                 if let similarity=local.validatedSimilarity() {
@@ -256,13 +242,23 @@ struct LocalVideoStudioView: View {
         .navigationDestination(item: $clipDestination) { input in
             VocalSeparationView(initialClip: input)
         }
+        .navigationDestination(item: $clipReviewDestination) { destination in
+            ClipSpeakerReviewView(clip: destination.clip, source: destination.source)
+        }
+        .task(id: local.retainedSeparationSource) {
+            guard let source = local.retainedSeparationSource else { preparedReviews = []; return }
+            let worker = Task.detached { try ClipSpeakerReviewStore().preparedClips(for: source) }
+            let clips = try? await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+            guard !Task.isCancelled, local.retainedSeparationSource == source else { return }
+            preparedReviews = (clips ?? []).map { ReviewDestination(clip: $0, source: source) }
+        }
         .onDisappear {clipRequest=nil;clipWork?.cancel();clipAuthorized=false}
         .onChange(of: clipScene) { _, value in
             if value != .active {clipRequest=nil;clipWork?.cancel();clipAuthorized=false}
         }
         .onChange(of: clipStart) {_,_ in clipAuthorized=false}
         .onChange(of: clipSeconds) {_,_ in clipAuthorized=false}
-        .onChange(of: local.current?.id) {_,_ in clipRequest=nil;clipWork?.cancel();clipAuthorized=false}
+        .onChange(of: local.retainedSeparationSource) {_,_ in clipRequest=nil;clipWork?.cancel();clipAuthorized=false}
         .navigationDestination(item: $speakerDestination) { mode in
             CharacterLibraryView(mode: mode)
         }
@@ -316,16 +312,56 @@ struct LocalVideoStudioView: View {
             }
         }
     }
+    private func retainedClipControls(_ source: SeparationClipHandoff.Source) -> some View {
+        GroupBox("Prepare a short clip from retained media") {
+            VStack(alignment:.leading,spacing:10) {
+                Text("Choose 0.5–10 seconds from the retained source. Speaker review needs 3–10 seconds. Preparing a clip does not start either analysis or experimental separation.").font(.footnote)
+                TextField("Start in seconds",text:$clipStart).keyboardType(.decimalPad)
+                    .disabled(clipPreparing).accessibilityIdentifier("retained-clip-start")
+                TextField("Duration in seconds (0.5–10)",text:$clipSeconds).keyboardType(.decimalPad)
+                    .disabled(clipPreparing).accessibilityIdentifier("retained-clip-seconds")
+                Toggle("I am authorized to use this selected clip and its voices",isOn:$clipAuthorized)
+                    .disabled(clipPreparing).accessibilityIdentifier("retained-clip-authorization")
+                Button("Prepare selected clip for separation") {prepareSeparationClip()}
+                    .disabled(!clipAuthorized || !clipIntervalValid || clipPreparing || audio.processingInUse || audio.microphoneInUse)
+                    .accessibilityIdentifier("retained-clip-prepare")
+                Button("Prepare selected clip for speaker review") { prepareSeparationClip(forReview: true) }
+                    .disabled(!clipAuthorized || !clipIntervalValid || (Double(clipSeconds) ?? 0) < 3 || clipPreparing || audio.processingInUse || audio.microphoneInUse)
+                    .accessibilityIdentifier("retained-clip-prepare-review")
+                if clipPreparing {
+                    ProgressView("Verifying retained source and extracting selected clip…")
+                    Button("Cancel clip preparation") {clipRequest=nil;clipWork?.cancel()}
+                        .accessibilityIdentifier("retained-clip-cancel")
+                }
+                Text(clipMessage).accessibilityIdentifier("retained-clip-status")
+                let previous = preparedReviews.filter { $0.source == source }
+                if !previous.isEmpty {
+                    DisclosureGroup("Reopen a prepared clip for speaker review") {
+                        ForEach(previous) { destination in
+                            Button(String(format: "Review %.2f–%.2f s", destination.clip.start,
+                                          destination.clip.start + Double(destination.clip.frames) / 44_100)) {
+                                clipReviewDestination = destination
+                            }
+                            .disabled(clipPreparing || audio.processingInUse || audio.microphoneInUse)
+                            .accessibilityIdentifier("retained-clip-open-review")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private var clipIntervalValid:Bool {
         guard let start=Double(clipStart),let seconds=Double(clipSeconds) else{return false}
         return start.isFinite && seconds.isFinite && start>=0 && (0.5...10).contains(seconds) && start+seconds<=1800
     }
-    private func prepareSeparationClip() {
+    private func prepareSeparationClip(forReview: Bool = false) {
         guard clipAuthorized, !clipPreparing, clipScene == .active,
               let source=local.retainedSeparationSource,
               let start=Double(clipStart), let seconds=Double(clipSeconds),
-              start.isFinite, seconds.isFinite, start>=0, (0.5...10).contains(seconds),start+seconds<=1800 else {
-            clipMessage="Enter a valid start and a duration from 0.5 to 10 seconds, then authorize this interval."
+              start.isFinite, seconds.isFinite, start>=0, ((forReview ? 3.0 : 0.5)...10).contains(seconds),start+seconds<=1800 else {
+            clipMessage=forReview ? "Enter a valid start and a duration from 3 to 10 seconds, then authorize this interval." :
+                "Enter a valid start and a duration from 0.5 to 10 seconds, then authorize this interval."
             return
         }
         guard let lease=audio.claimProcessing() else {clipMessage="Stop the other audio job first.";return}
@@ -338,8 +374,21 @@ struct LocalVideoStudioView: View {
                 let input=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
                 try Task.checkCancellation()
                 guard clipRequest==request,clipScene == .active,local.retainedSeparationSource==source else {return}
-                clipAuthorized=false;clipMessage="Selected short clip ready. Separation has not started."
-                clipDestination=input
+                clipAuthorized=false
+                let destination = ReviewDestination(clip: input, source: source)
+                if ClipSpeakerReviewStore.supports(input) {
+                    preparedReviews.append(destination)
+                } else if forReview {
+                    clipMessage="The prepared audio is shorter than 3 seconds. Speaker review did not start."
+                    return
+                }
+                if forReview {
+                    clipMessage="Selected clip ready. Speaker analysis has not started."
+                    clipReviewDestination=destination
+                } else {
+                    clipMessage="Selected short clip ready. Separation has not started."
+                    clipDestination=input
+                }
             } catch is CancellationError {clipMessage="Stopped. Original source and previous results were kept."}
             catch {clipMessage="Could not prepare this interval. The source may have changed, the interval may exceed its audio, or the track/timeline may be unsupported. Original files were kept."}
         }

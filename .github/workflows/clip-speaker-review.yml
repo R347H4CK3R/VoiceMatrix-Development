@@ -1,0 +1,101 @@
+name: Retained clip speaker review native gates
+'on':
+  push:
+    branches:
+    - feature/retained-clip-speaker-review
+  workflow_dispatch: null
+permissions:
+  contents: read
+concurrency:
+  group: clip-speaker-review-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compile:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Prepare source-only project resources
+      run: 'python3 tools/check_conversion_inputs.py
+
+        python3 tools/create_diagnostic_collection.py
+
+        mkdir -p VoiceMatrix/Resources/Phonon VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS VoiceMatrix/Resources/Separation
+
+        brew install xcodegen
+
+        xcodegen generate
+
+        '
+    - name: Compile full ARM64 app without IPA packaging
+      run: 'xcodebuild -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -configuration Debug -sdk iphoneos -destination ''generic/platform=iOS''
+        -derivedDataPath native-build CODE_SIGNING_ALLOWED=NO build > native-compile.log 2>&1 || { tail -160 native-compile.log; exit 1; }
+
+        '
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Native-app-compile-log
+        path: native-compile.log
+        retention-days: 7
+  review:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Prepare UI and bundled speaker-model resources, not a complete speech build
+      run: "python3 tools/bundle_diarization.py\npython3 tools/check_conversion_inputs.py\npython3 tools/create_diagnostic_collection.py\nmkdir -p VoiceMatrix/Resources/Phonon\
+        \ VoiceMatrix/Resources/OpenVoice VoiceMatrix/Resources/F5TTS VoiceMatrix/Resources/Separation\n# These are UI availability fixtures, not valid\
+        \ engines or speech assets.\n# No config, weights, stock profiles or private references enter the app.\nprintf '{\"testOnlyUIAvailability\":true}\\\
+        n' > VoiceMatrix/Resources/F5TTS/voicematrix-engine.json\nprintf '{\"testOnlyUIAvailability\":true}\\n' > VoiceMatrix/Resources/OpenVoice/model-manifest.json\n\
+        cp -R tests/fixtures/DiagnosticVoices VoiceMatrix/Resources/F5TTS/UITestVoices\n# XCTest waits for UI idleness after taps; a 2.5-second clip can\
+        \ finish\n# before it can inspect Stop. Extend only this UI fixture, not audio gates.\npython3 - <<'PY'\nimport hashlib,json,pathlib,wave\nroot=pathlib.Path('VoiceMatrix/Resources/F5TTS/UITestVoices/diagnostic-neutral')\n\
+        audio=root/'reference.wav'\nwith wave.open(str(audio),'rb') as f:\n    params=f.getparams()\n    pcm=f.readframes(f.getnframes())*6\nwith wave.open(str(audio),'wb')\
+        \ as f:\n    f.setparams(params)\n    f.writeframes(pcm)\nmanifest=json.loads((root/'manifest.json').read_text())\nmanifest.update(referenceSHA256=hashlib.sha256(audio.read_bytes()).hexdigest(),\n\
+        \                referenceBytes=audio.stat().st_size,seconds=len(pcm)/48000,\n                referenceText=' '.join([manifest['referenceText']]*6))\n\
+        (root/'manifest.json').write_text(json.dumps(manifest))\nassert 14 < manifest['seconds'] < 15\nPY\nbrew install xcodegen\nxcodegen generate\npython3\
+        \ - <<'PYCODE'\nimport json,subprocess,os\nruntimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','-j']))['runtimes']\n\
+        available=[x for x in runtimes if x.get('isAvailable') and 'iOS' in x['name'] and str(x.get('version','')).startswith('26.')]\nassert available,'No\
+        \ iOS 26 simulator runtime available'\nruntime=sorted(available,key=lambda x:tuple(int(p) for p in x['version'].split('.')))[-1]['identifier']\n\
+        device=subprocess.check_output(['xcrun','simctl','create','VoiceMatrix-Sync-UI','com.apple.CoreSimulator.SimDeviceType.iPhone-16-Plus',runtime],text=True).strip()\n\
+        with open(os.environ['GITHUB_ENV'],'a') as f:f.write('SIMULATOR_ID='+device+'\\n')\nsubprocess.run(['xcrun','simctl','boot',device],check=True,timeout=60)\n\
+        PYCODE\n"
+    - name: Build narrow review behavioral tests
+      run: xcodebuild build-for-testing -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$SIMULATOR_ID"
+        -derivedDataPath review-build CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:VoiceMatrixTests/ClipSpeakerReviewTests > review-build.log
+        2>&1 || { tail -160 review-build.log; exit 1; }
+    - name: Wait for the simulator launch services to finish booting
+      run: 'python3 - <<''PYCODE''
+
+        import os,subprocess
+
+        subprocess.run([''xcrun'',''simctl'',''bootstatus'',os.environ[''SIMULATOR_ID''],''-b''],check=True,timeout=360)
+
+        PYCODE
+
+        '
+    - name: Run actual store and lifecycle checks
+      run: xcodebuild test-without-building -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance
+        300 -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -derivedDataPath
+        review-build -resultBundlePath clip-review.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:VoiceMatrixTests/ClipSpeakerReviewTests
+        > clip-review.log 2>&1 || { tail -160 clip-review.log; exit 1; }
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: Clip-speaker-review-native-evidence
+        path: 'review-build.log
+
+          clip-review.log
+
+          clip-review.xcresult'
+        if-no-files-found: error
+        retention-days: 14
+    - name: Remove only owned simulator
+      if: always()
+      run: if [ -n "$SIMULATOR_ID" ]; then xcrun simctl shutdown "$SIMULATOR_ID" || true; xcrun simctl delete "$SIMULATOR_ID"; fi

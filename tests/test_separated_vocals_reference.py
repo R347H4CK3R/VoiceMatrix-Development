@@ -32,3 +32,18 @@ class HandoffSurfaceTests(unittest.TestCase):
   text=(ROOT/'.github/workflows/vocal-separation-native.yml').read_text()
   self.assertIn('feature/separated-vocals-reference',text)
   self.assertIn('tests.test_separation_store tests.test_separated_vocals_reference',text)
+ def test_every_explicit_coordinator_target_compiles_real_separation_dependencies(self):
+  import yaml
+  project=yaml.safe_load((ROOT/'project.yml').read_text())
+  checked=[]
+  for name,target in project['targets'].items():
+   paths=[s['path'] for s in target.get('sources',[]) if isinstance(s,dict)]
+   if 'VoiceMatrix/LocalVideoStudio.swift' in paths:
+    checked.append(name)
+    for dependency in ['SeparationStore','VocalSeparationAssets','RetainedMediaReader']:
+     self.assertIn('VoiceMatrix/'+dependency+'.swift',paths,name)
+  self.assertIn('LocalStudioDiagnostic',checked)
+ def test_native_probe_reports_safe_stage_and_receipt_comparisons(self):
+  probe=(ROOT/'probes/separation-store/main.swift').read_text()
+  for marker in ['SEPARATION_STORE_STAGE:', 'directoryURL', 'directoryPath', 'SEPARATION_STORE_DATE_DELTA=', 'FAIL separation store probe stage=', 'exit(1)']:
+   self.assertIn(marker,probe)

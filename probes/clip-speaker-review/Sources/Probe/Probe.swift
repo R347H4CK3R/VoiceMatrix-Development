@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import Darwin
 
 @main struct Probe {
     struct Fixture: Decodable { let cases: [Case] }
@@ -7,6 +8,11 @@ import CryptoKit
     enum Failure: Error { case failed(String) }
     static func check(_ ok: Bool, _ reason: String) throws { if !ok { throw Failure.failed(reason) } }
     static func hash(_ url: URL) throws -> String { SHA256.hash(data: try Data(contentsOf: url)).map { String(format: "%02x", $0) }.joined() }
+    static func log(_ message: String) { print(message); fflush(stdout) }
+    static func save(_ analysis: LocalSpeakerDiarization.Analysis, to url: URL) throws {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        try encoder.encode(analysis).write(to: url, options: .withoutOverwriting)
+    }
     static func main() async throws {
         let models = URL(fileURLWithPath: CommandLine.arguments[1])
         let fixtures = URL(fileURLWithPath: CommandLine.arguments[2])
@@ -30,7 +36,26 @@ import CryptoKit
                 } catch ClipSpeakerReviewStore.Failure.unsupported { }
                 try check(!FileManager.default.fileExists(atPath: reviewStore.root.appendingPathComponent(clip.id.uuidString + ".json").path), "unsupported published")
             } else {
-                let analysis = try await ClipSpeakerReviewAnalyzer.analyze(clip, store: reviewStore, bundle: models) { print("\(item.name): \($0)") }
+                let analysis: LocalSpeakerDiarization.Analysis
+                do {
+                    analysis = try await ClipSpeakerReviewAnalyzer.analyze(clip, store: reviewStore, bundle: models) { log("\(item.name): \($0)") }
+                } catch {
+                    let originalError = error
+                    log("ANALYZER FAILED \(item.name): \(originalError)")
+                    // Diagnostics only: retain evidence without publishing or bypassing the original failure.
+                    do {
+                        let snapshot = try reviewStore.snapshot(for: clip)
+                        defer { try? FileManager.default.removeItem(at: snapshot) }
+                        let diagnostic = try await LocalSpeakerDiarization.analyze(source: snapshot, bundle: models) { log("diagnostic \(item.name): \($0)") }
+                        try save(diagnostic, to: output.appendingPathComponent(item.name + "-diagnostic-analysis.json"))
+                        log("DIAGNOSTIC expectedFrames=\(clip.frames) expectedSeconds=\(Double(clip.frames)/44_100) analysis.seconds=\(diagnostic.seconds) clipSHA=\(clip.sha256) rawSHA=\(diagnostic.rawOverlap?.sourceSHA256 ?? "nil") policy=\(String(describing: diagnostic.selectionPolicyVersion))")
+                    } catch {
+                        log("DIAGNOSTIC FAILED \(item.name): \(error)")
+                    }
+                    throw originalError
+                }
+                try save(analysis, to: output.appendingPathComponent(item.name + "-analysis.json"))
+                log("VALIDATING \(item.name): expectedFrames=\(clip.frames) analysis.seconds=\(analysis.seconds)")
                 try reviewStore.validate(analysis, for: clip)
                 let result = try reviewStore.publish(analysis, for: clip)
                 try check(analysis.rawOverlap?.sourceSHA256 == clip.sha256, "raw source binding")
@@ -46,14 +71,12 @@ import CryptoKit
                     try check(labeled?.alias(for: first.speaker) == "Local review label", "alias reopen")
                     try check(labeled?.binding == result.binding, "alias changed evidence")
                 }
-                let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-                try encoder.encode(analysis).write(to: output.appendingPathComponent(item.name + "-analysis.json"), options: .withoutOverwriting)
-                print("PASS \(item.name): \(result.groups.count) anonymous guesses; overlap=\(result.hasOverlap)")
+                log("PASS \(item.name): \(result.groups.count) anonymous guesses; overlap=\(result.hasOverlap)")
             }
             try check(try hash(sourceURL) == item.audioSHA256, "original source modified")
             try check(try hash(clip.url) == clipHash, "clip modified")
             try check(try hash(receiptURL) == receiptHash, "receipt modified")
         }
-        print("PASS real bounded retained-clip pipeline. macOS native inference only; not physical iPhone acceptance.")
+        log("PASS real bounded retained-clip pipeline. macOS native inference only; not physical iPhone acceptance.")
     }
 }

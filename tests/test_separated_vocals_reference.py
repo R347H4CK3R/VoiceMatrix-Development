@@ -47,3 +47,11 @@ class HandoffSurfaceTests(unittest.TestCase):
   probe=(ROOT/'probes/separation-store/main.swift').read_text()
   for marker in ['SEPARATION_STORE_STAGE:', 'directoryURL', 'directoryPath', 'SEPARATION_STORE_DATE_DELTA=', 'FAIL separation store probe stage=', 'exit(1)']:
    self.assertIn(marker,probe)
+
+ def test_directory_guard_uses_non_symlink_filesystem_identity(self):
+  source=(ROOT/'VoiceMatrix/SeparationStore.swift').read_text()
+  self.assertIn('sameOwnedDirectory(current.directory, selected.directory)',source)
+  self.assertIn('ownedInfo.st_dev == selectedInfo.st_dev',source)
+  self.assertIn('ownedInfo.st_ino == selectedInfo.st_ino',source)
+  self.assertIn('lstat(selected.path',source)
+  self.assertNotIn('current.directory == selected.directory',source)

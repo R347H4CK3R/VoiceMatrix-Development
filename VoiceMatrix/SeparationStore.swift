@@ -56,9 +56,24 @@ struct SeparationStore {
             guard count == bytes, digest == sha256 else { throw Failure.unsafe }
         }
     }
+    /// Directory URLs may use /var or /private/var on Apple platforms. The fresh
+    /// owned listing anchors admission; accept only that same physical directory,
+    /// never an alternate receipt directory or a symbolic-link leaf.
+    private func sameOwnedDirectory(_ owned: URL, _ selected: URL) -> Bool {
+        guard owned.isFileURL, selected.isFileURL,
+              owned.lastPathComponent == selected.lastPathComponent else { return false }
+        var ownedInfo=stat(), selectedInfo=stat()
+        guard lstat(owned.path,&ownedInfo)==0, lstat(selected.path,&selectedInfo)==0,
+              ownedInfo.st_mode & mode_t(S_IFMT)==mode_t(S_IFDIR),
+              selectedInfo.st_mode & mode_t(S_IFMT)==mode_t(S_IFDIR) else { return false }
+        let ownedRoot=root.resolvingSymlinksInPath().standardizedFileURL.path
+        guard owned.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path == ownedRoot,
+              selected.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path == ownedRoot else {return false}
+        return ownedInfo.st_dev == selectedInfo.st_dev && ownedInfo.st_ino == selectedInfo.st_ino
+    }
     func referenceInput(for selected: Result) throws -> ReferenceInput {
         guard let current = try results().first(where: { $0.id == selected.id }),
-              current.directory == selected.directory, current.receipt == selected.receipt,
+              sameOwnedDirectory(current.directory, selected.directory), current.receipt == selected.receipt,
               current.receipt.modelSHA256 == VocalSeparationAssets.models.mapValues({ $0.sha256 }),
               current.receipt.inputSHA256.count == 64,
               current.receipt.inputSHA256.allSatisfy({ $0.isHexDigit }) else { throw Failure.unsafe }

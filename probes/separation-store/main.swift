@@ -44,6 +44,24 @@ do {try handoff.validateCopied(digest:handoff.sha256,bytes:original.count+1);fat
 let copiedVocals=try Data(contentsOf:handoff.url)
 precondition(copiedVocals==original)
 stage("repeated snapshot reuse")
+stage("owned directory parent alias and foreign-directory rejection")
+let aliasParent=root.deletingLastPathComponent().appendingPathComponent("store-parent-alias")
+try FileManager.default.createSymbolicLink(at:aliasParent,withDestinationURL:root)
+let aliased=SeparationStore.Result(receipt:result.receipt,directory:aliasParent.appendingPathComponent(result.directory.lastPathComponent,isDirectory:true))
+let noDirectoryHint=SeparationStore.Result(receipt:result.receipt,directory:URL(fileURLWithPath:result.directory.path,isDirectory:false))
+let noHintInput=try store.referenceInput(for:noDirectoryHint)
+precondition(noHintInput.url==handoff.url)
+let aliasInput=try store.referenceInput(for:aliased)
+precondition(aliasInput.url==handoff.url)
+let leafLink=root.deletingLastPathComponent().appendingPathComponent(result.directory.lastPathComponent,isDirectory:true)
+try FileManager.default.createSymbolicLink(at:leafLink,withDestinationURL:result.directory)
+let linkedResult=SeparationStore.Result(receipt:result.receipt,directory:leafLink)
+do {_=try store.referenceInput(for:linkedResult);fatalError("symlink directory leaf accepted")} catch {}
+let foreignParent=root.deletingLastPathComponent().appendingPathComponent("foreign",isDirectory:true)
+let foreignDirectory=foreignParent.appendingPathComponent(result.directory.lastPathComponent,isDirectory:true)
+try FileManager.default.createDirectory(at:foreignDirectory,withIntermediateDirectories:true)
+let foreignResult=SeparationStore.Result(receipt:result.receipt,directory:foreignDirectory)
+do {_=try store.referenceInput(for:foreignResult);fatalError("foreign directory with same receipt accepted")} catch {}
 let beforeRepeated=try FileManager.default.contentsOfDirectory(atPath:root.path).count
 for _ in 0..<70 {
     let reused=try store.referenceInput(for:result)

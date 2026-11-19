@@ -290,7 +290,7 @@ enum LocalMatroskaDerivedMedia {
     /// Container-level implicit QuickTime priming is never involved.
     private static func stagePCM(tape: FileHandle, offset: UInt64, packets: [IndexedPacket],
                                  track: LocalMatroskaReader.Track, maximumBytes: UInt64,
-                                 check: () throws -> Void,
+                                 check: @escaping () throws -> Void,
                                  decodeProgress: @Sendable (Int) -> Void) throws -> PCMStage {
         let rate = UInt64(track.sampleRate)
         guard let last = packets.last, let maximumPacketSize = packets.lazy.map({ $0.size }).max() else {

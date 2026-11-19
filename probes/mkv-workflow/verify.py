@@ -30,6 +30,22 @@ assert (receipt["frames"], receipt["startSeconds"], receipt["sampleRate"]) == (4
 for key, name in (("mkvSHA256", "source.mkv"), ("derivedSHA256", "derived.mov"), ("clipSHA256", "clip.f32le")):
     assert hashlib.sha256((evidence / name).read_bytes()).hexdigest() == receipt[key]
 assert len({receipt[k] for k in ("originalSHA256", "mkvSHA256", "derivedSHA256")}) == 3
+
+committed_wav = (evidence / "committed-clip.wav").read_bytes()
+committed_data = (evidence / "committed-clip-receipt.json").read_bytes()
+committed = json.loads(committed_data)
+assert hashlib.sha256(committed_wav).hexdigest() == receipt["committedWAVSHA256"] == committed["clipSHA256"]
+assert hashlib.sha256(committed_data).hexdigest() == receipt["committedReceiptSHA256"]
+assert (committed["requestedStart"], committed["requestedSeconds"], committed["actualStart"], committed["frames"]) == (2, 10, 2, 441000)
+assert committed["sourceJobID"] == receipt["jobID"] and committed["sourceSHA256"] == receipt["derivedSHA256"]
+assert committed["matroskaLineage"] == {
+    "schemaVersion": 1, "jobID": receipt["jobID"], "attemptID": receipt["attemptID"],
+    "acquisitionSHA256": receipt["originalSHA256"], "mkvSHA256": receipt["mkvSHA256"],
+    "derivedSHA256": receipt["derivedSHA256"],
+}
+assert committed_wav[:4] == b"RIFF" and committed_wav[8:12] == b"WAVE"
+assert committed_wav[44:] == (evidence / "clip.f32le").read_bytes()
+
 expected = mono(evidence / "source.mkv")[88200:529200]
 derived = mono(evidence / "derived.mov")[88200:529200]
 native = floats((evidence / "clip.f32le").read_bytes())

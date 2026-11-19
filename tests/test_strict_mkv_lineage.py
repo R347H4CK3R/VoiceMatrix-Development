@@ -42,3 +42,28 @@ class StrictMKVLineageTests(unittest.TestCase):
         profile = lineage[lineage.index("struct MatroskaReferenceLineage:"):]
         self.assertIn("(0.5...10).contains(requestedDurationSeconds)", profile)
         self.assertIn("(10_800...240_000).contains(retainedFrames)", profile)
+
+    def test_isolated_native_gate_requires_named_lineage_and_job_evidence(self):
+        gate = (ROOT.parent / ".github/workflows/strict-mkv-workflow.yml").read_text()
+        self.assertIn("github.ref == 'refs/heads/verification/strict-mkv-workflow'", gate)
+        self.assertIn("contents: read", gate)
+        self.assertIn("persist-credentials: false", gate)
+        for suite, name in {
+            "StrictMatroskaJobTests": "testStrictJobAcceptsOnlyCompleteDerivedSourceBinding",
+            "StrictMatroskaLineageTests": "testSeparatedVocalsReceiptAndReferenceKeepClipHashAndAbsoluteTime",
+        }.items():
+            self.assertIn(f"-only-testing:VoiceMatrixTests/{suite}", gate)
+            self.assertIn(name, gate)
+        self.assertIn("probes/mkv-workflow/verify.py", gate)
+        self.assertIn("strict-mkv-licensed.mp4", gate)
+
+    def test_real_media_gate_requires_committed_clip_receipt_and_payload(self):
+        root = ROOT.parent
+        native = (root / "VoiceMatrixTests/LocalMatroskaWorkflowMediaTests.swift").read_text()
+        oracle = (root / "probes/mkv-workflow/verify.py").read_text()
+        self.assertIn("SeparationClipHandoff.prepare", native)
+        self.assertIn("SeparationClipHandoff.verifiedLineage", native)
+        for artifact in ("committed-clip.wav", "committed-clip-receipt.json"):
+            self.assertIn(artifact, native)
+            self.assertIn(artifact, oracle)
+        self.assertIn('assert committed["matroskaLineage"]', oracle)

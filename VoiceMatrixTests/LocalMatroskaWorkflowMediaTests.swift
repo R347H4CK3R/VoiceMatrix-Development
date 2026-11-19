@@ -79,18 +79,34 @@ final class LocalMatroskaWorkflowMediaTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: job.originalURL.path))
         XCTAssertEqual(hash(try Data(contentsOf: preserved)), job.original.sha256)
         XCTAssertEqual(try Data(contentsOf: sentinel), sentinelData)
+        let clipStore = SeparationStore(root: root.appendingPathComponent("retained-clips", isDirectory: true))
+        let sourceLineage = MatroskaSourceLineage(schemaVersion: 1, jobID: job.id, attemptID: job.attempt,
+                                                  acquisitionSHA256: output.acquisition.sha256, mkvSHA256: output.mkv.sha256,
+                                                  derivedSHA256: output.derived.sha256)
+        let committed = try await SeparationClipHandoff.prepare(
+            source: .init(jobID: job.id, url: mov, sha256: output.derived.sha256, matroskaLineage: sourceLineage),
+            start: 2, seconds: 10, store: clipStore)
+        let committedLineage = try XCTUnwrap(SeparationClipHandoff.verifiedLineage(committed, store: clipStore))
+        XCTAssertEqual(committedLineage.source, sourceLineage)
+        XCTAssertEqual(committedLineage.frames, 441_000)
+        XCTAssertEqual(committedLineage.actualStart, 2)
 
         let documents = try XCTUnwrap(fm.urls(for: .documentDirectory, in: .userDomainMask).first)
         let evidence = documents.appendingPathComponent("strict-mkv-native-evidence", isDirectory: true)
         try fm.createDirectory(at: evidence, withIntermediateDirectories: false)
         try fm.copyItem(at: mkv, to: evidence.appendingPathComponent("source.mkv"))
         try fm.copyItem(at: mov, to: evidence.appendingPathComponent("derived.mov"))
+        try fm.copyItem(at: committed.url, to: evidence.appendingPathComponent("committed-clip.wav"))
+        try fm.copyItem(at: committed.url.deletingLastPathComponent().appendingPathComponent("receipt.json"),
+                        to: evidence.appendingPathComponent("committed-clip-receipt.json"))
         let pcm = clip.samples.withUnsafeBufferPointer { Data(buffer: $0) }
         try pcm.write(to: evidence.appendingPathComponent("clip.f32le"), options: .withoutOverwriting)
         let receipt: [String: Any] = [
             "originalSHA256": output.acquisition.sha256, "mkvSHA256": output.mkv.sha256,
             "derivedSHA256": output.derived.sha256, "clipSHA256": hash(pcm),
             "frames": clip.frames, "startSeconds": clip.start, "sampleRate": clip.sampleRate,
+            "committedWAVSHA256": committed.sha256, "committedReceiptSHA256": committed.receiptSHA256,
+            "jobID": job.id.uuidString, "attemptID": job.attempt.uuidString,
             "originalAbsentDuringDeriveAndExtraction": true, "sourceAndSentinelPreserved": true
         ]
         try JSONSerialization.data(withJSONObject: receipt).write(to: evidence.appendingPathComponent("result.json"))

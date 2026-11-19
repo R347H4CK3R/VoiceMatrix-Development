@@ -10,10 +10,13 @@ concurrency:
   cancel-in-progress: true
 jobs:
   app-integration:
+    if: github.repository == 'R347H4CK3R/VoiceMatrix-Development' && github.ref == 'refs/heads/verification/strict-mkv-workflow'
     runs-on: macos-26
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
@@ -44,8 +47,11 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/python-packaging -v
       - name: Record exact source and run portable policy checks
         run: |
+          set -euo pipefail
           git rev-parse HEAD | tee native-mkv-stage-source.txt
-          python3 -m unittest tests.test_mkv_stage_policy tests.test_mkv_python_bridge_contract -v
+          test "$(cat native-mkv-stage-source.txt)" = "$GITHUB_SHA"
+          git rev-parse HEAD^{tree} | tee native-mkv-stage-tree.txt
+          python3 -m unittest tests.test_mkv_stage_policy tests.test_mkv_python_bridge_contract tests.test_local_matroska_workflow_contract tests.test_strict_mkv_product_route tests.test_strict_mkv_lineage tests.test_separated_vocals_reference -v
       - name: Compile full production ARM64 app
         run: |
           set -o pipefail
@@ -55,15 +61,26 @@ jobs:
         run: |
           set -euo pipefail
           DEVICE=$(xcrun simctl list devices available -j | python3 tools/python-runtime/select_ios26_simulator.py)
-          xcodebuild -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath native-simulator-build -resultBundlePath native-strict-workflow.xcresult -only-testing:VoiceMatrixTests/LocalMatroskaWorkflowTests -only-testing:VoiceMatrixTests/LocalMatroskaWorkflowMediaTests CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES -parallel-testing-enabled NO test > native-strict-workflow.log 2>&1 || { tail -180 native-strict-workflow.log; exit 1; }
+          xcodebuild -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath native-simulator-build -resultBundlePath native-strict-workflow.xcresult -only-testing:VoiceMatrixTests/LocalMatroskaWorkflowTests -only-testing:VoiceMatrixTests/LocalMatroskaWorkflowMediaTests -only-testing:VoiceMatrixTests/StrictMatroskaJobTests -only-testing:VoiceMatrixTests/StrictMatroskaLineageTests CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES -parallel-testing-enabled NO test > native-strict-workflow.log 2>&1 || { tail -180 native-strict-workflow.log; exit 1; }
           python3 - <<'PY_GATE'
           from pathlib import Path
           import re
           log = Path("native-strict-workflow.log").read_text()
           assert "** TEST SUCCEEDED **" in log and not re.search(r"Test Case .* (?:skipped|failed)", log)
-          for file in ("LocalMatroskaWorkflowTests", "LocalMatroskaWorkflowMediaTests"):
+          mandatory = {
+              "LocalMatroskaWorkflowTests": {"testPublishedValidationPermitsOriginalAbsentAndRejectsOrphanSwap"},
+              "LocalMatroskaWorkflowMediaTests": {"testBundledPythonResumesVerifiedMKVWithoutOriginalAndExtractsExactClip",
+                                                  "testCorruptCommittedMKVRejectsDespiteIntactOriginal"},
+              "StrictMatroskaJobTests": {"testLegacyAndFileJobsRoundTripWithoutOptIn",
+                                         "testStrictJobAcceptsOnlyCompleteDerivedSourceBinding",
+                                         "testStrictRejectsInvalidSchemaAndCachesWithoutDerivedSource"},
+              "StrictMatroskaLineageTests": {"testClipReceiptBindsLineageAndExactSampleIntervalWhileLegacyDecodes",
+                                              "testReferenceProvenanceRoundTripAndInvalidTimeOrHashRejected",
+                                              "testSeparatedVocalsReceiptAndReferenceKeepClipHashAndAbsoluteTime"},
+          }
+          for file, required in mandatory.items():
               names = re.findall(r"func (test\w+)\(", Path(f"VoiceMatrixTests/{file}.swift").read_text())
-              assert names
+              assert required <= set(names), (file, required - set(names))
               for name in names:
                   assert re.search(r"Test Case .*" + file + r"[ .]" + name + r"(?:\(\))?[\]']* passed", log), name
           PY_GATE
@@ -76,6 +93,7 @@ jobs:
           name: strict-mkv-workflow-native-verification
           path: |
             native-mkv-stage-source.txt
+            native-mkv-stage-tree.txt
             native-device-compile.log
             native-strict-workflow.log
             native-strict-workflow.xcresult

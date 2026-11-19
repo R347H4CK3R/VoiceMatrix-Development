@@ -86,6 +86,13 @@ class DerivedSourcePolicy(unittest.TestCase):
             self.assertIn(marker, source)
         self.assertLess(source.index("try validateStoredVideoTiming"), source.index("let decoded ="))
 
+    def test_rejected_video_marker_reports_native_metadata(self):
+        source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
+        for marker in ("storedObservation=", "sampleCount=", "payloadBytes=",
+                       "hasImage=", "observedTiming=", "observedDTS=", "emptyMedia=",
+                       "endsPreviousSampleDuration=", "expectedTrackEnd="):
+            self.assertIn(marker, source)
+
     def test_verified_packet_tape_pumps_each_ready_input_independently(self):
         source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
         for marker in ("IndexedPacket", "spooling-mkv-packets", "packetIndexLimit",

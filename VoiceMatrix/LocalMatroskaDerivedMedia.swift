@@ -478,7 +478,14 @@ enum LocalMatroskaDerivedMedia {
                 return StoredVideoSample(samples: CMSampleBufferGetNumSamples(buffer), bytes: bytes,
                                          hasImage: CMSampleBufferGetImageBuffer(buffer) != nil,
                                          pts: CMSampleBufferGetPresentationTimeStamp(buffer),
-                                         duration: CMSampleBufferGetDuration(buffer))
+                                         duration: CMSampleBufferGetDuration(buffer),
+                                         diagnostic: {
+                    func attachment(_ key: CFString) -> String {
+                        guard let value = CMGetAttachment(buffer, key: key, attachmentModeOut: nil) else { return "absent" }
+                        return CFEqual(value, kCFBooleanTrue) ? "true" : "other"
+                    }
+                    return "observedDTS=\(describeTime(CMSampleBufferGetDecodeTimeStamp(buffer))) emptyMedia=\(attachment(kCMSampleBufferAttachmentKey_EmptyMedia)) endsPreviousSampleDuration=\(attachment(kCMSampleBufferAttachmentKey_EndsPreviousSampleDuration))"
+                })
             }
             guard storedReader.status == .completed else { throw Failure.unsupported("stored video reader incomplete") }
         }
@@ -519,6 +526,17 @@ enum LocalMatroskaDerivedMedia {
         let hasImage: Bool
         let pts: CMTime
         let duration: CMTime
+        let diagnostic: () -> String
+
+        init(samples: Int, bytes: Int, hasImage: Bool, pts: CMTime, duration: CMTime,
+             diagnostic: @escaping () -> String = { "metadata unavailable" }) {
+            self.samples = samples
+            self.bytes = bytes
+            self.hasImage = hasImage
+            self.pts = pts
+            self.duration = duration
+            self.diagnostic = diagnostic
+        }
     }
 
     /// Input is a bounded series of lazy AVAssetReader observations. Consume
@@ -537,7 +555,9 @@ enum LocalMatroskaDerivedMedia {
                 continue
             }
             guard index < videoPTS.count, sample.samples == 1, sample.bytes > 0, !sample.hasImage else {
-                throw Failure.unsupported("unexpected stored video sample or marker at index \(index)")
+                let timing = CMTimeRange(start: sample.pts, duration: sample.duration)
+                let end = CMTime(value: videoEnd, timescale: 1000)
+                throw Failure.unsupported("unexpected stored video sample or marker at index \(index): storedObservation=\(observations) sampleCount=\(sample.samples) payloadBytes=\(sample.bytes) hasImage=\(sample.hasImage) observedTiming=\(describe(timing)) expectedTrackEnd=\(describeTime(end)) \(sample.diagnostic())")
             }
             let pts = videoPTS[index]
             let next = index + 1 < videoPTS.count ? videoPTS[index + 1] : videoEnd
@@ -554,11 +574,12 @@ enum LocalMatroskaDerivedMedia {
         guard index == videoPTS.count else { throw Failure.unsupported("stored video frame count") }
     }
 
+    private static func describeTime(_ time: CMTime) -> String {
+        "\(time.value)/\(time.timescale) flags=\(time.flags.rawValue) epoch=\(time.epoch)"
+    }
+
     private static func describe(_ range: CMTimeRange) -> String {
-        func describeTime(_ time: CMTime) -> String {
-            "\(time.value)/\(time.timescale) flags=\(time.flags.rawValue) epoch=\(time.epoch)"
-        }
-        return "(start=\(describeTime(range.start)), duration=\(describeTime(range.duration)))"
+        "(start=\(describeTime(range.start)), duration=\(describeTime(range.duration)))"
     }
 
     private static func hash(_ url: URL, maximumBytes: Int64, check: () throws -> Void) throws -> (String, Int64) {

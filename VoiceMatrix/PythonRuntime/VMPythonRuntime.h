@@ -9,6 +9,8 @@ typedef void (^VMJavaScriptCanceller)(NSString *requestID);
                                   canceller:(VMJavaScriptCanceller)canceller;
 /// Returns identity immediately; cancellation is cooperative and suppresses late output.
 - (NSString *)resolveJSON:(NSString *)request completion:(void (^)(NSString *_Nullable, NSError *_Nullable))completion;
+/// Fixed local Matroska stage decision; does not perform media or network I/O.
+- (NSString *)decideMKVStageJSON:(NSString *)request completion:(void (^)(NSString *_Nullable, NSError *_Nullable))completion;
 - (void)cancelRequest:(NSString *)requestID;
 @end
 NS_ASSUME_NONNULL_END

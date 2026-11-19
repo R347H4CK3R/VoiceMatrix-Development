@@ -111,6 +111,15 @@ static BOOL VMInitialize(void) {
     PyEval_SaveThread();
     return valid;
 }
+typedef NS_ENUM(NSUInteger, VMOperation) {
+    VMOperationResolve,
+    VMOperationMKVStage
+};
+
+@interface VMPythonRuntime ()
+- (NSString *)invokeJSON:(NSString *)request operation:(VMOperation)operation completion:(void (^)(NSString *, NSError *))completion;
+@end
+
 @implementation VMPythonRuntime
 - (instancetype)initWithJavaScriptEvaluator:(VMJavaScriptEvaluator)evaluator canceller:(VMJavaScriptCanceller)canceller {
     if ((self=[super init])) {
@@ -120,7 +129,14 @@ static BOOL VMInitialize(void) {
     return self;
 }
 - (NSString *)resolveJSON:(NSString *)request completion:(void (^)(NSString *, NSError *))completion {
+    return [self invokeJSON:request operation:VMOperationResolve completion:completion];
+}
+- (NSString *)decideMKVStageJSON:(NSString *)request completion:(void (^)(NSString *, NSError *))completion {
+    return [self invokeJSON:request operation:VMOperationMKVStage completion:completion];
+}
+- (NSString *)invokeJSON:(NSString *)request operation:(VMOperation)operation completion:(void (^)(NSString *, NSError *))completion {
     NSString *copy=[request copy];
+    BOOL stage=operation==VMOperationMKVStage;
     NSString *identity=NSUUID.UUID.UUIDString;
     VMResolverRequest *context=[VMResolverRequest new];
     @synchronized(vmRequests) {vmRequests[identity]=context;}
@@ -128,15 +144,25 @@ static BOOL VMInitialize(void) {
         @autoreleasepool {
             BOOL owned=vmWorkerContextReady && VMWorkerContextSet(&vmWorkerContext,(__bridge void *)context)==0;
             NSString *result=nil;
-            if (owned && !VMCancelled(context) && [copy lengthOfBytesUsingEncoding:NSUTF8StringEncoding] <= 16384 && VMInitialize()) {
+            NSUInteger inputLimit=stage ? 4096 : 16384;
+            Py_ssize_t outputLimit=stage ? 4096 : 1024*1024;
+            if (owned && !VMCancelled(context) && copy && [copy lengthOfBytesUsingEncoding:NSUTF8StringEncoding] <= inputLimit && VMInitialize()) {
                 PyGILState_STATE gil=PyGILState_Ensure();
-                PyObject *module=PyImport_ImportModule("voicematrix_resolver");
-                PyObject *fn=module?PyObject_GetAttrString(module,"resolve"):NULL;
-                PyObject *arg=PyUnicode_FromString(copy.UTF8String);
+                PyObject *module=PyImport_ImportModule(stage ? "voicematrix_mkv_stage" : "voicematrix_resolver");
+                PyObject *fn=module?PyObject_GetAttrString(module,stage ? "decide" : "resolve"):NULL;
+                PyObject *arg=NULL;
+                if (stage) {
+                    NSData *data=[copy dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:NO];
+                    if (data && data.length<=inputLimit) {
+                        arg=PyUnicode_DecodeUTF8(data.length ? data.bytes : "", (Py_ssize_t)data.length, "strict");
+                    }
+                } else {
+                    arg=PyUnicode_FromString(copy.UTF8String);
+                }
                 PyObject *response=fn && PyCallable_Check(fn) && arg?PyObject_CallOneArg(fn,arg):NULL;
                 if (response && PyUnicode_Check(response)) {
                     Py_ssize_t size=0; const char *utf8=PyUnicode_AsUTF8AndSize(response,&size);
-                    if (utf8 && size<=1024*1024) result=[[NSString alloc] initWithBytes:utf8 length:(NSUInteger)size encoding:NSUTF8StringEncoding];
+                    if (utf8 && size<=outputLimit) result=[[NSString alloc] initWithBytes:utf8 length:(NSUInteger)size encoding:NSUTF8StringEncoding];
                 }
                 Py_XDECREF(response);Py_XDECREF(arg);Py_XDECREF(fn);Py_XDECREF(module);
                 // Never expose URLs, cookies or raw upstream exception strings through logs.

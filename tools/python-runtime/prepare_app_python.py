@@ -20,7 +20,8 @@ def main():
     if target.exists():shutil.rmtree(target)
     target.mkdir(parents=True)
     subprocess.run([sys.executable,'-m','pip','install','--no-index','--find-links',str(wheels),'--require-hashes','--no-deps','--no-compile','-r',str(requirements),'--target',str(target)],check=True)
-    shutil.copy2(ROOT/'python-resolver/voicematrix_resolver.py',target/'voicematrix_resolver.py')
+    for module in ('voicematrix_resolver.py','voicematrix_mkv_stage.py'):
+        shutil.copy2(ROOT/'python-resolver'/module,target/module)
     for p in target.rglob('__pycache__'):shutil.rmtree(p)
     for directory in ('bin','share'):
         if (target/directory).exists():shutil.rmtree(target/directory)

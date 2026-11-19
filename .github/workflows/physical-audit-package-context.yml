@@ -1,0 +1,42 @@
+name: Single pinned iPhoneOS package-context probe (no app or output)
+on:
+  push:
+    branches: [verification/physical-audit-package-context]
+permissions:
+  contents: read
+jobs:
+  context:
+    if: github.repository == 'R347H4CK3R/VoiceMatrix-Development' && github.ref == 'refs/heads/verification/physical-audit-package-context' && github.event.repository.private == false && github.run_attempt == 1
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 12
+      - name: Verify only the pinned software package context
+        env:
+          PACKAGE_CONTEXT_CODE_PARENT: 1c3065cccf2e27d76cf9aa222c97310191f0b4be
+        run: |
+          set -euo pipefail
+          guard() { printf 'audit_package_context_activation_guard=%s\n' "$1" >&2; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || guard checkout
+          [[ "$(git cat-file -p HEAD | sed -n 's/^parent //p')" == "$PACKAGE_CONTEXT_CODE_PARENT" ]] || guard actual-code-parent
+          [[ "$(git cat-file -p "$PACKAGE_CONTEXT_CODE_PARENT" | sed -n 's/^parent //p')" == 9fb76c75c3cdb85a1a4f52bfab1d1b38eaba2b5d ]] || guard prior-diagnosed-source
+          git diff --quiet "$PACKAGE_CONTEXT_CODE_PARENT" HEAD -- . ':(exclude).github/workflows/physical-audit-package-context.yml' || guard activation-scope
+          git cat-file -e 42da8f3ed18ca1c0f1462032db5dc05ce77362a1^{tree} || guard reviewed-runtime-parent
+          [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]] || guard runner-platform
+          export DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer
+          [[ $(xcodebuild -version 2>/dev/null) == $'Xcode 26.6\nBuild version 17F113' ]] || guard exact-xcode
+          [[ $(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null) == 26.5 ]] || guard exact-iphoneos-sdk
+          [[ $(df -Pk "$RUNNER_TEMP" | awk 'END { print $4 }') -ge 2097152 ]] || guard scratch-space
+          umask 077
+          tool=$(mktemp -d "$RUNNER_TEMP/audit-package-context-tool.XXXXXX") || guard scratch
+          trap 'rm -rf -- "$tool"' EXIT
+          # Same previously reviewed exact public XcodeGen distribution. No model or build downloads.
+          curl --fail --silent --location --proto '=https' --proto-redir '=https' --tlsv1.2             --max-filesize 30000000 --max-time 90             https://github.com/yonaskolb/XcodeGen/releases/download/2.44.1/xcodegen.zip -o "$tool/xcodegen.zip" || guard xcodegen-fetch
+          [[ $(shasum -a 256 "$tool/xcodegen.zip" | awk '{print $1}') == a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73 ]] || guard xcodegen-archive-sha
+          unzip -p "$tool/xcodegen.zip" 'xcodegen/bin/xcodegen' > "$tool/xcodegen" 2>/dev/null || guard xcodegen-extract
+          [[ $(shasum -a 256 "$tool/xcodegen" | awk '{print $1}') == a450f63bdd650c280cfce0fef6c94dbb19c5bf8dc32811361fd5d2e912718503 ]] || guard xcodegen-binary-sha
+          chmod 0700 "$tool/xcodegen"
+          AUDIT_PACKAGE_CONTEXT_REVIEWED=exact-software-dependency-resolution-only             bash probes/physical-audit/package-context/run.sh "$tool/xcodegen"

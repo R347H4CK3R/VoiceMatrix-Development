@@ -1,5 +1,6 @@
 """Source-level UI contract; native XCTest owns interaction/layout verification."""
 import unittest
+import re
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 class FriendlyStudioUI(unittest.TestCase):
@@ -33,3 +34,14 @@ class FriendlyStudioUI(unittest.TestCase):
         view = (ROOT/'VoiceMatrix/LocalVideoStudioView.swift').read_text()
         self.assertIn('.frame(minHeight: 44)', view)
         self.assertNotIn('.minimumScaleFactor', view)
+
+    def test_filled_actions_have_white_text_contrast(self):
+        app = (ROOT/'VoiceMatrix/App.swift').read_text()
+        color = re.search(r'static let action = Color\(red: ([0-9.]+), green: ([0-9.]+), blue: ([0-9.]+)\)', app)
+        self.assertIsNotNone(color, 'Filled actions need a distinct high-contrast fill')
+        rgb = list(map(float, color.groups()))
+        linear = [v/12.92 if v<=0.04045 else ((v+0.055)/1.055)**2.4 for v in rgb]
+        luminance = sum(a*b for a,b in zip(linear, [0.2126,0.7152,0.0722]))
+        self.assertGreaterEqual(1.05/(luminance+0.05), 4.5)
+        view = (ROOT/'VoiceMatrix/LocalVideoStudioView.swift').read_text()
+        self.assertEqual(view.count('.tint(StudioPalette.action)'), 3)

@@ -1,6 +1,58 @@
 import XCTest
 import UIKit
 @MainActor final class LocalVideoStudioUITests: XCTestCase {
+    func testHomeVideoLinkErrorKeepsInputAndStartsNoJob() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-tutorialSeen", "YES"]
+        app.launch()
+        let hero = app.buttons["local-video-studio"]
+        XCTAssertTrue(hero.waitForExistence(timeout: 25))
+        XCTAssertGreaterThanOrEqual(hero.frame.height, 44)
+        hero.tap()
+        XCTAssertTrue(app.navigationBars["Video Voice Studio"].waitForExistence(timeout: 15))
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<10 where !element.isHittable { app.swipeUp() }
+            XCTAssertTrue(element.exists && element.isHittable)
+        }
+        let choose = app.buttons["local-video-import"]
+        reveal(choose)
+        XCTAssertGreaterThanOrEqual(choose.frame.height, 44)
+        let field = app.textFields["local-video-url"]
+        reveal(field)
+        XCTAssertEqual(field.label, "Video link")
+        XCTAssertGreaterThanOrEqual(field.frame.height, 44)
+        let invalid = "not-a-video-link"
+        field.tap()
+        field.typeText(invalid)
+        app.buttons["Done"].tap()
+        let paste = app.buttons["local-video-paste"]
+        reveal(paste)
+        XCTAssertGreaterThanOrEqual(paste.frame.height, 44)
+        let permission = app.switches["local-video-authorization"]
+        reveal(permission)
+        XCTAssertEqual(permission.value as? String, "0")
+        let download = app.buttons["local-video-download"]
+        XCTAssertFalse(download.isEnabled)
+        permission.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        reveal(download)
+        XCTAssertGreaterThanOrEqual(download.frame.height, 44)
+        XCTAssertTrue(download.isEnabled)
+        download.tap()
+        let status = app.staticTexts["local-video-status"]
+        let rejected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label BEGINSWITH %@", "Use an HTTPS YouTube link or a direct media link"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [rejected], timeout: 15), .completed)
+        XCTAssertEqual(field.value as? String, invalid, "Rejected input must remain available to edit")
+        XCTAssertFalse(app.buttons["local-video-generate"].isEnabled)
+        let details = app.buttons["Processing details"]
+        reveal(details)
+        details.tap()
+        XCTAssertTrue(app.staticTexts["No local job has started."].waitForExistence(timeout: 10))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Direct Home bad link, corrective error, no job"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testFriendlyStudioAtAccessibilityTextSizeDoesNotStartWork() {
         let app = XCUIApplication()
         app.launchArguments = ["-tutorialSeen", "YES", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL", "-laptopURL", "https://127.0.0.1:9"]

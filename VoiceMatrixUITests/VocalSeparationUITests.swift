@@ -42,7 +42,7 @@ import XCTest
             let url=app.textFields["local-video-url"]
             // An empty text field may expose its placeholder as its accessibility value.
             let urlValue=url.value as? String ?? ""
-            XCTAssertTrue(urlValue.isEmpty || urlValue=="YouTube or supported HTTPS media URL")
+            XCTAssertTrue(urlValue.isEmpty || urlValue=="https://…")
             let consent=app.switches["local-video-authorization"]
             reveal(consent)
             XCTAssertEqual(consent.value as? String,"0")

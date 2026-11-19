@@ -47,6 +47,7 @@ enum StudioPalette {
     static let background = Color(red: 0.035, green: 0.04, blue: 0.075)
     static let surface = Color(red: 0.085, green: 0.09, blue: 0.14)
     static let accent = Color(red: 0.68, green: 0.53, blue: 1)
+    static let action = Color(red: 0.35, green: 0.17, blue: 0.67)
     static let mint = Color(red: 0.35, green: 0.85, blue: 0.77)
 }
 struct HomeView: View {

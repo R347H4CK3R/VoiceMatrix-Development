@@ -87,18 +87,18 @@ struct LocalVideoStudioView: View {
                         selected = nil
                         selectionError = nil
                     } catch { selectionError = error.localizedDescription }
-                }.buttonStyle(.bordered).controlSize(.large).frame(minHeight: 44).disabled(local.busy || checkingSeparatedInput || clipPreparing)
+                }.buttonStyle(.bordered).tint(StudioPalette.action).controlSize(.large).frame(minHeight: 44).disabled(local.busy || checkingSeparatedInput || clipPreparing)
                     .accessibilityLabel("Paste video URL from Clipboard")
                     .accessibilityIdentifier("local-video-paste")
                 Text("Links need internet. If a link is not supported, choose a file you have permission to use.").font(.footnote).foregroundStyle(.secondary)
                 Toggle("I have permission to use this video or audio and its voices", isOn: $authorized).disabled(local.busy || checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-authorization")
                 Button("Create previews from this file") {
                     if let selected { local.start(selected, authorized: authorized, library: library, audio: audio, speech: speech, referenceInput: separatedInput) }
-                }.buttonStyle(.borderedProminent).disabled(selected == nil || !authorized || local.busy || checkingSeparatedInput || clipPreparing)
+                }.buttonStyle(.borderedProminent).tint(StudioPalette.action).disabled(selected == nil || !authorized || local.busy || checkingSeparatedInput || clipPreparing)
                     .accessibilityIdentifier("local-video-generate")
                 Button("Download link and create previews") {
                     local.startURL(sourceURL, authorized: authorized, library: library, audio: audio, speech: speech)
-                }.buttonStyle(.borderedProminent).disabled(sourceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !authorized || local.busy || clipPreparing)
+                }.buttonStyle(.borderedProminent).tint(StudioPalette.action).disabled(sourceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !authorized || local.busy || clipPreparing)
                     .accessibilityIdentifier("local-video-download")
                 Text("First add media and turn on permission above. Then choose the matching create button. Nothing starts just by pasting a link.")
                     .font(.footnote).foregroundStyle(.secondary)

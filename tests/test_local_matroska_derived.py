@@ -93,19 +93,14 @@ class DerivedSourcePolicy(unittest.TestCase):
                        "endsPreviousSampleDuration=", "expectedTrackEnd="):
             self.assertIn(marker, source)
 
-    def test_terminal_no_media_observation_requires_exact_end_and_immediate_eof(self):
+    def test_terminal_no_media_sequence_requires_exact_end_and_immediate_eof(self):
         source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
         for marker in ("isTerminalNoMedia", "!pts.isValid", "!dts.isValid", 'emptyMedia == "absent"',
-                       'endsPreviousSampleDuration == "absent"', "if let following = nextSample()",
+                       'endsPreviousSampleDuration == "absent"', "second.isTerminalNoMedia",
+                       "boundary.isTerminalEnd(at: end)", "nextSample() == nil",
                        "storedReader.status == .completed"):
             self.assertIn(marker, source)
         self.assertIn("index == videoPTS.count, sample.isTerminalNoMedia", source)
-
-    def test_post_terminal_diagnostics_are_bounded_and_preserve_rejection(self):
-        source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
-        for marker in ("terminalStatus=", "followingObservations=", "1..<4", "readerStatus()",
-                       "stored video data after terminal no-media observation"):
-            self.assertIn(marker, source)
 
     def test_verified_packet_tape_pumps_each_ready_input_independently(self):
         source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()

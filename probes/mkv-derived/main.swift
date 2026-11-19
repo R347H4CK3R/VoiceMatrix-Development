@@ -72,8 +72,9 @@ import Foundation
             Sample(samples: samples, bytes: bytes, hasImage: hasImage, pts: pts, duration: duration,
                    dts: dts, emptyMedia: emptyMedia, endsPreviousSampleDuration: endsPrevious)
         }
-        try verify([first, second, terminal()])
-        try verify([marker, first, second, terminal()])
+        let endMarker = terminal(pts: CMTime(value: 4_368, timescale: 48_000), emptyMedia: "true")
+        try verify([first, second, terminal(), terminal(), endMarker])
+        try verify([marker, first, second, terminal(), terminal(), endMarker])
         let malformed = [
             [marker, marker, first, second], [first, second, marker],
             [timed(0, 0, samples: 0, bytes: 1), first, second],
@@ -84,7 +85,21 @@ import Foundation
             [timed(0, 57, samples: 2), second], [timed(0, 57, bytes: 0), second],
             [first], [first, second, timed(91, 1)],
             [terminal(), first, second], [first, terminal(), second], [first, terminal()],
-            [first, second, terminal(), terminal()], [first, second, terminal(), marker],
+            [first, second, terminal()], [first, second, terminal(), terminal()],
+            [first, second, terminal(), endMarker],
+            [first, second, terminal(), terminal(), terminal(), endMarker],
+            [first, second, terminal(), terminal(), endMarker, terminal()],
+            [first, second, terminal(), terminal(), endMarker, timed(91, 1)],
+            [first, second, endMarker, terminal(), terminal()],
+            [first, second, terminal(), terminal(), terminal(pts: CMTime(value: 90, timescale: 1000), emptyMedia: "true")],
+            [first, second, terminal(), terminal(), terminal(pts: CMTime(value: 91, timescale: 1000), emptyMedia: "other")],
+            [first, second, terminal(), terminal(), terminal(bytes: 1, pts: CMTime(value: 91, timescale: 1000), emptyMedia: "true")],
+            [first, second, terminal(), terminal(), terminal(samples: 1, pts: CMTime(value: 91, timescale: 1000), emptyMedia: "true")],
+            [first, second, terminal(), terminal(), terminal(hasImage: true, pts: CMTime(value: 91, timescale: 1000), emptyMedia: "true")],
+            [first, second, terminal(), terminal(), terminal(pts: CMTime(value: 91, timescale: 1000), duration: .invalid, emptyMedia: "true")],
+            [first, second, terminal(), terminal(), terminal(pts: CMTime(value: 91, timescale: 1000), dts: .zero, emptyMedia: "true")],
+            [first, second, terminal(), terminal(), terminal(pts: CMTime(value: 91, timescale: 1000), emptyMedia: "true", endsPrevious: "true")],
+            [first, second, terminal(), marker],
             [first, second, terminal(), timed(91, 1)],
             [first, second, terminal(samples: 1)], [first, second, terminal(bytes: 1)],
             [first, second, terminal(hasImage: true)], [first, second, terminal(pts: .zero)],

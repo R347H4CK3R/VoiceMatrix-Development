@@ -34,6 +34,50 @@ def pcm_error_evidence(actual, expected):
     return result
 
 
+def adts_payload_hashes(raw, rate):
+    """Observe only baseline AAC-LC mono ADTS transport frames."""
+    index = {44100: 4, 48000: 3}[rate]
+    cursor, packets = 0, []
+    while cursor < len(raw):
+        h = raw[cursor:cursor+7]
+        if (len(h) != 7 or h[:2] != b"\xff\xf1" or h[2] >> 6 != 1
+                or ((h[2] >> 2) & 15) != index or (((h[2] & 1) << 2) | (h[3] >> 6)) != 1
+                or h[6] & 3):
+            raise ValueError("unsupported ADTS fixture transport")
+        length = ((h[3] & 3) << 11) | (h[4] << 3) | (h[5] >> 5)
+        if length <= 7 or cursor + length > len(raw):
+            raise ValueError("incomplete ADTS fixture access unit")
+        payload = raw[cursor+7:cursor+length]
+        packets.append((str(len(payload)), "SHA256:" + hashlib.sha256(payload).hexdigest()))
+        cursor += length
+    if not packets:
+        raise ValueError("ADTS fixture contains no access units")
+    return packets
+
+
+class ADTSPacketEvidence(unittest.TestCase):
+    @staticmethod
+    def frame(data):
+        length = len(data) + 7
+        return bytes((0xff, 0xf1, 0x4c, 0x40 | (length >> 11), (length >> 3) & 0xff,
+                      ((length & 7) << 5) | 0x1f, 0xfc)) + data
+
+    def test_hashes_raw_access_units_without_transport_headers(self):
+        packets = (b"abc", bytes(range(100)))
+        self.assertEqual(adts_payload_hashes(b"".join(map(self.frame, packets)), 48000),
+                         [(str(len(p)), "SHA256:" + hashlib.sha256(p).hexdigest()) for p in packets])
+
+    def test_rejects_truncation_unsupported_layout_and_changed_rate(self):
+        frame = self.frame(b"abc")
+        for invalid in (b"", frame[:-1], bytes([0]) + frame[1:],
+                        frame[:1] + bytes([0xf0]) + frame[2:],
+                        frame[:6] + bytes([0xfd]) + frame[7:]):
+            with self.assertRaises(ValueError):
+                adts_payload_hashes(invalid, 48000)
+        with self.assertRaises(ValueError):
+            adts_payload_hashes(frame, 44100)
+
+
 class PCMErrorEvidence(unittest.TestCase):
     def test_distinguishes_access_unit_and_edges(self):
         values = [0] * 4096
@@ -189,20 +233,21 @@ class DerivedNativeParity(unittest.TestCase):
                     self.check_fixture(probe, media, rate)
 
     def compare_direct_native_aac(self, probe, mkv, folder, receipt, actual, expected):
-        wrapped, direct_path = folder / "direct-aac.mov", folder / "direct-native.pcm"
+        wrapped, direct_path = folder / "direct-aac.aac", folder / "direct-native.pcm"
         def diagnostic_tool(*args):
             return subprocess.check_output([str(arg) for arg in args], timeout=15)
 
         diagnostic_tool("ffmpeg", "-v", "error", "-i", mkv, "-map", "0:a:0", "-c:a", "copy",
-                      "-use_editlist", "0", wrapped)
+                      "-f", "adts", wrapped)
         def compressed(path):
             data = json.loads(diagnostic_tool("ffprobe", "-v", "error", "-select_streams", "a:0",
                                             "-show_packets", "-show_data_hash", "sha256", "-of", "json", path))
             return [(p["size"], p["data_hash"]) for p in data["packets"]]
-        source_packets, wrapper_packets = compressed(mkv), compressed(wrapped)
+        source_packets = compressed(mkv)
+        wrapper_packets = adts_payload_hashes(wrapped.read_bytes(), receipt["audioSampleRate"])
         if source_packets != wrapper_packets or len(source_packets) != receipt["audioPackets"]:
             raise ValueError("diagnostic AAC access units were not copied exactly")
-        diagnostic_tool(probe, "pcm", wrapped, direct_path)
+        diagnostic_tool(probe, "adts-pcm", wrapped, direct_path, receipt["audioSampleRate"], receipt["audioPackets"] * 1024)
         native = direct_path.read_bytes()
         encoded_bytes = receipt["audioPackets"] * 1024 * 2
         print("PCM_DIRECT_NATIVE_LENGTH", json.dumps({"rate": receipt["audioSampleRate"],
@@ -268,7 +313,7 @@ class DerivedNativeParity(unittest.TestCase):
         self.assertEqual(len(pcm), len(oracle))
         print("PCM_CROSS_DECODER", rate, json.dumps(pcm_error_evidence(pcm, oracle), sort_keys=True), flush=True)
         # Diagnostic only: copy, do not decode or re-encode, the independently demuxed
-        # AAC samples into a native-readable audio-only MOV. Do not use this measurement
+        # AAC samples into ADTS (no QuickTime edit list or packet table). Do not use this measurement
         # to waive either the existing FFmpeg bound or any of the other assertions.
         try:
             self.compare_direct_native_aac(probe, mkv, d, receipt, pcm, oracle)

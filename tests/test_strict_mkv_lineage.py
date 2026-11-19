@@ -67,3 +67,20 @@ class StrictMKVLineageTests(unittest.TestCase):
             self.assertIn(artifact, native)
             self.assertIn(artifact, oracle)
         self.assertIn('assert committed["matroskaLineage"]', oracle)
+
+    def test_studio_explains_strict_mkv_and_explicit_file_import(self):
+        view = (ROOT / "LocalVideoStudioView.swift").read_text()
+        section = view.split('DisclosureGroup("What this can do")', 1)[1].split("if let mkvExport", 1)[0]
+        self.assertIn("New links", section)
+        self.assertIn("verified MKV", section)
+        self.assertIn("the app stops and keeps any files it saved", section)
+        self.assertIn("choose a local file you have permission to use", section)
+        self.assertIn("Older saved jobs", section)
+        self.assertIn("does not identify characters", section)
+        self.assertNotIn("verified MP4 fallback", section)
+        self.assertNotIn("Analysis uses the MP4 companion", section)
+
+    def test_native_gate_runs_history_recovery_with_swift_available(self):
+        gate = (ROOT.parent / ".github/workflows/strict-mkv-workflow.yml").read_text()
+        self.assertIn("command -v swiftc", gate)
+        self.assertIn("tests.test_local_snapshot_recovery", gate)

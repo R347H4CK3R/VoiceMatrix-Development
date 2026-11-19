@@ -2,7 +2,7 @@ name: Retained clip speaker review UI on real speech
 'on':
   workflow_dispatch:
   push:
-    branches: [feature/retained-clip-speaker-review, verification/clip-speaker-review-ui]
+    branches: [feature/retained-clip-speaker-review, verification/clip-speaker-review-ui, feature/friendly-voice-studio, fix/review-consent-epoch, fix/studio-native-touch-targets]
     paths:
       - 'VoiceMatrix/ClipSpeakerReview*.swift'
       - 'VoiceMatrix/LocalVideoStudioView.swift'

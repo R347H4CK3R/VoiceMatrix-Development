@@ -19,6 +19,29 @@ enum ClipSpeakerReviewAnalyzer {
 import Combine
 import FluidAudio
 
+/// A permission belongs to one visible lifecycle epoch, never to a recycled control.
+@MainActor final class ClipSpeakerReviewConsent: ObservableObject {
+    private struct State {
+        let epoch: UUID
+        let authorized: Bool
+    }
+    @Published private var state = State(epoch: UUID(), authorized: false)
+    var epoch: UUID { state.epoch }
+    var authorized: Bool { state.authorized }
+
+    func invalidate() {
+        state = State(epoch: UUID(), authorized: false)
+    }
+
+    @discardableResult
+    func set(_ value: Bool, epoch: UUID, isCurrent: Bool) -> Bool {
+        guard epoch == state.epoch else { return false }
+        guard isCurrent else { invalidate(); return false }
+        state = State(epoch: epoch, authorized: value)
+        return true
+    }
+}
+
 @MainActor final class ClipSpeakerReviewCoordinator: ObservableObject {
     typealias Clip = SeparationClipHandoff.Input
     typealias Review = ClipSpeakerReviewStore.Review

@@ -475,10 +475,17 @@ enum LocalMatroskaDerivedMedia {
             try validateStoredVideoTiming(videoPTS: videoPTS, videoEnd: videoEnd, check: check) {
                 guard let buffer = stored.copyNextSampleBuffer() else { return nil }
                 let bytes = CMSampleBufferGetDataBuffer(buffer).map { CMBlockBufferGetDataLength($0) } ?? 0
+                func attachment(_ key: CFString) -> String {
+                    guard let value = CMGetAttachment(buffer, key: key, attachmentModeOut: nil) else { return "absent" }
+                    return CFEqual(value, kCFBooleanTrue) ? "true" : "other"
+                }
                 return StoredVideoSample(samples: CMSampleBufferGetNumSamples(buffer), bytes: bytes,
                                          hasImage: CMSampleBufferGetImageBuffer(buffer) != nil,
                                          pts: CMSampleBufferGetPresentationTimeStamp(buffer),
-                                         duration: CMSampleBufferGetDuration(buffer))
+                                         duration: CMSampleBufferGetDuration(buffer),
+                                         dts: CMSampleBufferGetDecodeTimeStamp(buffer),
+                                         emptyMedia: attachment(kCMSampleBufferAttachmentKey_EmptyMedia),
+                                         endsPreviousSampleDuration: attachment(kCMSampleBufferAttachmentKey_EndsPreviousSampleDuration))
             }
             guard storedReader.status == .completed else { throw Failure.unsupported("stored video reader incomplete") }
         }
@@ -519,11 +526,27 @@ enum LocalMatroskaDerivedMedia {
         let hasImage: Bool
         let pts: CMTime
         let duration: CMTime
+        var dts: CMTime = .invalid
+        var emptyMedia = "absent"
+        var endsPreviousSampleDuration = "absent"
+
+        var isTerminalNoMedia: Bool {
+            samples == 0 && bytes == 0 && !hasImage && !pts.isValid && !dts.isValid &&
+                duration.isNumeric && duration == .zero && emptyMedia == "absent" &&
+                endsPreviousSampleDuration == "absent"
+        }
+
+        func isTerminalEnd(at end: CMTime) -> Bool {
+            samples == 0 && bytes == 0 && !hasImage && pts.isNumeric && pts == end &&
+                !dts.isValid && duration.isNumeric && duration == .zero &&
+                emptyMedia == "true" && endsPreviousSampleDuration == "absent"
+        }
     }
 
-    /// Input is a bounded series of lazy AVAssetReader observations. Consume
-    /// one extra at most to disprove exact count; allow just the observed
-    /// leading empty zero-time MOV marker, not arbitrary empty edit buffers.
+    /// After every expected real sample, allow immediate EOF or exactly the
+    /// two untimed empty observations and one timed empty-media end seen from
+    /// AVAssetReaderTrackOutput. The caller independently verifies track
+    /// bounds and requires the reader to complete.
     static func validateStoredVideoTiming(videoPTS: [Int64], videoEnd: Int64,
                                           check: () throws -> Void = {},
                                           nextSample: () -> StoredVideoSample?) throws {
@@ -536,8 +559,26 @@ enum LocalMatroskaDerivedMedia {
                sample.pts == .zero, sample.duration == .zero {
                 continue
             }
+            if index == videoPTS.count, sample.isTerminalNoMedia {
+                try check()
+                guard let second = nextSample(), second.isTerminalNoMedia else {
+                    throw Failure.unsupported("unexpected second stored video tail observation")
+                }
+                try check()
+                let end = CMTime(value: videoEnd, timescale: 1000)
+                guard let boundary = nextSample(), boundary.isTerminalEnd(at: end) else {
+                    throw Failure.unsupported("unexpected stored video end-marker timing or content")
+                }
+                try check()
+                guard nextSample() == nil else {
+                    throw Failure.unsupported("stored video data after end marker")
+                }
+                break
+            }
             guard index < videoPTS.count, sample.samples == 1, sample.bytes > 0, !sample.hasImage else {
-                throw Failure.unsupported("unexpected stored video sample or marker at index \(index)")
+                let timing = CMTimeRange(start: sample.pts, duration: sample.duration)
+                let end = CMTime(value: videoEnd, timescale: 1000)
+                throw Failure.unsupported("unexpected stored video sample or marker at index \(index): storedObservation=\(observations) sampleCount=\(sample.samples) payloadBytes=\(sample.bytes) hasImage=\(sample.hasImage) observedTiming=\(describe(timing)) expectedTrackEnd=\(describeTime(end)) observedDTS=\(describeTime(sample.dts)) emptyMedia=\(sample.emptyMedia) endsPreviousSampleDuration=\(sample.endsPreviousSampleDuration)")
             }
             let pts = videoPTS[index]
             let next = index + 1 < videoPTS.count ? videoPTS[index + 1] : videoEnd
@@ -554,11 +595,12 @@ enum LocalMatroskaDerivedMedia {
         guard index == videoPTS.count else { throw Failure.unsupported("stored video frame count") }
     }
 
+    private static func describeTime(_ time: CMTime) -> String {
+        "\(time.value)/\(time.timescale) flags=\(time.flags.rawValue) epoch=\(time.epoch)"
+    }
+
     private static func describe(_ range: CMTimeRange) -> String {
-        func describeTime(_ time: CMTime) -> String {
-            "\(time.value)/\(time.timescale) flags=\(time.flags.rawValue) epoch=\(time.epoch)"
-        }
-        return "(start=\(describeTime(range.start)), duration=\(describeTime(range.duration)))"
+        "(start=\(describeTime(range.start)), duration=\(describeTime(range.duration)))"
     }
 
     private static func hash(_ url: URL, maximumBytes: Int64, check: () throws -> Void) throws -> (String, Int64) {

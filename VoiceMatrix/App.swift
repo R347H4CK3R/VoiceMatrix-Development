@@ -47,6 +47,7 @@ enum StudioPalette {
     static let background = Color(red: 0.035, green: 0.04, blue: 0.075)
     static let surface = Color(red: 0.085, green: 0.09, blue: 0.14)
     static let accent = Color(red: 0.68, green: 0.53, blue: 1)
+    static let action = Color(red: 0.35, green: 0.17, blue: 0.67)
     static let mint = Color(red: 0.35, green: 0.85, blue: 0.77)
 }
 struct HomeView: View {
@@ -61,14 +62,14 @@ struct HomeView: View {
                 }
                 Text("Give your words\na new voice.")
                     .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                Text("Pick a character. Create something worth hearing.")
+                Text("Start with a video. Explore a voice. Make it yours.")
                     .foregroundStyle(.secondary)
                 VStack(spacing: 12) {
                     NavigationLink { LocalVideoStudioView() } label: {
-                        HomeCard(title: "Video Voice Studio", detail: "On this iPhone · no laptop needed.", icon: "iphone.gen3")
+                        HomeCard(title: "Make a voice from video", detail: "Add a link or a file. Explore on this iPhone.", icon: "play.rectangle.fill", prominent: true)
                     }.accessibilityIdentifier("local-video-studio")
                     NavigationLink { CharacterLibraryView() } label: {
-                        HomeCard(title: "Make speech", detail: "Type a message. Bring it to life.", icon: "text.bubble.fill", prominent: true)
+                        HomeCard(title: "Make speech", detail: "Type a message. Bring it to life.", icon: "text.bubble.fill")
                     }.accessibilityIdentifier("make-speech")
                     NavigationLink { CharacterLibraryView(mode: .conversion) } label: {
                         HomeCard(title: "Change my voice", detail: "Record or import your own words.", icon: "mic.fill")
@@ -110,6 +111,32 @@ struct HomeView: View {
         }
         .background(StudioPalette.background).navigationTitle("VoiceMatrix")
         .task { await library.loadAndRefresh() }
+    }
+}
+/// Static guidance, never a claim that a processing stage has completed.
+/// ViewThatFits stacks full-size labels instead of shrinking accessibility text.
+struct StudioSteps: View {
+    @ScaledMetric(relativeTo: .caption) private var badgeSize: CGFloat = 26
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) { steps(horizontal: true) }
+            VStack(alignment: .leading, spacing: 12) { steps(horizontal: false) }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("video-studio-steps")
+        .accessibilityLabel("How it works: 1. Add video. 2. Pick clips. 3. Try voice. Results need your review.")
+    }
+    @ViewBuilder private func steps(horizontal: Bool) -> some View {
+        step("1", "Add video", "link", horizontal: horizontal)
+        step("2", "Pick clips", "scissors", horizontal: horizontal)
+        step("3", "Try voice", "waveform", horizontal: horizontal)
+    }
+    private func step(_ number: String, _ title: String, _ icon: String, horizontal: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text(number).font(.caption.bold()).foregroundStyle(StudioPalette.background)
+                .frame(width: badgeSize, height: badgeSize).background(StudioPalette.mint, in: Circle())
+            Label(title, systemImage: icon).font(.subheadline.bold()).fixedSize(horizontal: horizontal, vertical: true)
+        }
     }
 }
 struct HomeCard: View {

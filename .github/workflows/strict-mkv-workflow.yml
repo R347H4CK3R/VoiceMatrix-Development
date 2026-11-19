@@ -51,7 +51,8 @@ jobs:
           git rev-parse HEAD | tee native-mkv-stage-source.txt
           test "$(cat native-mkv-stage-source.txt)" = "$GITHUB_SHA"
           git rev-parse HEAD^{tree} | tee native-mkv-stage-tree.txt
-          python3 -m unittest tests.test_mkv_stage_policy tests.test_mkv_python_bridge_contract tests.test_local_matroska_workflow_contract tests.test_strict_mkv_product_route tests.test_strict_mkv_lineage tests.test_separated_vocals_reference -v
+          command -v swiftc
+          python3 -m unittest tests.test_mkv_stage_policy tests.test_mkv_python_bridge_contract tests.test_local_matroska_workflow_contract tests.test_strict_mkv_product_route tests.test_strict_mkv_lineage tests.test_separated_vocals_reference tests.test_local_snapshot_recovery -v
       - name: Compile full production ARM64 app
         run: |
           set -o pipefail

@@ -1,8 +1,29 @@
 import XCTest
 import AVFoundation
+import UIKit
 @testable import VoiceMatrix
 
 final class LocalVideoAudioTests: XCTestCase {
+    @MainActor func testNativePasteTargetRejectsMultipleItemsAndDoesNotReadWhileBlocked() async {
+        let host = StudioPasteButton.PasteHost(frame: CGRect(x: 0, y: 0, width: 150, height: 48))
+        host.layoutIfNeeded()
+        XCTAssertGreaterThanOrEqual(host.control.frame.height, 44)
+        var values: [[String]] = []
+        host.onPaste = { values.append($0) }
+        let provider = NSItemProvider(object: "https://youtu.be/AAAAAAAAAAA" as NSString)
+        host.paste(itemProviders: [provider, provider])
+        XCTAssertEqual(values, [[]], "Multiple items must reach the existing rejection path, not select the first")
+        host.allowsPaste = false
+        host.paste(itemProviders: [provider])
+        XCTAssertEqual(values, [[]])
+        host.allowsPaste = true
+        let delivered = expectation(description: "Explicit native item-provider paste delivered")
+        host.onPaste = { values.append($0); delivered.fulfill() }
+        host.paste(itemProviders: [provider])
+        await fulfillment(of: [delivered], timeout: 5)
+        XCTAssertEqual(values, [[], ["https://youtu.be/AAAAAAAAAAA"]])
+    }
+
     func testRemoteURLIsNeverOpened() async {
         do { _ = try await LocalVideoAudio.extract(source: URL(string: "https://example.invalid/video.mp4")!, start: 0, seconds: 1); XCTFail("Remote source accepted") }
         catch LocalVideoAudio.Failure.localFileRequired {} catch { XCTFail("Unexpected error: \(error)") }

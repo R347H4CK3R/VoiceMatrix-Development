@@ -71,10 +71,10 @@ struct LocalVideoStudioView: View {
                 }
                 if checkingSeparatedInput { ProgressView("Verifying saved vocals…") }
                 Text("Or paste a video link").font(.headline)
-                TextField("https://…", text: $sourceURL)
+                StudioURLField(text: $sourceURL)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                     .textFieldStyle(.roundedBorder).frame(minHeight: 44).disabled(local.busy || checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-url").accessibilityLabel("Video link")
-                PasteButton(payloadType: String.self) { values in
+                StudioPasteButton { values in
                     authorized = false
                     if separatedInput != nil { selected = nil }
                     separatedInput = nil

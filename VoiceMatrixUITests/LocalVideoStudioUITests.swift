@@ -22,12 +22,17 @@ import UIKit
         XCTAssertEqual(field.label, "Video link")
         XCTAssertGreaterThanOrEqual(field.frame.height, 44)
         let invalid = "not-a-video-link"
-        field.tap()
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "Top edge of the real field focuses text entry")
         field.typeText(invalid)
         app.buttons["Done"].tap()
         let paste = app.buttons["local-video-paste"]
         reveal(paste)
         XCTAssertGreaterThanOrEqual(paste.frame.height, 44)
+        let inputs = XCTAttachment(screenshot: app.screenshot())
+        inputs.name = "Normal-size native video link and Paste controls"
+        inputs.lifetime = .keepAlways
+        add(inputs)
         let permission = app.switches["local-video-authorization"]
         reveal(permission)
         XCTAssertEqual(permission.value as? String, "0")
@@ -123,7 +128,8 @@ import UIKit
         let paste=app.buttons["local-video-paste"]
         XCTAssertTrue(paste.waitForExistence(timeout:15))
         for _ in 0..<4 where !paste.isHittable { app.swipeUp() }
-        paste.tap()
+        XCTAssertGreaterThanOrEqual(paste.frame.height, 44)
+        paste.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)).tap()
         let field=app.textFields["local-video-url"]
         let staged=NSPredicate(format:"value == %@", "https://www.youtube.com/watch?v=AAAAAAAAAAA")
         expectation(for:staged,evaluatedWith:field)

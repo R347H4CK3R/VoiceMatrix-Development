@@ -19,7 +19,14 @@ class FriendlyStudioUI(unittest.TestCase):
     def test_authorization_and_inputs_remain_explicit(self):
         view = (ROOT/'VoiceMatrix/LocalVideoStudioView.swift').read_text()
         self.assertIn('I have permission to use this video or audio and its voices', view)
-        self.assertIn('PasteButton(payloadType: String.self)', view)
+        self.assertIn('StudioPasteButton { values in', view)
+        native = (ROOT/'VoiceMatrix/StudioNativeInputs.swift').read_text()
+        self.assertIn('class PasteControl: UIPasteControl', native)
+        self.assertIn('itemProviders.count == 1', native)
+        self.assertIn('self.generation == request', native)
+        self.assertNotIn('traits.remove(.notEnabled)', native)
+        self.assertIn('greaterThanOrEqualToConstant: 48', native)
+        self.assertNotIn('UIPasteboard.general', native)
         self.assertIn('.accessibilityLabel("Video link")', view)
         for identifier in ('local-video-import','local-video-url','local-video-paste','local-video-authorization','local-video-generate','local-video-download','local-video-live-log','local-video-durable-log'):
             self.assertIn('"'+identifier+'"', view)

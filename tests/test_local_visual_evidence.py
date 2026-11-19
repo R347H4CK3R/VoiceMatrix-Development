@@ -21,8 +21,13 @@ class VisualEvidenceTests(unittest.TestCase):
 
  def test_paste_is_explicit_bounded_and_does_not_poll_clipboard(self):
   view=(ROOT/'VoiceMatrix/LocalVideoStudioView.swift').read_text()
-  for text in ['PasteButton(payloadType: String.self)', 'values.count == 1', 'raw.utf8.count <= 16_384', 'LocalMediaURLPolicy.input(raw)', 'local-video-paste']:
+  for text in ['StudioPasteButton { values in', 'values.count == 1', 'raw.utf8.count <= 16_384', 'LocalMediaURLPolicy.input(raw)', 'local-video-paste']:
    self.assertIn(text,view)
+  native=(ROOT/'VoiceMatrix/StudioNativeInputs.swift').read_text()
+  for text in ['class PasteControl: UIPasteControl', 'control.target = self', 'paste(itemProviders:', 'itemProviders.count == 1', 'self.generation == request']:
+   self.assertIn(text,native)
+  self.assertNotIn('UIPasteboard',native)
+  self.assertNotIn('hasStrings',native)
   self.assertNotIn('UIPasteboard',view)
   self.assertNotIn('hasStrings',view)
   self.assertIn('set -euo pipefail',(ROOT/'.github/workflows/native-visual-evidence.yml').read_text())

@@ -38,11 +38,7 @@ struct ClipSpeakerReviewView: View {
             }
             Section("Speaker turns") {
                 if review.verified, review.result == nil, !review.busy {
-                    Toggle("I am authorized to analyze this clip and its voices", isOn: Binding(get: { authorized }, set: { value in
-                        traceConsent("toggle-write-\(value)")
-                        authorized = value
-                        traceConsent("toggle-written")
-                    }))
+                    Toggle("I am authorized to analyze this clip and its voices", isOn: $authorized)
                         .disabled(unavailable)
                         .accessibilityIdentifier("clip-speaker-review-authorization")
                     Button("Find speaker turns") {

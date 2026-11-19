@@ -1,0 +1,171 @@
+# Draft. Do not push until exact sources, inputs and workflow have been independently reviewed.
+name: Standalone Swift Double frontend diagnostic
+on:
+  push:
+    branches:
+      - verification/asr-swift-double-parity-v1
+    paths:
+      - .github/workflows/asr-swift-double-parity.yml
+permissions:
+  contents: read
+concurrency:
+  group: voicematrix-asr-swift-double-diagnostic-v1
+  cancel-in-progress: false
+
+jobs:
+  standalone-diagnostic:
+    if: ${{ github.repository == 'R347H4CK3R/VoiceMatrix-Development' && github.ref == 'refs/heads/verification/asr-swift-double-parity-v1' && github.event.deleted == false }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      LC_ALL: C
+      CANDIDATE_SHA: ${{ github.sha }}
+      MANIFEST_SHA256: fa37d5f57e004d90126602ad0a844f970538e64426fbb82be9d7164e945ce036
+      VERIFIER_SHA256: 9db9099240885adae201dee6831a7778c2d609b836f9165e88242a10a68a9281
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Initialize diagnostic evidence and validate selectors
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$VERIFIER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]]
+          evidence="$RUNNER_TEMP/asr-swift-double-evidence"
+          mkdir -m 700 "$evidence"
+          {
+            printf 'source_sha=%s\ninput_manifest_sha256=%s\nverifier_sha256=%s\nworkflow_sha=%s\nrun_id=%s\nrun_attempt=%s\n' \
+              "$CANDIDATE_SHA" "$MANIFEST_SHA256" "$VERIFIER_SHA256" "$GITHUB_WORKFLOW_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            sw_vers
+            uname -m
+            xcodebuild -version
+            swift --version
+          } > "$evidence/runtime.txt"
+      - name: Checkout exact reviewed source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          lfs: false
+          submodules: false
+      - name: Select pinned native Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+          architecture: arm64
+      - name: Verify and stage exact reviewed input tree
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$CANDIDATE_SHA" ]]
+          python -I -c 'import platform,sys; assert sys.version_info[:3] == (3,12,10) and platform.machine() == "arm64"'
+          [[ -f verify_manifest.py && ! -L verify_manifest.py ]]
+          [[ "$(stat -f '%z' verify_manifest.py)" -le 16384 ]]
+          [[ "$(shasum -a 256 verify_manifest.py | cut -d " " -f 1)" == "$VERIFIER_SHA256" ]]
+          stage="$RUNNER_TEMP/asr-swift-double-reviewed"
+          evidence="$RUNNER_TEMP/asr-swift-double-evidence"
+          python -I verify_manifest.py --root "$GITHUB_WORKSPACE" --manifest-sha256 "$MANIFEST_SHA256" --stage "$stage" 2>&1 | tee "$evidence/manifest-verify.log"
+          cp "$stage/run-inputs.json" "$evidence/run-inputs.json"
+          cp "$stage/original-failed-baseline.json" "$evidence/original-failed-baseline.json"
+          cp "$stage/stage-diagnostic-baseline.json" "$evidence/stage-diagnostic-baseline.json"
+          python -I --version >> "$evidence/runtime.txt"
+      - name: Install only the exact NumPy wheel
+        working-directory: ${{ runner.temp }}/asr-swift-double-reviewed
+        run: |
+          set -euo pipefail
+          python -I -m venv "$RUNNER_TEMP/asr-swift-double-venv"
+          py="$RUNNER_TEMP/asr-swift-double-venv/bin/python"
+          evidence="$RUNNER_TEMP/asr-swift-double-evidence"
+          "$py" -I -m pip --isolated --disable-pip-version-check install --no-cache-dir \
+            --index-url https://pypi.org/simple --only-binary=:all: --require-hashes --no-deps \
+            --report "$evidence/install-report.json" -r requirements.txt 2>&1 | tee "$evidence/install.log"
+          "$py" -I -m pip --isolated check 2>&1 | tee "$evidence/pip-check.log"
+          "$py" -I -c 'import numpy as n; assert n.__version__ == "1.26.4"; print("numpy=" + n.__version__)' >> "$evidence/runtime.txt"
+      - name: Generate owned neutral speech and independent fixtures
+        id: fixtures
+        working-directory: ${{ runner.temp }}/asr-swift-double-reviewed
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/asr-swift-double-evidence"
+          py="$RUNNER_TEMP/asr-swift-double-venv/bin/python"
+          tmp="$RUNNER_TEMP/asr-swift-double-speech"
+          fixtures="$RUNNER_TEMP/asr-swift-double-fixtures"
+          mkdir -m 700 "$tmp"
+          # Query installed voices only. Request neither a download nor a fallback voice.
+          {
+            /usr/bin/say -v '?' > "$tmp/installed-voices.txt"
+            if ! awk '$1 == "Samantha" && $2 == "en_US" { found=1 } END { exit !found }' "$tmp/installed-voices.txt"; then
+              echo "Required local en_US Samantha voice unavailable; no download or fallback attempted." >&2
+              exit 1
+            fi
+            printf 'voice=Samantha; language=en_US; rate_wpm=180; owned_synthesized_speech=true\n'
+            /usr/bin/say -v Samantha -r 180 -f "$PWD/neutral-speech.txt" -o "$tmp/neutral.aiff"
+            /usr/bin/afconvert -f WAVE -d LEI16@16000 -c 1 "$tmp/neutral.aiff" "$tmp/neutral.wav"
+            "$py" -E -s Oracle/generate.py --out "$fixtures" --speech-wav "$tmp/neutral.wav"
+            "$py" -I - "$fixtures/fixtures.json" <<'PYTHON'
+          import json, pathlib, sys
+          rows = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          speech = [r for r in rows if r["name"].startswith("native-synthetic-speech-offset-")]
+          if len(rows) - len(speech) != 36 or not 2 <= len(speech) <= 3:
+              raise SystemExit("Expected exactly 36 synthetic fixtures plus 2-3 owned synthesized speech slices")
+          print(f"synthetic_fixtures={len(rows)-len(speech)} owned_synthesized_speech_slices={len(speech)}")
+          PYTHON
+          } 2>&1 | tee "$evidence/fixtures.log"
+          cp "$fixtures/fixtures.json" "$evidence/fixture-manifest.json"
+          cp "$fixtures/oracle-provenance.json" "$evidence/oracle-provenance.json"
+          shasum -a 256 "$fixtures/fixtures.json" | awk '{print "fixture_manifest_sha256="$1}' >> "$evidence/runtime.txt"
+      - name: Run release-mode XCTest
+        working-directory: ${{ runner.temp }}/asr-swift-double-reviewed
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/asr-swift-double-evidence"
+          export ASR_SWIFT_FIXTURES="$RUNNER_TEMP/asr-swift-double-fixtures"
+          export ASR_SWIFT_BUFFERS="$PWD/Oracle/original-buffers"
+          swift test --package-path SwiftFrontend -c release 2>&1 | tee "$evidence/xctest.log"
+      - name: Build CLI and run separate output/performance comparison
+        if: ${{ !cancelled() && steps.fixtures.outcome == 'success' }}
+        working-directory: ${{ runner.temp }}/asr-swift-double-reviewed
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/asr-swift-double-evidence"
+          py="$RUNNER_TEMP/asr-swift-double-venv/bin/python"
+          swift build --package-path SwiftFrontend -c release --product parakeet231-frontend 2>&1 | tee "$evidence/cli-build.log"
+          exe="$(swift build --package-path SwiftFrontend -c release --show-bin-path)/parakeet231-frontend"
+          "$py" -E -s compare_cli.py --executable "$exe" --fixtures "$RUNNER_TEMP/asr-swift-double-fixtures" \
+            --buffers "$PWD/Oracle/original-buffers" --output "$RUNNER_TEMP/asr-swift-double-cli-run" 2>&1 | tee "$evidence/cli-compare.log"
+          "$py" -I -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "DOUBLE_FRONTEND_MATH_PARITY_PASSED_NO_ASR_ACCEPTANCE"' "$RUNNER_TEMP/asr-swift-double-cli-run/report.json"
+      - name: Retain only the CLI aggregate report if produced
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/asr-swift-double-cli-run/report.json"
+          evidence="$RUNNER_TEMP/asr-swift-double-evidence"
+          if [[ -f "$report" && ! -L "$report" && -d "$evidence" ]]; then
+            [[ "$(stat -f '%z' "$report")" -le 1048576 ]]
+            cp "$report" "$evidence/cli-report.json"
+          fi
+      - name: Upload only bounded diagnostic evidence, even if tests failed
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: asr-swift-double-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/asr-swift-double-evidence/runtime.txt
+            ${{ runner.temp }}/asr-swift-double-evidence/run-inputs.json
+            ${{ runner.temp }}/asr-swift-double-evidence/original-failed-baseline.json
+            ${{ runner.temp }}/asr-swift-double-evidence/stage-diagnostic-baseline.json
+            ${{ runner.temp }}/asr-swift-double-evidence/manifest-verify.log
+            ${{ runner.temp }}/asr-swift-double-evidence/install-report.json
+            ${{ runner.temp }}/asr-swift-double-evidence/install.log
+            ${{ runner.temp }}/asr-swift-double-evidence/pip-check.log
+            ${{ runner.temp }}/asr-swift-double-evidence/fixtures.log
+            ${{ runner.temp }}/asr-swift-double-evidence/fixture-manifest.json
+            ${{ runner.temp }}/asr-swift-double-evidence/oracle-provenance.json
+            ${{ runner.temp }}/asr-swift-double-evidence/xctest.log
+            ${{ runner.temp }}/asr-swift-double-evidence/cli-build.log
+            ${{ runner.temp }}/asr-swift-double-evidence/cli-compare.log
+            ${{ runner.temp }}/asr-swift-double-evidence/cli-report.json
+          if-no-files-found: warn
+          retention-days: 7

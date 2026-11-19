@@ -9,15 +9,7 @@ import stat
 MANIFEST = "run-inputs.json"
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_FILES = 32
-REQUIRED = frozenset({
-    "stage_probe.py", "original-native-baseline.json", "NUMERICAL-STATUS.md",
-    "acquire.py", "buffers.py", "README.md",
-    "native_gate.py", "native_reference.py", "native-requirements.txt", "upstream_features_231.py",
-    "oracle.py", "verify_manifest.py", "original-buffers/ATTRIBUTION.md",
-    "original-buffers/model_config.yaml", "original-buffers/provenance.json",
-    "original-buffers/window.f32le", "original-buffers/filterbank.f32le",
-    "LICENSE-NeMo",
-})
+REQUIRED = frozenset({'test_compare_cli.py', 'SwiftFrontend/Sources/Parakeet231/Parakeet231Frontend.swift', 'SwiftFrontend/Sources/Parakeet231CLI/main.swift', 'Oracle/original-buffers/ATTRIBUTION.md', 'Oracle/original-buffers/provenance.json', 'SwiftFrontend/Package.swift', 'verify_manifest.py', 'original-failed-baseline.json', 'neutral-speech.txt', 'SwiftFrontend/Tests/Parakeet231Tests/Parakeet231Tests.swift', 'requirements.txt', 'stage-diagnostic-baseline.json', 'THIRD-PARTY-NOTICES.txt', 'Oracle/original-buffers/window.f32le', 'SwiftFrontend/README.md', 'compare_cli.py', 'Oracle/original-buffers/filterbank.f32le', 'Oracle/oracle.py', 'Oracle/LICENSE-NeMo', 'README.md', 'SwiftFrontend/LICENSE', 'Oracle/test_generate.py', 'Oracle/generate.py'})
 
 def strict_object(items):
     result = dict(items)

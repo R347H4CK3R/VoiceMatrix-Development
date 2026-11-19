@@ -1,0 +1,20 @@
+======================================================================
+ERROR: test_not_enough_base_cases (test_compare_cli.FixtureCountTests.test_not_enough_base_cases)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/asr-swift-diagnostic-checkpoint/test_compare_cli.py", line 17, in test_not_enough_base_cases
+    from compare_cli import validate_rows
+ImportError: cannot import name 'validate_rows' from 'compare_cli' (/tmp/asr-swift-diagnostic-checkpoint/compare_cli.py)
+
+======================================================================
+ERROR: test_short_speech_not_counted (test_compare_cli.FixtureCountTests.test_short_speech_not_counted)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/asr-swift-diagnostic-checkpoint/test_compare_cli.py", line 21, in test_short_speech_not_counted
+    from compare_cli import validate_rows
+ImportError: cannot import name 'validate_rows' from 'compare_cli' (/tmp/asr-swift-diagnostic-checkpoint/compare_cli.py)
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.014s
+
+FAILED (errors=2)

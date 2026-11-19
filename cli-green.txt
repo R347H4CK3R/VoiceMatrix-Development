@@ -1,0 +1,9 @@
+test_bad_mask (test_compare_cli.Tests.test_bad_mask) ... ok
+test_exact (test_compare_cli.Tests.test_exact) ... ok
+test_nan (test_compare_cli.Tests.test_nan) ... ok
+test_valid_rms_not_diluted (test_compare_cli.Tests.test_valid_rms_not_diluted) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.015s
+
+OK

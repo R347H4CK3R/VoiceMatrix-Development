@@ -2,94 +2,119 @@
   "schema": 1,
   "files": [
     {
-      "path": "LICENSE-NeMo",
+      "path": "Oracle/LICENSE-NeMo",
       "size": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
-      "path": "NUMERICAL-STATUS.md",
-      "size": 2096,
-      "sha256": "01b109cb6bdbe1972eaab4b85e8ad706e5dbf296b1f938492c26369bdf20fcbf"
+      "path": "Oracle/generate.py",
+      "size": 4388,
+      "sha256": "208e90ef1c16c6c0bc3a5a15778efa4822f89812835b57aac8a7152ecd8e208f"
     },
     {
-      "path": "README.md",
-      "size": 7282,
-      "sha256": "d53a7ed85924ebb958a6ebe47f04f20182fd201c1ead503fb590c0b6c3804b8a"
-    },
-    {
-      "path": "acquire.py",
-      "size": 2362,
-      "sha256": "5a7347ab66d36c51da9eb5b7805d3a278db074c6d7c0e40b79298b448bbe964b"
-    },
-    {
-      "path": "buffers.py",
-      "size": 3589,
-      "sha256": "abbc2f59216830733558f5384738c483f0dcd64ea94551f5aeeba20a93015628"
-    },
-    {
-      "path": "native-requirements.txt",
-      "size": 29830,
-      "sha256": "893310f8e558311536f7534222264fd1ee4a9d1f068998e624d592e799541e45"
-    },
-    {
-      "path": "native_gate.py",
-      "size": 6568,
-      "sha256": "5f17f9970c913cbba4645da60ef9de4c9649c9171a1e7b264c37cb523d4fec52"
-    },
-    {
-      "path": "native_reference.py",
-      "size": 2864,
-      "sha256": "2a32939da46dcdc2d5b8e742b9b841c1222b1209a34bbaed1448a65601da6b97"
-    },
-    {
-      "path": "oracle.py",
+      "path": "Oracle/oracle.py",
       "size": 1470,
       "sha256": "62011fc49918d9cfe5f67ba3e3cd6693003da32bb1661439d9e28dbc9cd788eb"
     },
     {
-      "path": "original-buffers/ATTRIBUTION.md",
+      "path": "Oracle/original-buffers/ATTRIBUTION.md",
       "size": 992,
       "sha256": "a06720e7a66b57cdd4b7d04480d91293fc22f87b96c29fe04b54a1eb3b8b2730"
     },
     {
-      "path": "original-buffers/filterbank.f32le",
+      "path": "Oracle/original-buffers/filterbank.f32le",
       "size": 131584,
       "sha256": "f5608e00763a20a191022fbb00a43346db5f1ec06828a97a6f4157f7d02b76c8"
     },
     {
-      "path": "original-buffers/model_config.yaml",
-      "size": 161386,
-      "sha256": "eadae985ef97451402be2faef3b240c2cae7d9cc0362c5bd00e64dfc4265ed09"
-    },
-    {
-      "path": "original-buffers/provenance.json",
+      "path": "Oracle/original-buffers/provenance.json",
       "size": 693,
       "sha256": "7e8c154073daf4f13c1b797c623387ce800ab1a7304575e6b2d7daea348f4b30"
     },
     {
-      "path": "original-buffers/window.f32le",
+      "path": "Oracle/original-buffers/window.f32le",
       "size": 1600,
       "sha256": "744788a137aa808ccc97d9d3c185c649b2e9c2b99c3262887c3ac9bb3b7e1c4c"
     },
     {
-      "path": "original-native-baseline.json",
+      "path": "Oracle/test_generate.py",
+      "size": 1368,
+      "sha256": "214cbc18ba6dc3447fc71e50cb80496a101fad8e86185de442f0f24f8e6e6baa"
+    },
+    {
+      "path": "README.md",
+      "size": 1379,
+      "sha256": "90a162a7d1de4693bc87d26ad73d559cfb97ecebae64cb2bf5f6bee2ba5608c7"
+    },
+    {
+      "path": "SwiftFrontend/LICENSE",
+      "size": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "SwiftFrontend/Package.swift",
+      "size": 542,
+      "sha256": "0328e7305d23b5324d9aebe89a23913351b52d69446eae9e29498631d9170d5f"
+    },
+    {
+      "path": "SwiftFrontend/README.md",
+      "size": 3764,
+      "sha256": "be0800431c881a50088cc4c94c65e5f81865a97dbed37889a77cbbfda7ab532a"
+    },
+    {
+      "path": "SwiftFrontend/Sources/Parakeet231/Parakeet231Frontend.swift",
+      "size": 7956,
+      "sha256": "0204480006dab281f09e2c7d45c8d98c3114efac464b48beab1c478afd71ff07"
+    },
+    {
+      "path": "SwiftFrontend/Sources/Parakeet231CLI/main.swift",
+      "size": 3556,
+      "sha256": "d60c0ee94fd4f703ccb38772adefbdf2848d96751c9476c51afdee4752f14d1f"
+    },
+    {
+      "path": "SwiftFrontend/Tests/Parakeet231Tests/Parakeet231Tests.swift",
+      "size": 9038,
+      "sha256": "4b3bd145a0d6e7c8f0256ed1a20d30647f07bbde4d3383dc6f23a410934f4c75"
+    },
+    {
+      "path": "THIRD-PARTY-NOTICES.txt",
+      "size": 1947,
+      "sha256": "0536b40ea1476e9c4fa4a5540c8c2ac3a00c24bef6dab2691eb37ac536b9ef4d"
+    },
+    {
+      "path": "compare_cli.py",
+      "size": 5163,
+      "sha256": "9cd7e3df77dc76877559c29ca4209561e399b62d9380c662770635f1042f9029"
+    },
+    {
+      "path": "neutral-speech.txt",
+      "size": 443,
+      "sha256": "4304733b2e3436a34789f4010459977cf58ffd06c3761b7e3867f1d435718693"
+    },
+    {
+      "path": "original-failed-baseline.json",
       "size": 9335,
       "sha256": "1d92810ff61a17c8aa98003f84f5ce5ef903f6b7f50b40ba59c40363f3a4389b"
     },
     {
-      "path": "stage_probe.py",
-      "size": 10673,
-      "sha256": "081c6c61fa48555ae37d38d94c25c2e6d9b23cc7803ff30d5efca3d638b8d440"
+      "path": "requirements.txt",
+      "size": 93,
+      "sha256": "317c95fb0eca6efa3e1678ebaad2a7e0afb0b333af86afddbd8af6a8cb4ed275"
     },
     {
-      "path": "upstream_features_231.py",
-      "size": 28465,
-      "sha256": "bd333719eec5b65053a97e29f12618c9e82121fb0ab0c1c8854bb47a1114b101"
+      "path": "stage-diagnostic-baseline.json",
+      "size": 133403,
+      "sha256": "7bffdc7de672b45e95ce654ffbb6fd81f9d7420a631c8dbed640c410b25a8429"
+    },
+    {
+      "path": "test_compare_cli.py",
+      "size": 1340,
+      "sha256": "74af454a298bc2a764bcd17b1a707a892044cbeccdb577afb1cba5325c9d5a18"
     },
     {
       "path": "verify_manifest.py",
-      "size": 4391,
-      "sha256": "2164a2cc86dbc4d7fa93f85d1343fcb093918714159b1a65102158d38413d4ed"
+      "size": 4652,
+      "sha256": "9db9099240885adae201dee6831a7778c2d609b836f9165e88242a10a68a9281"
     }
   ]
 }

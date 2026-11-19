@@ -2,30 +2,43 @@
 # Hosted macOS build, deliberately not invoked by any installed workflow.
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
-root=$(git rev-parse --show-toplevel)
-cd "$root"
-[[ ${GITHUB_ACTIONS:-} == true && ${GITHUB_REPOSITORY:-} == R347H4CK3R/VoiceMatrix-Development ]]
-[[ ${GITHUB_REF:-} == refs/heads/verification/physical-audit-arm64 && ${GITHUB_RUN_ATTEMPT:-} == 1 ]]
-[[ $(uname -s) == Darwin && $(uname -m) == arm64 && $# == 4 ]]
+fail_guard() { printf 'audit_arm64_failed_guard=%s\n' "$1" >&2; exit 1; }
+root=$(git rev-parse --show-toplevel 2>/dev/null) || fail_guard checkout
+cd "$root" || fail_guard checkout-directory
+[[ ${GITHUB_ACTIONS:-} == true && ${GITHUB_REPOSITORY:-} == R347H4CK3R/VoiceMatrix-Development ]] || fail_guard repository
+[[ ${GITHUB_REF:-} == refs/heads/verification/physical-audit-arm64 && ${GITHUB_RUN_ATTEMPT:-} == 1 ]] || fail_guard branch-or-attempt
+[[ $(uname -s) == Darwin && $(uname -m) == arm64 && $# == 4 ]] || fail_guard platform-or-arity
 expected_source=$1 expected_tree=$2 receipt=$3 receipt_sha=$4
-[[ $expected_source =~ ^[a-f0-9]{40}$ && $expected_tree =~ ^[a-f0-9]{40}$ && $receipt_sha =~ ^[a-f0-9]{64}$ ]]
-[[ ${GITHUB_SHA:-} == "$expected_source" && $(git rev-parse HEAD) == "$expected_source" ]]
-[[ $(git rev-parse HEAD^{tree}) == "$expected_tree" ]]
-[[ $(git rev-parse 42da8f3ed18ca1c0f1462032db5dc05ce77362a1^{tree}) == 24e298cb887b1a6bf19c177c0733e06f5a474bfc ]]
-[[ $(git rev-parse 4ed344a8bb859e841c35041f3f07b9510a930492^{tree}) == 53e26cfe17017df02c2c6fdc1e63a8c0d6f3ba37 ]]
-git diff --quiet && git diff --cached --quiet
-[[ -z $(git ls-files --others --exclude-standard) ]]
+[[ $expected_source =~ ^[a-f0-9]{40}$ && $expected_tree =~ ^[a-f0-9]{40}$ && $receipt_sha =~ ^[a-f0-9]{64}$ ]] || fail_guard source-identity-format
+[[ ${GITHUB_SHA:-} == "$expected_source" && $(git rev-parse HEAD 2>/dev/null) == "$expected_source" ]] || fail_guard source-sha
+[[ $(git rev-parse HEAD^{tree} 2>/dev/null) == "$expected_tree" ]] || fail_guard source-tree
+[[ $(git rev-parse 42da8f3ed18ca1c0f1462032db5dc05ce77362a1^{tree} 2>/dev/null) == 24e298cb887b1a6bf19c177c0733e06f5a474bfc ]] || fail_guard exact-asr-runtime
+[[ $(git rev-parse 4ed344a8bb859e841c35041f3f07b9510a930492^{tree} 2>/dev/null) == 53e26cfe17017df02c2c6fdc1e63a8c0d6f3ba37 ]] || fail_guard exact-strict-base
+git diff --quiet && git diff --cached --quiet || fail_guard modified-checkout
+[[ -z $(git ls-files --others --exclude-standard) ]] || fail_guard unexpected-untracked-files
+[[ $(date -u +%F) == 2026-11-19 ]] || fail_guard approval-utc-date
 export DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer
-[[ $(xcodebuild -version) == $'Xcode 26.6\nBuild version 17F113' ]]
-[[ $(xcrun --sdk iphoneos --show-sdk-version) == 26.5 ]]
-command -v ffmpeg >/dev/null
-command -v ffprobe >/dev/null
+[[ -d $DEVELOPER_DIR ]] || fail_guard xcode-path
+[[ $(xcodebuild -version 2>/dev/null) == $'Xcode 26.6\nBuild version 17F113' ]] || fail_guard xcode-version-26-6-build-17F113
+[[ $(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null) == 26.5 ]] || fail_guard iphoneos-sdk-26-5
+command -v python3 >/dev/null || fail_guard python3
+python3 -c 'import sys; raise SystemExit(sys.version_info[:2] != (3,12))' || fail_guard python-3-12
+[[ -x /usr/bin/sandbox-exec ]] || fail_guard sandbox-exec
 
 # Anticipated max data before compile: baseline 1.331GB, model+tools 1.40GB,
 # one scratch app+archive ~3GB; require surplus for source dependency/build layers.
 disk_kib() { df -Pk "$root" | awk 'END { print $4 }'; }
-[[ $(disk_kib) -ge 10485760 ]]  # 10 GiB actual upfront; fail before any large download.
-work=$(mktemp -d "$root/.audit-transient.XXXXXX")
+disk_guard() {
+  local available
+  available=$(disk_kib)
+  [[ $available =~ ^[0-9]+$ ]] || fail_guard disk-measurement
+  if [[ $available -lt $1 ]]; then
+    printf 'audit_arm64_disk_available_kib=%s;required_kib=%s\n' "$available" "$1" >&2
+    fail_guard "$2"
+  fi
+}
+disk_guard 10485760 disk-before-tooling
+work=$(mktemp -d "$root/.audit-transient.XXXXXX") || fail_guard scratch-directory
 chmod 0700 "$work"
 stage=verified-receipt
 cleanup() {
@@ -40,7 +53,7 @@ gate=probes/physical-audit/packaging_gate.py
 hosted=probes/physical-audit/hosted
 graph="$root/tests/fixtures/build17-original-Package.resolved"
 graphsha=ff9369012927524e241f0cf3bcca1a72177947e02ef7933beef716377c87de72
-[[ $(shasum -a 256 "$graph" | awk '{print $1}') == "$graphsha" ]]
+[[ $(shasum -a 256 "$graph" | awk '{print $1}') == "$graphsha" ]] || fail_guard frozen-package-graph
 python3 - "$gate" "$receipt" "$receipt_sha" <<'PY_RECEIPT'
 import importlib.util, json, sys
 from pathlib import Path
@@ -52,11 +65,31 @@ if not p.is_file() or p.is_symlink() or p.stat().st_size > 4096 or m.digest(p) !
     sys.exit("Missing externally approved exact receipt")
 r = json.loads(p.read_bytes())
 m.require_receipt(r)
-if r["xcodeVersion"] != "Xcode 26.6" or r["iphoneOSSDK"] != "26.5":
+if r["approvalDateUTC"] != "2026-11-19" or r["xcodeVersion"] != "Xcode 26.6" or r["iphoneOSSDK"] != "26.5":
     sys.exit("Clearance receipt does not bind this toolchain")
 PY_RECEIPT
 
 offline=(/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)')
+stage=official-homebrew-ffmpeg
+[[ -x /opt/homebrew/bin/brew ]] || fail_guard official-arm64-homebrew
+# Only the official default formula source, with caches scoped to this disposable run.
+if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+  HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ANALYTICS=1 \
+    HOMEBREW_CACHE="$work/brew-cache" /opt/homebrew/bin/brew install ffmpeg > "$work/brew.log" 2>&1 || fail_guard homebrew-ffmpeg-install
+fi
+ffmpeg=$(command -v ffmpeg) || fail_guard ffmpeg-not-on-path
+ffprobe=$(command -v ffprobe) || fail_guard ffprobe-not-on-path
+[[ $ffmpeg == /opt/homebrew/bin/ffmpeg && $ffprobe == /opt/homebrew/bin/ffprobe ]] || fail_guard media-tool-not-from-approved-prefix
+for tool in "$ffmpeg" "$ffprobe"; do
+  version=$("$tool" -version 2>/dev/null | awk 'NR == 1 { print $3 }') || fail_guard media-tool-version-execution
+  checksum=$(shasum -a 256 "$tool" | awk '{print $1}') || fail_guard media-tool-binary-sha
+  [[ $version =~ ^[A-Za-z0-9._+-]+$ && $checksum =~ ^[a-f0-9]{64}$ ]] || fail_guard media-tool-metadata-format
+  printf 'audit_media_tool=%s;version=%s;binary_sha256=%s\n' "${tool##*/}" "$version" "$checksum"
+done
+"$ffmpeg" -hide_banner -encoders > "$work/encoders.log" 2>&1 || fail_guard ffmpeg-encoder-inventory
+grep -Eq '[[:space:]]libx264[[:space:]]' "$work/encoders.log" || fail_guard ffmpeg-libx264
+grep -Eq '[[:space:]]aac[[:space:]]' "$work/encoders.log" || fail_guard ffmpeg-aac
+disk_guard 10485760 disk-after-tooling-before-model-fetch
 stage=source-tooling
 # Verify clean exact runtime before the local ephemeral build mutates ignored directories.
 "${offline[@]}" python3 probes/physical-audit/prepare.py .physical-audit-src > "$work/source.log" 2>&1
@@ -119,7 +152,7 @@ cmp "$graph" "$resolved"
 "${offline[@]}" python3 tools/character_package.py notices --checkouts "$work/SourcePackages/checkouts" \
   --resolved "$graph" --resources .physical-audit-assets > "$work/notices.log" 2>&1
 # The generated resource group folder tracks contents; retain the verified graph and record exact disk capacity gate.
-[[ $(disk_kib) -ge 6291456 ]]  # 6 GiB actual after inputs/packages; never escalate to paid runners.
+disk_guard 6291456 disk-after-dependencies-before-compile
 stage=native-device-build
 "${offline[@]}" xcodebuild "${common_build[@]}" -configuration Release -sdk iphoneos \
   -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build \

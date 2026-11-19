@@ -77,6 +77,13 @@ class DerivedSourcePolicy(unittest.TestCase):
                 self.assertIn(marker, source)
 
 
+    def test_decoded_timing_rejection_includes_passthrough_timing_evidence(self):
+        source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
+        for marker in ("compressedVideoTiming", "decodedNext=", "compressedFirst=",
+                       "compressedCurrent=", "compressedNext=", "videoTrackRange=", "outputSettings: nil"):
+            self.assertIn(marker, source)
+        self.assertIn("CMSampleBufferGetDuration(buffer) == CMTime(value: next - pts", source)
+
     def test_verified_packet_tape_pumps_each_ready_input_independently(self):
         source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
         for marker in ("IndexedPacket", "spooling-mkv-packets", "packetIndexLimit",

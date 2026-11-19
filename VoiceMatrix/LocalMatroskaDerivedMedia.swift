@@ -485,11 +485,43 @@ enum LocalMatroskaDerivedMedia {
                                            duration: CMSampleBufferGetDuration(buffer))
                 let expected = CMTimeRange(start: CMTime(value: pts, timescale: 1000),
                                            duration: CMTime(value: next - pts, timescale: 1000))
-                throw Failure.unsupported("native video frame timing: index=\(index) actual=\(describe(observed)) expected=\(describe(expected))")
+                let decodedNext = decoded.copyNextSampleBuffer().map { describe(sampleTiming($0)) } ?? "unavailable"
+                if videoReader.status == .reading { videoReader.cancelReading() }
+                let compressed = try compressedVideoTiming(asset, track: videos[0], index: index,
+                                                           packetLimit: videoPTS.count, check: check)
+                throw Failure.unsupported("native video frame timing: index=\(index) actual=\(describe(observed)) expected=\(describe(expected)) decodedNext=\(decodedNext) videoTrackRange=\(describe(videoRange)) \(compressed)")
             }
             index += 1
         }
         guard videoReader.status == .completed, index == videoPTS.count else { throw Failure.unsupported("native video frame count") }
+    }
+
+    /// Diagnostic-only path on a rejected decoded frame. This never changes
+    /// the rejection or publishes media; it separates decoder timing from MOV timing.
+    private static func compressedVideoTiming(_ asset: AVURLAsset, track: AVAssetTrack, index: Int,
+                                              packetLimit: Int, check: () throws -> Void) throws -> String {
+        try check()
+        guard let reader = try? AVAssetReader(asset: asset) else { return "compressedReader=unavailable" }
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { return "compressedReader=unsupported" }
+        reader.add(output)
+        guard reader.startReading() else { return "compressedReaderStatus=\(reader.status.rawValue)" }
+        defer { if reader.status == .reading { reader.cancelReading() } }
+        var first = "unavailable", current = "unavailable", next = "unavailable"
+        for offset in 0..<min(packetLimit, index + 2) {
+            try check()
+            guard let buffer = output.copyNextSampleBuffer() else { break }
+            let summary = "samples=\(CMSampleBufferGetNumSamples(buffer)) \(describe(sampleTiming(buffer)))"
+            if offset == 0 { first = summary }
+            if offset == index { current = summary }
+            if offset == index + 1 { next = summary }
+        }
+        return "compressedFirst=\(first) compressedCurrent=\(current) compressedNext=\(next) compressedReaderStatus=\(reader.status.rawValue)"
+    }
+
+    private static func sampleTiming(_ sample: CMSampleBuffer) -> CMTimeRange {
+        CMTimeRange(start: CMSampleBufferGetPresentationTimeStamp(sample), duration: CMSampleBufferGetDuration(sample))
     }
 
     private static func describe(_ range: CMTimeRange) -> String {

@@ -87,6 +87,8 @@ jobs:
               for name in names:
                   assert re.search(r"Test Case .*" + file + r"[ .]" + name + r"(?:\(\))?[\]']* passed", log), name
           PY_GATE
+          # XCTest can shut down this simulator before returning; reopen the same UDID.
+          xcrun simctl bootstatus "$DEVICE" -b
           CONTAINER=$(xcrun simctl get_app_container "$DEVICE" com.voicematrix.app data)
           cp -R "$CONTAINER/Documents/strict-mkv-native-evidence" strict-mkv-native-evidence
           python3 probes/mkv-workflow/verify.py strict-mkv-native-evidence .strict-mkv-fixture/strict-mkv-fixture.json | tee strict-mkv-oracle.json

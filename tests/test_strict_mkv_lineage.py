@@ -119,3 +119,36 @@ class StrictMKVLineageTests(unittest.TestCase):
             rejected = subprocess.run([sys.executable, "-c", script], cwd=directory, capture_output=True)
             self.assertNotEqual(rejected.returncode, 0)
             self.assertEqual(project.read_text(), broken)
+
+    def test_native_collection_boots_the_exact_test_simulator_before_reading(self):
+        import subprocess
+        import tempfile
+        import yaml
+
+        workflow = yaml.safe_load((ROOT.parent / ".github/workflows/strict-mkv-workflow.yml").read_text())
+        run = next(step["run"] for step in workflow["jobs"]["app-integration"]["steps"]
+                   if step.get("name") == "Run actual Python, MKV remux, derivation and clip extraction")
+        collect = run.split("\nPY_GATE\n", 1)[1].split("\ncp -R ", 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            mock = r'''
+            set -euo pipefail
+            DEVICE=01234567-89AB-4CDE-F012-3456789ABCDE
+            xcrun() {
+                test "$1" = simctl
+                test "$3" = "$DEVICE"
+                case "$2" in
+                    bootstatus) test "$4" = -b; touch booted;;
+                    get_app_container)
+                        if ! test -f booted; then echo "Unable to lookup in current state: Shutdown" >&2; return 1; fi
+                        test "$4" = com.voicematrix.app
+                        test "$5" = data
+                        printf '/expected/owned/container\n';;
+                    *) return 1;;
+                esac
+            }
+            '''
+            result = subprocess.run(["bash", "-c", mock + collect +
+                                     '\ntest "$CONTAINER" = /expected/owned/container\n'],
+                                    cwd=directory, text=True, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((Path(directory) / "booted").is_file())

@@ -30,6 +30,10 @@ jobs:
           for file in LocalSpeakerDiarization LocalSpeakerPolicy LocalOverlapPolicy ClipSpeakerReviewStore ClipSpeakerReviewCoordinator SeparationClipHandoff SeparationClipExtractor SeparationStore RetainedMediaReader VocalSeparationAssets; do
             cp "VoiceMatrix/$file.swift" probes/clip-speaker-controls/Sources/Probe/
           done
+          mkdir -p "$RUNNER_TEMP/diagnostic-vendor"
+          cp -R Vendors/FluidAudio "$RUNNER_TEMP/diagnostic-vendor/FluidAudio"
+          python3 probes/clip-speaker-controls/instrument_stages.py "$RUNNER_TEMP/diagnostic-vendor/FluidAudio"
+          export VOICEMATRIX_DIAGNOSTIC_FLUIDAUDIO_PATH="$RUNNER_TEMP/diagnostic-vendor/FluidAudio"
           swift build --package-path probes/clip-speaker-controls -c release
           probes/clip-speaker-controls/.build/release/Probe "$RUNNER_TEMP/clip-review-models" "$RUNNER_TEMP/clip-review-fixtures" "$RUNNER_TEMP/clip-review-results" | tee clip-speaker-controls.log
       - uses: actions/upload-artifact@v4

@@ -53,6 +53,28 @@ import Foundation
         let cluster: Int
     }
 
+    struct PairDistance: Codable {
+        let first: Int
+        let second: Int
+        let distance: Double
+    }
+    struct StageStatistics: Codable {
+        let embeddingCount: Int
+        let finite256DCount: Int
+        let embeddingNorms: [Double?]
+        let pairwiseUnitEuclidean: [PairDistance]
+        let ahcTrainingIndices: [Int]
+        let ahcInitialPartition: [Int]
+        let vbxNumClusters: Int
+        let vbxPiMasses: [Double?]
+        let centroidCount: Int
+    }
+    struct StageExport: Decodable {
+        let schemaVersion: Int
+        let assignments: [Assignment]
+        let stages: StageStatistics
+    }
+
     struct CaseEvidence: Encodable {
         let name: String
         let requestedSeconds: Double
@@ -70,6 +92,7 @@ import Foundation
         var segmentation: MaskEvidence?
         var embeddingCount: Int?
         var assignments: [Assignment] = []
+        var stageStatistics: StageStatistics?
         var diagnosticSegments: [Segment] = []
         var productionSegments: [Segment] = []
         var preservedInputs = false
@@ -213,8 +236,12 @@ import Foundation
                         Segment(speaker: $0.speakerId, start: Double($0.startTimeSeconds), end: Double($0.endTimeSeconds))
                     }
                     var export = Data()
-                    try RetainedMediaReader.read(rawExport, maximumBytes: 4_000_000) { export.append($0) }
-                    evidence.assignments = try JSONDecoder().decode([Assignment].self, from: export)
+                    try RetainedMediaReader.read(rawExport, maximumBytes: 262_144) { export.append($0) }
+                    let staged = try JSONDecoder().decode(StageExport.self, from: export)
+                    try require(staged.schemaVersion == 1 && staged.stages.embeddingCount == prepared.embeddingCount,
+                                "stage export version/count mismatch")
+                    evidence.assignments = staged.assignments
+                    evidence.stageStatistics = staged.stages
                     try require(evidence.assignments.count == prepared.embeddingCount, "assignment count does not match embeddings")
                     evidence.diagnosticOutcome = "segments"
                 } catch OfflineDiarizationError.noSpeechDetected {

@@ -58,6 +58,26 @@ final class StrictMatroskaF5Tests: XCTestCase {
     }
     private enum ProbeFailure: Error { case timeout, malformedAudio }
 
+    private func recordPhaseOneFailure(_ root: URL, reason: String, stage: String,
+                                       folder: URL, job: LocalVideoStudio.Job?) {
+        let allowed = Set(["Received", "Original retained", "Preparing Matroska", "Source retained",
+                           "Checking local transcription", "Speaker references ready", "Partial result needs review",
+                           "Needs attention", "Paused"])
+        let children = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        let model: [String: Any] = [
+            "schemaVersion": 1, "phase": "phase-one", "reason": reason,
+            "stage": allowed.contains(stage) ? stage : "other",
+            "originalReceipt": job?.strictMatroska?.original != nil,
+            "committedMkvReceipt": job?.strictMatroska?.mkv != nil,
+            "committedDerivedReceipt": job?.strictMatroska?.derived != nil,
+            "hasStrictJournal": children.contains("strict-matroska-v1.json"),
+            "retainedMkvCount": children.filter { $0.hasSuffix(".mkv") }.count,
+            "retainedMovCount": children.filter { $0.hasSuffix(".mov") }.count
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: model, options: [.sortedKeys]) else { return }
+        try? data.write(to: root.appendingPathComponent("strict-f5-failure.json"), options: .withoutOverwriting)
+    }
+
     private func verifySignal(_ url: URL) throws -> String {
         let file = try AVAudioFile(forReading: url)
         let format = file.processingFormat
@@ -107,6 +127,14 @@ final class StrictMatroskaF5Tests: XCTestCase {
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         let original = folder.appendingPathComponent("original.mp4")
         try fm.copyItem(at: fixture, to: original)
+        do {
+            // The exact production parser distinguishes malformed fixture from inference failure.
+            _ = try MP4SampleTable(url: original)
+        } catch {
+            recordPhaseOneFailure(root, reason: "fixture-rejected-by-production-parser", stage: "Original retained",
+                                  folder: folder, job: nil)
+            throw error
+        }
         let bytes = try original.resourceValues(forKeys: [.fileSizeKey]).fileSize
         let acquisitionURL = try LocalMediaURLPolicy.input("https://www.youtube.com/watch?v=abcdefghijk")
         var job = LocalVideoStudio.Job(id: id, created: now, updated: now, stage: "Original retained",
@@ -128,6 +156,12 @@ final class StrictMatroskaF5Tests: XCTestCase {
         studio.resume(library: library, audio: audio, speech: speech)
         try await waitUntilIdle({ studio.busy }, cancel: { studio.cancel() }, seconds: 1800)
         let done = try XCTUnwrap(studio.current)
+        if !done.completed {
+            let entries = (try? studio.journalPage())?.events ?? []
+            recordPhaseOneFailure(root, reason: "production-job-not-completed",
+                                  stage: entries.last(where: { $0.stage != "Needs attention" && $0.stage != "Paused" })?.stage ?? done.stage,
+                                  folder: folder, job: done)
+        }
         XCTAssertTrue(done.completed, studio.notice)
         XCTAssertFalse(audio.processingInUse)
         let source = try XCTUnwrap(done.strictSourceLineage)

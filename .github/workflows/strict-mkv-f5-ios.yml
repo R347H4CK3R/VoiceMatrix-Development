@@ -84,7 +84,16 @@ jobs:
           common=(-disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath strict-f5-build CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES -parallel-testing-enabled NO)
           xcodebuild "${common[@]}" build-for-testing > strict-f5-build.log 2>&1 || { tail -160 strict-f5-build.log; exit 1; }
           for name in testRealStrictSourceSavesTwoReferences testGeneratesNewSpeechAfterProcessRelaunch; do
-            xcodebuild "${common[@]}" -only-testing:VoiceMatrixTests/StrictMatroskaF5Tests/"$name" test-without-building > "strict-f5-${name}.log" 2>&1 || { tail -160 "strict-f5-${name}.log"; exit 1; }
+            xcrun simctl bootstatus "$DEVICE" -b
+            if ! xcodebuild "${common[@]}" -only-testing:VoiceMatrixTests/StrictMatroskaF5Tests/"$name" test-without-building > "strict-f5-${name}.log" 2>&1; then
+              if xcrun simctl bootstatus "$DEVICE" -b &&
+                  CONTAINER=$(xcrun simctl get_app_container "$DEVICE" com.voicematrix.app data) &&
+                  test -f "$CONTAINER/Documents/strict-f5-proof/strict-f5-failure.json"; then
+                cp "$CONTAINER/Documents/strict-f5-proof/strict-f5-failure.json" proof-metadata/strict-f5-failure.json
+              fi
+              tail -160 "strict-f5-${name}.log"
+              exit 1
+            fi
             python3 - "strict-f5-${name}.log" "$name" <<'PY_TEST'
           from pathlib import Path
           import re
@@ -98,6 +107,7 @@ jobs:
             xcrun simctl terminate "$DEVICE" com.voicematrix.app || true
           done
           shasum -a 256 -c proof-metadata/package-graph.sha256
+          xcrun simctl bootstatus "$DEVICE" -b
           CONTAINER=$(xcrun simctl get_app_container "$DEVICE" com.voicematrix.app data)
           cp "$CONTAINER/Documents/strict-f5-proof/strict-f5-report.json" proof-metadata/strict-f5-report.json
           python3 probes/mkv-f5-ios/verify.py proof-metadata/strict-f5-report.json
@@ -110,5 +120,6 @@ jobs:
             proof-metadata/source-tree.txt
             proof-metadata/package-graph.sha256
             proof-metadata/strict-f5-report.json
+            proof-metadata/strict-f5-failure.json
           if-no-files-found: warn
           retention-days: 7

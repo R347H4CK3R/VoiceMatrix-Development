@@ -21,7 +21,20 @@ class StrictMKVF5GateTests(unittest.TestCase):
             self.assertNotEqual(manifest["turns"][0]["sha256"], manifest["turns"][1]["sha256"])
             self.assertLess(manifest["turns"][0]["end"], manifest["turns"][1]["start"])
             self.assertFalse(manifest["identityVerified"])
-            self.assertTrue((out / "strict-f5-licensed.mp4").is_file())
+            mp4 = out / "strict-f5-licensed.mp4"
+            self.assertTrue(mp4.is_file())
+            probe = json.loads(subprocess.check_output(
+                ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,duration",
+                 "-of", "json", str(mp4)], text=True, timeout=10))
+            spans = {track["codec_type"]: float(track["duration"]) for track in probe["streams"]}
+            self.assertEqual(set(spans), {"audio", "video"})
+            self.assertLessEqual(abs(spans["audio"] - spans["video"]), 0.25)
+            self.assertGreaterEqual(min(spans.values()), manifest["turns"][-1]["end"])
+
+    def test_pcm_duration_is_fixed_explicitly_not_by_encoder_buffering(self):
+        generator = (ROOT / "probes/mkv-f5-ios/generate.py").read_text()
+        self.assertNotIn('"-shortest"', generator)
+        self.assertIn('"-t", f"{turns[-1][', generator)
 
     def test_native_gate_requires_real_synthesis_and_metadata_only_artifact(self):
         gate = (ROOT / ".github/workflows/strict-mkv-f5-ios.yml")
@@ -34,6 +47,10 @@ class StrictMKVF5GateTests(unittest.TestCase):
             self.assertIn(token, source)
         artifact = source.split("uses: actions/upload-artifact@", 1)[1]
         self.assertIn("strict-f5-report.json", artifact)
+        self.assertIn("strict-f5-failure.json", artifact)
+        native = (ROOT / "VoiceMatrixTests/StrictMatroskaF5Tests.swift").read_text()
+        self.assertIn("try MP4SampleTable(url: original)", native)
+        self.assertIn("hasStrictJournal", native)
         for secret in (".wav", ".mp4", ".mkv", ".xcresult", "strict-f5-native.log"):
             self.assertNotIn(secret, artifact)
 

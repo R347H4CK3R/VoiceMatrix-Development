@@ -39,11 +39,21 @@ subprocess.run(
      "-filter_complex",
      "[1:a]aresample=44100[a];anullsrc=r=44100:cl=mono,atrim=duration=1.5[gap];"
      "[2:a]aresample=44100[b];[a][gap][b]concat=n=3:v=0:a=1[voice]",
-     "-map", "0:v:0", "-map", "[voice]", "-shortest", "-c:v", "libx264", "-bf", "0",
+     "-map", "0:v:0", "-map", "[voice]", "-t", f"{turns[-1]['end']:.6f}", "-c:v", "libx264", "-bf", "0",
      "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "44100", "-ac", "1", "-use_editlist", "0", str(mp4)],
     check=True, timeout=45)
 assert 0 < mp4.stat().st_size <= 32_000_000
+probe = json.loads(subprocess.check_output(
+    ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,codec_name,duration",
+     "-of", "json", str(mp4)], text=True, timeout=15))
+assert len(probe["streams"]) == 2
+tracks = {stream["codec_type"]: stream for stream in probe["streams"]}
+assert tracks["audio"]["codec_name"] == "aac" and tracks["video"]["codec_name"] == "h264"
+audio_span, video_span = (float(tracks[k]["duration"]) for k in ("audio", "video"))
+assert turns[-1]["end"] <= min(audio_span, video_span), "Both complete spoken turns must be retained."
+assert abs(audio_span - video_span) <= 0.25, "Track span exceeds production MP4SampleTable's bound."
+
 (out / "strict-f5-fixture.json").write_text(json.dumps(dict(
-    schemaVersion=1, mp4SHA256=sha(mp4), turns=turns, license="CC-BY-4.0",
+    schemaVersion=1, mp4SHA256=sha(mp4), turns=turns, audioSeconds=audio_span, videoSeconds=video_span, license="CC-BY-4.0",
     attribution="LibriSpeech (Panayotov, Chen, Povey, and Khudanpur), OpenSLR 12",
     source="https://www.openslr.org/12", syntheticVideo=True, identityVerified=False), sort_keys=True))

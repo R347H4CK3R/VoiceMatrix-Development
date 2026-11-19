@@ -96,12 +96,14 @@ def inspect(app):
             assert len(actual)==entry['bytes'] and sha(actual)==entry['sha256'],f'Wheel resource mismatch: {relative}'
             proof['resources']['app_packages/'+relative]=entry;wheel_paths.add(relative)
     assert found==expected_wheels,'Missing pinned wheel'
-    resource('app_packages/voicematrix_resolver.py',(ROOT/'python-resolver/voicematrix_resolver.py').read_bytes())
+    app_modules=('voicematrix_resolver.py','voicematrix_mkv_stage.py')
+    for module in app_modules:
+        resource('app_packages/'+module,(ROOT/'python-resolver'/module).read_bytes())
     for path in (app/'app_packages').rglob('*'):
         if not path.is_file():continue
         relative=path.relative_to(app/'app_packages').as_posix()
         generated=relative.endswith(('.dist-info/RECORD','.dist-info/INSTALLER','.dist-info/REQUESTED'))
-        assert relative in wheel_paths or relative=='voicematrix_resolver.py' or generated,f'Unexpected Python resource: {relative}'
+        assert relative in wheel_paths or relative in app_modules or generated,f'Unexpected Python resource: {relative}'
         if generated:
             actual=path.read_bytes();proof['resources']['app_packages/'+relative]={'bytes':len(actual),'sha256':sha(actual)}
     assert not list(app.rglob('*.pyc')),'Bytecode caches unexpectedly packaged'

@@ -1,0 +1,129 @@
+# Draft only. Do not push or dispatch until independently reviewed and explicitly authorized.
+name: Native original frontend parity (artifact only)
+
+on:
+  push:
+    branches:
+      - verification/asr-original-frontend-parity-v1
+    paths:
+      - .github/workflows/asr-original-frontend-parity.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voicematrix-asr-original-frontend-native-artifact-v1
+  cancel-in-progress: false
+
+jobs:
+  reference-export-parity:
+    if: ${{ github.repository == 'R347H4CK3R/VoiceMatrix-Development' && github.ref == 'refs/heads/verification/asr-original-frontend-parity-v1' && github.event.deleted == false }}
+    runs-on: macos-26
+    env:
+      CANDIDATE_SHA: ${{ github.sha }}
+      MANIFEST_SHA256: 7b4bf2b8b43a11da1d7086ad7152ab5a5ab8b180344fc367018585285781832a
+      VERIFIER_SHA256: 6247ef092a39f4cef7ba32d046876cf39219c5a6853e2fb69c3fc7aa77111729
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Verify run selectors and host platform
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$VERIFIER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]]
+      - name: Checkout exact reviewed source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          lfs: false
+          submodules: false
+      - name: Initialize narrow diagnostics
+        run: |
+          set -euo pipefail
+          diag="$RUNNER_TEMP/asr-native-frontend-diagnostic"
+          mkdir -m 700 "$diag"
+          {
+            printf 'source_sha=%s\nmanifest_sha256=%s\nworkflow_sha=%s\nrun_id=%s\nrun_attempt=%s\n' \
+              "$CANDIDATE_SHA" "$MANIFEST_SHA256" "$GITHUB_WORKFLOW_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            sw_vers
+            xcodebuild -version
+            uname -m
+          } > "$diag/runtime.txt"
+      - name: Select pinned Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+          architecture: arm64
+      - name: Verify and stage reviewed inputs before dependency install
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$CANDIDATE_SHA" ]]
+          python -I --version >> "$RUNNER_TEMP/asr-native-frontend-diagnostic/runtime.txt"
+          python -I -c 'import platform, sys; assert sys.version_info[:3] == (3,12,10) and platform.machine() == "arm64"'
+          [[ -f verify_manifest.py && ! -L verify_manifest.py ]]
+          [[ "$(stat -f '%z' verify_manifest.py)" -le 16384 ]]
+          [[ "$(shasum -a 256 verify_manifest.py | cut -d ' ' -f 1)" == "$VERIFIER_SHA256" ]]
+          python -I verify_manifest.py --root "$GITHUB_WORKSPACE" --manifest-sha256 "$MANIFEST_SHA256" --stage "$RUNNER_TEMP/asr-reviewed-inputs"
+      - name: Install declared verified wheels
+        working-directory: ${{ runner.temp }}/asr-reviewed-inputs
+        run: |
+          set -euo pipefail
+          python -I -m venv "$RUNNER_TEMP/asr-frontend-venv"
+          py="$RUNNER_TEMP/asr-frontend-venv/bin/python"
+          diag="$RUNNER_TEMP/asr-native-frontend-diagnostic"
+          "$py" -I -m pip --isolated --disable-pip-version-check install --no-cache-dir \
+            --index-url https://pypi.org/simple --only-binary=:all: --require-hashes --no-deps \
+            --report "$diag/install-report.json" -r native-requirements.txt 2>&1 | tee "$diag/install.log"
+          "$py" -I -m pip --isolated check 2>&1 | tee "$diag/pip-check.log"
+      - name: Export and evaluate isolated frontend
+        working-directory: ${{ runner.temp }}/asr-reviewed-inputs
+        run: |
+          set -euo pipefail
+          unset PYTHONPATH PYTHONHOME
+          py="$RUNNER_TEMP/asr-frontend-venv/bin/python"
+          out="$RUNNER_TEMP/asr-native-frontend-output"
+          diag="$RUNNER_TEMP/asr-native-frontend-diagnostic"
+          "$py" -E -s native_gate.py --output "$out" 2>&1 | tee "$diag/native.log"
+          "$py" -I -c 'import json, sys; r=json.load(open(sys.argv[1])); assert r["status"]=="VALID_DOMAIN_FRONTEND_PARITY_PASSED"' "$out/report.json"
+          cp "$diag/install-report.json" "$out/install-report.json"
+          cp run-inputs.json "$out/run-inputs.json"
+          cp original-buffers/ATTRIBUTION.md "$out/ATTRIBUTION.md"
+          cp original-buffers/provenance.json "$out/original-provenance.json"
+          cp LICENSE-NeMo "$out/LICENSE-NeMo"
+          cp "$diag/runtime.txt" "$out/runtime.txt"
+      - name: Retain native report when produced
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/asr-native-frontend-output/report.json"
+          diag="$RUNNER_TEMP/asr-native-frontend-diagnostic"
+          if [[ -f "$report" && ! -L "$report" && -d "$diag" ]]; then
+            cp "$report" "$diag/report.json"
+          fi
+      - name: Upload narrow diagnostics even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: asr-original-frontend-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/asr-native-frontend-diagnostic/runtime.txt
+            ${{ runner.temp }}/asr-native-frontend-diagnostic/install.log
+            ${{ runner.temp }}/asr-native-frontend-diagnostic/install-report.json
+            ${{ runner.temp }}/asr-native-frontend-diagnostic/pip-check.log
+            ${{ runner.temp }}/asr-native-frontend-diagnostic/native.log
+            ${{ runner.temp }}/asr-native-frontend-diagnostic/report.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload successful native evidence only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: asr-original-frontend-parity-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/asr-native-frontend-output
+          if-no-files-found: error
+          retention-days: 7

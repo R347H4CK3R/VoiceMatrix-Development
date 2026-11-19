@@ -1,0 +1,55 @@
+test_old_length_includes_center_frame (test_oracle.OracleTests.test_old_length_includes_center_frame) ... FAIL
+test_preemphasis_keeps_samples_past_valid_before_stft (test_oracle.OracleTests.test_preemphasis_keeps_samples_past_valid_before_stft) ... FAIL
+test_reflection_not_zero_padding (test_oracle.OracleTests.test_reflection_not_zero_padding) ... FAIL
+test_reject_one_valid_frame_normalization (test_oracle.OracleTests.test_reject_one_valid_frame_normalization) ... FAIL
+test_silence_finite_normalization (test_oracle.OracleTests.test_silence_finite_normalization) ... FAIL
+
+======================================================================
+FAIL: test_old_length_includes_center_frame (test_oracle.OracleTests.test_old_length_includes_center_frame)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/asr-frontend-oracle/test_oracle.py", line 9, in test_old_length_includes_center_frame
+    self.assertIsNotNone(r);self.assertEqual(r[1],5)
+    ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+======================================================================
+FAIL: test_preemphasis_keeps_samples_past_valid_before_stft (test_oracle.OracleTests.test_preemphasis_keeps_samples_past_valid_before_stft)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/asr-frontend-oracle/test_oracle.py", line 15, in test_preemphasis_keeps_samples_past_valid_before_stft
+    self.assertIsNotNone(r);self.assertAlmostEqual(r[0][0,1],np.log(49+2**-24));self.assertEqual(r[0][0,2],0)
+    ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+======================================================================
+FAIL: test_reflection_not_zero_padding (test_oracle.OracleTests.test_reflection_not_zero_padding)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/asr-frontend-oracle/test_oracle.py", line 12, in test_reflection_not_zero_padding
+    self.assertIsNotNone(r);np.testing.assert_allclose(r[0][0],np.log(np.array([64.,100.,144.])+2**-24))
+    ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+======================================================================
+FAIL: test_reject_one_valid_frame_normalization (test_oracle.OracleTests.test_reject_one_valid_frame_normalization)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/asr-frontend-oracle/test_oracle.py", line 20, in test_reject_one_valid_frame_normalization
+    with self.assertRaises(ValueError):features(np.zeros(8),0,np.ones((2,3)),np.ones(4),2)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_silence_finite_normalization (test_oracle.OracleTests.test_silence_finite_normalization)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/asr-frontend-oracle/test_oracle.py", line 18, in test_silence_finite_normalization
+    self.assertIsNotNone(r);np.testing.assert_array_equal(r[0],np.zeros((2,5)))
+    ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+FAILED (failures=5)

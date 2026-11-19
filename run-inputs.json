@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "files": [
+    {
+      "path": "LICENSE-NeMo",
+      "size": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "README.md",
+      "size": 7282,
+      "sha256": "d53a7ed85924ebb958a6ebe47f04f20182fd201c1ead503fb590c0b6c3804b8a"
+    },
+    {
+      "path": "acquire.py",
+      "size": 2362,
+      "sha256": "5a7347ab66d36c51da9eb5b7805d3a278db074c6d7c0e40b79298b448bbe964b"
+    },
+    {
+      "path": "buffers.py",
+      "size": 3589,
+      "sha256": "abbc2f59216830733558f5384738c483f0dcd64ea94551f5aeeba20a93015628"
+    },
+    {
+      "path": "native-requirements.txt",
+      "size": 29830,
+      "sha256": "893310f8e558311536f7534222264fd1ee4a9d1f068998e624d592e799541e45"
+    },
+    {
+      "path": "native_gate.py",
+      "size": 6568,
+      "sha256": "5f17f9970c913cbba4645da60ef9de4c9649c9171a1e7b264c37cb523d4fec52"
+    },
+    {
+      "path": "native_reference.py",
+      "size": 2864,
+      "sha256": "2a32939da46dcdc2d5b8e742b9b841c1222b1209a34bbaed1448a65601da6b97"
+    },
+    {
+      "path": "oracle.py",
+      "size": 1470,
+      "sha256": "62011fc49918d9cfe5f67ba3e3cd6693003da32bb1661439d9e28dbc9cd788eb"
+    },
+    {
+      "path": "original-buffers/ATTRIBUTION.md",
+      "size": 992,
+      "sha256": "a06720e7a66b57cdd4b7d04480d91293fc22f87b96c29fe04b54a1eb3b8b2730"
+    },
+    {
+      "path": "original-buffers/filterbank.f32le",
+      "size": 131584,
+      "sha256": "f5608e00763a20a191022fbb00a43346db5f1ec06828a97a6f4157f7d02b76c8"
+    },
+    {
+      "path": "original-buffers/model_config.yaml",
+      "size": 161386,
+      "sha256": "eadae985ef97451402be2faef3b240c2cae7d9cc0362c5bd00e64dfc4265ed09"
+    },
+    {
+      "path": "original-buffers/provenance.json",
+      "size": 693,
+      "sha256": "7e8c154073daf4f13c1b797c623387ce800ab1a7304575e6b2d7daea348f4b30"
+    },
+    {
+      "path": "original-buffers/window.f32le",
+      "size": 1600,
+      "sha256": "744788a137aa808ccc97d9d3c185c649b2e9c2b99c3262887c3ac9bb3b7e1c4c"
+    },
+    {
+      "path": "upstream_features_231.py",
+      "size": 28465,
+      "sha256": "bd333719eec5b65053a97e29f12618c9e82121fb0ab0c1c8854bb47a1114b101"
+    },
+    {
+      "path": "verify_manifest.py",
+      "size": 4313,
+      "sha256": "6247ef092a39f4cef7ba32d046876cf39219c5a6853e2fb69c3fc7aa77111729"
+    }
+  ]
+}

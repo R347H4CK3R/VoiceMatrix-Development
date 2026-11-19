@@ -1,0 +1,28 @@
+{
+  "original_sha256": "3cbdc85877e668ca7b82d0d56770eb1fac76691f55d6b97545e8d61ca588d10d",
+  "original_bytes": 2509332480,
+  "metadata_sha256": "360fd24a883d1328e7fb946a2b772b2379d389377f6c47f3ae6d510a05952cd6",
+  "buffers": [
+    {
+      "name": "window",
+      "shape": [
+        400
+      ],
+      "dtype": "<f4",
+      "bytes": 1600,
+      "sha256": "744788a137aa808ccc97d9d3c185c649b2e9c2b99c3262887c3ac9bb3b7e1c4c"
+    },
+    {
+      "name": "filterbank",
+      "shape": [
+        1,
+        128,
+        257
+      ],
+      "dtype": "<f4",
+      "bytes": 131584,
+      "sha256": "f5608e00763a20a191022fbb00a43346db5f1ec06828a97a6f4157f7d02b76c8"
+    }
+  ],
+  "native_parity": "NOT RUN"
+}

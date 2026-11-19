@@ -1,0 +1,19 @@
+test_native_preparation (unittest.loader._FailedTest.test_native_preparation) ... ERROR
+
+======================================================================
+ERROR: test_native_preparation (unittest.loader._FailedTest.test_native_preparation)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_native_preparation
+Traceback (most recent call last):
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/loader.py", line 137, in loadTestsFromName
+    module = __import__(module_name)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/asr-frontend-oracle/test_native_preparation.py", line 2, in <module>
+    from native_reference import selected_source,verified_buffers
+ModuleNotFoundError: No module named 'native_reference'
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)

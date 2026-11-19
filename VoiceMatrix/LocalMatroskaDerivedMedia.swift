@@ -481,7 +481,11 @@ enum LocalMatroskaDerivedMedia {
             let next = index + 1 < videoPTS.count ? videoPTS[index + 1] : videoEnd
             guard CMSampleBufferGetPresentationTimeStamp(buffer) == CMTime(value: pts, timescale: 1000),
                   CMSampleBufferGetDuration(buffer) == CMTime(value: next - pts, timescale: 1000) else {
-                throw Failure.unsupported("native video frame timing")
+                let observed = CMTimeRange(start: CMSampleBufferGetPresentationTimeStamp(buffer),
+                                           duration: CMSampleBufferGetDuration(buffer))
+                let expected = CMTimeRange(start: CMTime(value: pts, timescale: 1000),
+                                           duration: CMTime(value: next - pts, timescale: 1000))
+                throw Failure.unsupported("native video frame timing: index=\(index) actual=\(describe(observed)) expected=\(describe(expected))")
             }
             index += 1
         }

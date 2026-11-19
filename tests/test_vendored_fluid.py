@@ -3,7 +3,10 @@ from tools import vendored_fluid as v
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 class VendoredFluidTests(unittest.TestCase):
  def test_exact_inventory_and_upstream_tree(self):
-  p=v.verify(ROOT); self.assertEqual(p['upstreamTree'],'2234ed3bb9af2f02d187dbd4c35e51f9eef18f44');self.assertEqual(p['fileCount'],960)
+  p=v.verify(ROOT); self.assertEqual(p['upstreamTree'],'2234ed3bb9af2f02d187dbd4c35e51f9eef18f44');self.assertEqual(p['fileCount'],962)
+  self.assertEqual(len(p['modified']),6)
+  self.assertEqual(len(p['added']),4)
+  self.assertEqual(sum('Parakeet' in name for name in p['modified']),3)
  def test_mutation_missing_extra_symlink_fail(self):
   with tempfile.TemporaryDirectory() as d:
    root=pathlib.Path(d);shutil.copytree(ROOT/'Vendors',root/'Vendors');target=root/'Vendors/FluidAudio/LICENSE';original=target.read_bytes()

@@ -842,7 +842,7 @@
     },
     "NOTICE-VoiceMatrix.txt": {
       "mode": "100644",
-      "sha256": "144936a13aba1e037e3b145a765be654a673d012476389fed7778c5f40cd9445",
+      "sha256": "5562b70ed2b87526a21abbfe91c3d3c981688911ef2b43aea42032ad2a461ebd",
       "upstreamBlob": null
     },
     "Package.swift": {
@@ -1237,7 +1237,7 @@
     },
     "Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/AsrManager+Pipeline.swift": {
       "mode": "100644",
-      "sha256": "a7ac7ccfd48c3a33f9b3f58186b84c073e74e39180132b0ebed7f3e46bb303c5",
+      "sha256": "e52d4a4790cd64c40553a07bf3600d463ab83709a0f25101626b760a54f3b7c1",
       "upstreamBlob": "5eaf63e454c5785878199456c7788c0f4daeca3c"
     },
     "Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/AsrManager+TokenProcessing.swift": {
@@ -1252,12 +1252,12 @@
     },
     "Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/AsrManager.swift": {
       "mode": "100644",
-      "sha256": "fac160cff9795f0d5736f17d6679b2c6aa0efe62958622e9ba23e9d626025ddf",
+      "sha256": "0a43b42aa97b7d2faf17dba08e41e3a35955b6966bdcf728cd36dbf555db4fc2",
       "upstreamBlob": "e0320ac8691857d3abd12756f953e661df9b792e"
     },
     "Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/AsrModels.swift": {
       "mode": "100644",
-      "sha256": "cd24575bf6ef1ebf22ab447b7aab44afcd840f69682ce774f65269618fb9a65d",
+      "sha256": "c68047a28a577fc4f80df9fe012fc9a8ef8ab72ad3b8b2b2f30a085e83c1c34a",
       "upstreamBlob": "93d44403b54eef421cd43ae0dfd747f4d02d8362"
     },
     "Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/ChunkProcessor.swift": {
@@ -1329,6 +1329,11 @@
       "mode": "100644",
       "sha256": "0abfcf21726b4edbdf370e1c0d6dde093bcf1331b3d0fd42ebc9c275b7b9490e",
       "upstreamBlob": "443851af86320261aebf819eddf3e39cb8448877"
+    },
+    "Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/Parakeet231Frontend.swift": {
+      "mode": "100644",
+      "sha256": "6158f7d9d9002d0b87e4f6bcbadcd08f22c071ea0b86a9324de56d698b7346a5",
+      "upstreamBlob": null
     },
     "Sources/FluidAudio/ASR/Parakeet/Streaming/EOU/StreamingEouAsrManager.swift": {
       "mode": "100644",
@@ -3614,6 +3619,11 @@
       "mode": "100644",
       "sha256": "6de6298a2f459fe06b5d07ad0a6d60d15293cd9db213e07e40185cf8a9d832fb",
       "upstreamBlob": "959fed7a4f933ceae8b3ed0bc8a78694b6928f2f"
+    },
+    "Tests/FluidAudioTests/ASR/Parakeet/SlidingWindow/TDT/OriginalNemo231AdapterTests.swift": {
+      "mode": "100644",
+      "sha256": "47db501a4e41249270e57a077c1a1f32bbb08fad2219f0a00e5b07f0d773e332",
+      "upstreamBlob": null
     },
     "Tests/FluidAudioTests/ASR/Parakeet/SlidingWindow/TDT/Phonon25Tests.swift": {
       "mode": "100644",

@@ -3,10 +3,13 @@ import hashlib,json,pathlib,re,stat
 REVISION='ee78635d23d52379117554ba72358b65a0612447'
 TREE='2234ed3bb9af2f02d187dbd4c35e51f9eef18f44'
 MODIFIED={
+ 'Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/AsrManager+Pipeline.swift':'e52d4a4790cd64c40553a07bf3600d463ab83709a0f25101626b760a54f3b7c1',
+ 'Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/AsrManager.swift':'0a43b42aa97b7d2faf17dba08e41e3a35955b6966bdcf728cd36dbf555db4fc2',
+ 'Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/AsrModels.swift':'c68047a28a577fc4f80df9fe012fc9a8ef8ab72ad3b8b2b2f30a085e83c1c34a',
  'Sources/FluidAudio/Diarizer/Offline/Core/PreparedDiarization.swift':'b43f90398c405a47754b77d799e9af7af9941f0450b1c895c35335e2cbf7d91f',
  'Sources/FluidAudio/Diarizer/Offline/Utils/OfflineReconstruction.swift':'d5b9f2532ecb3c5d40cb621f83ea2768a5cab56d6817c9123dc987b67b6d2c54',
  'Sources/FluidAudio/Diarizer/Offline/Core/OfflineDiarizerManager.swift':'db5cbe9fa368dce0524c50f9610bf848fc253e108ce99eaf702a66755f4000f7'}
-ADDED={'Tests/FluidAudioTests/Diarizer/Offline/EOFTimelineTests.swift','NOTICE-VoiceMatrix.txt'}
+ADDED={'Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/Parakeet231Frontend.swift','Tests/FluidAudioTests/ASR/Parakeet/SlidingWindow/TDT/OriginalNemo231AdapterTests.swift','Tests/FluidAudioTests/Diarizer/Offline/EOFTimelineTests.swift','NOTICE-VoiceMatrix.txt'}
 def sha(data):return hashlib.sha256(data).hexdigest()
 def git_hash(kind,data):return hashlib.sha1(kind.encode()+b' '+str(len(data)).encode()+b'\0'+data).hexdigest()
 def check_manifest(m):

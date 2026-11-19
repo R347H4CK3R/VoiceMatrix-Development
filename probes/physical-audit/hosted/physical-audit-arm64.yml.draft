@@ -1,0 +1,46 @@
+# INERT DRAFT. Do not install or promote until the root approves the reviewed run.
+# Replace sentinels only after the exact audit code child, license/rights receipt, host
+# preflight and no-cost/public metadata scope are reviewed. Then use the single
+# explicit reviewed push; never permit fallback dispatch on main, pull requests or tags.
+name: Physical audit ARM64 build (metadata only; no delivery)
+on:
+  push:
+    branches: [verification/physical-audit-arm64]
+permissions:
+  contents: read
+concurrency:
+  group: physical-audit-arm64-metadata-only
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'R347H4CK3R/VoiceMatrix-Development' && github.ref == 'refs/heads/verification/physical-audit-arm64' && github.event.repository.private == false && github.run_attempt == 1
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Require exact public source and externally approved hosted scope
+        env:
+          ALLOWED_CODE_PARENT: NEEDS_ROOT_REVIEW
+          APPROVAL_SHA256: NEEDS_OUT_OF_BAND_APPROVAL
+          APPROVAL_JSON: NEEDS_OUT_OF_BAND_NON_SENSITIVE_RECEIPT
+        run: |
+          set -euo pipefail
+          [[ "$ALLOWED_CODE_PARENT" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$APPROVAL_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          # Public read-only exact refs, fetch no full history and no authenticated remote writes.
+          git fetch --no-tags --depth=1 origin "$ALLOWED_CODE_PARENT" 42da8f3ed18ca1c0f1462032db5dc05ce77362a1 4ed344a8bb859e841c35041f3f07b9510a930492
+          git diff --quiet "$ALLOWED_CODE_PARENT" HEAD -- . ':(exclude).github/workflows/physical-audit-arm64.yml'
+          test "$(git cat-file -p HEAD | sed -n 's/^parent //p')" = "$ALLOWED_CODE_PARENT"
+          umask 077
+          receipt=$(mktemp "$RUNNER_TEMP/noncommercial-audit-approval.XXXXXX")
+          printf '%s' "$APPROVAL_JSON" > "$receipt"
+          test "$(shasum -a 256 "$receipt" | awk '{print $1}')" = "$APPROVAL_SHA256"
+          unset APPROVAL_JSON
+          bash probes/physical-audit/hosted/run_metadata.sh "$GITHUB_SHA" "$(git rev-parse HEAD^{tree})" "$receipt" "$APPROVAL_SHA256"

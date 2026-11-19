@@ -1,0 +1,23 @@
+# Inert standard ARM64 build verification (metadata only)
+
+Do not copy the draft into .github/workflows or create its guarded verification ref without approval of the exact code, checkout and scope. No native job has been run for this checkpoint. The draft is not an active workflow.
+
+Scope: existing public VoiceMatrix-Development only, exact reviewed code, standard macos-26 ARM64, one attempt, no paid runner, no jobs with credentials or write scopes, no cache, no artifact upload. Its public output is a small fixed schema of checksum, size, and verification results, never the IPA, build output, model, fixture, credentials, or signing. This does not deliver an app or test an iPhone.
+
+| Input | Exact bound |
+|---|---|
+| Reviewed original strict runtime | 4ed344a8bb859e841c35041f3f07b9510a930492, tree 53e26cfe17017df02c2c6fdc1e63a8c0d6f3ba37 |
+| Replaced ASR runtime | 42da8f3ed18ca1c0f1462032db5dc05ce77362a1, tree 24e298cb887b1a6bf19c177c0733e06f5a474bfc |
+| Isolated audit assembly before hosted prep | 6de4a16b97e8e0239250c6ed37a062ffab5d0037, tree e63da3b9ff74edd3cfa9647852b02a21c278a80a |
+| Frozen package graph | ff9369012927524e241f0cf3bcca1a72177947e02ef7933beef716377c87de72 |
+| Xcode | Xcode 26.6, build 17F113; iphoneos SDK 26.5 must be verified on host before any heavy work |
+| XcodeGen | official 2.44.1 archive a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73, executable a450f63bdd650c280cfce0fef6c94dbb19c5bf8dc32811361fd5d2e912718503, checked without executing it locally |
+| Original already released baseline (downloaded once) | 1330407101 bytes; SHA256 04d199d356a5fde59101d3909a35abf05e8dd1129141e0add66e1e45006c5d11 |
+| F5, diarization from that baseline only | f5-listening-lock.json e51680c87462bb26433613fe61f7da735c59ab770020f5705a6159cda78bdb70; diarization-resource-lock.json 137ad0aba1483d0ba3c74cb5380ab05f5cd76a5eb47aa69b9de41c353315e7e0. Verify each byte. Actual matches are not yet measured. Any mismatch stops **before** fetching replacement ASR. |
+| Replacement ASR retrieval | resource-lock.json f58c59e24e41e17f701d7b2b7fc4aa45343c232a2119fb6540357f676a6416ce; 16 remote files, 631653214 total bytes, one staging, no automatic retry. Complete model tree 19 files, 631788023 bytes not counting the lock. |
+| Python | BeeWare 3.13-b18 34524958 bytes a priori; d06acf2a9c7964a8689566353a0e707402eff822037de5e29ba0e16040f7047d, three exact pure wheel hashes in checked requirements. |
+| Disk | standard advertised 14 GB; actual minimum 10 GiB before any large fetch and 6 GiB after model and dependency staging; no speculation about free scratch on a particular job. |
+
+Keep the original baseline immutable by its checks before and after archive verification. Donor extraction is allowlisted and never copies the old ASR, old metadata, or laptop settings. Resource discovery for Xcode happens after installing the exact assets into a disposable staging tree. Download data once in one job, discard duplicate local staging after the verifying copy, and move the built .app into local scratch without copying it wholesale. Public workflow outputs are only the allowed checksums/report and a coarse failure-stage token. No temporary or complete IPA leaves the runner.
+
+F5 including converted weights/vocoder is restricted to this documented private noncommercial test intent; ASR and diarization weights retain CC BY attribution and the code's own notices. Other already-reviewed pins and notices still apply. None of these statements authorizes a public distribution or proof of upload. The scope itself needs an independently approved dated receipt and approval to execute this public-metadata job, pinned to the actual current graph/toolchain, checked before any model request. No fabricated, auto-generated, or secret approval record is present. Public repository visibility is verified separately and is an explicit workflow precondition. If pinned SDK/ffmpeg are absent, donor hashes differ, package graph changes, or either storage guard fails, stop with metadata only and do not try a second run or higher-priced hardware.

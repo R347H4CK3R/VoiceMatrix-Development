@@ -7,9 +7,19 @@ License: Apache-2.0; original LICENSE and third-party notices preserved.
 Modifications: OfflineReconstruction.swift and OfflineDiarizerManager.swift
 exclude model padding beyond the actual source sample count during offline
 speaker timeline reconstruction. EOFTimelineTests.swift adds boundary tests.
-No ASR, model weights, voice identity, or app acceptance thresholds are changed.
-This source integration is under validation and is not in published build 8.
+Those diarization changes did not modify ASR, model weights, voice identity or acceptance thresholds.
 
 PreparedDiarization.swift adds a read-only segmentationEvidence accessor so the
 app can retain raw model overlap evidence independently of speaker clustering.
 It does not change inference, clustering, model weights or original count rules.
+
+
+Later ASR changes represented by production source 42da8f3ed18ca1c0f1462032db5dc05ce77362a1:
+AsrManager+Pipeline.swift, AsrManager.swift and AsrModels.swift add explicit
+recognizer frontend selection, Apple adapter validation and inference routing.
+Parakeet231Frontend.swift computes features with independent Swift Double
+mathematics and selected original NeMo 2.3.1 window/filterbank bytes; it is not
+bit-identical to the original framework Float32 output, and prior parity
+failure remains recorded. OriginalNemo231AdapterTests.swift covers the adapter.
+Model assets and attribution are separate; original upstream license and notices
+are preserved. No release, physical iPhone acceptance or likeness is claimed.

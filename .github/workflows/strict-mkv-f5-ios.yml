@@ -1,0 +1,114 @@
+name: Strict MKV real F5 on iOS simulator (test only)
+on:
+  push:
+    branches: [verification/strict-mkv-f5-ios]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: strict-mkv-f5-ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-f5:
+    if: github.repository == 'R347H4CK3R/VoiceMatrix-Development' && github.ref == 'refs/heads/verification/strict-mkv-f5-ios'
+    runs-on: macos-26
+    timeout-minutes: 95
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Stage genuine pinned runtime resources and local test-only fixture
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(uname -m)" = arm64
+          mkdir -p .tooling proof-metadata
+          git rev-parse HEAD > proof-metadata/source-sha.txt
+          git rev-parse HEAD^{tree} > proof-metadata/source-tree.txt
+          python3 tools/check_conversion_inputs.py
+          python3 tools/bundle_asr.py
+          python3 tools/bundle_diarization.py
+          python3 tools/character_package.py prepare --cache character-cache --resources character-resources > proof-metadata/model-preflight.json
+          python3 - <<'PY_ASSETS'
+          import shutil
+          from pathlib import Path
+          target = Path("VoiceMatrix/Resources/F5TTS")
+          assert not target.is_symlink()
+          if target.exists():
+              assert target.is_dir()
+              assert {item.name for item in target.iterdir()} == {"BUILD-INPUTS.txt"}
+              marker = target / "BUILD-INPUTS.txt"
+              assert marker.is_file() and not marker.is_symlink()
+          source = Path("character-resources/F5TTS")
+          assert not (source / "BUILD-INPUTS.txt").exists()
+          shutil.copytree(source, target, dirs_exist_ok=True)
+          assert (target / "config.json").is_file()
+          PY_ASSETS
+          mkdir -p VoiceMatrix/Resources/{Phonon,OpenVoice,Separation}
+          python3 tools/create_diagnostic_collection.py
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          command -v ffprobe
+          python3 probes/mkv-f5-ios/generate.py .strict-f5-fixture
+          python3 -m unittest tests.test_strict_mkv_f5_gate -v
+          curl --fail --location --proto '=https' --tlsv1.2 https://github.com/yonaskolb/XcodeGen/releases/download/2.44.1/xcodegen.zip -o .tooling/xcodegen.zip
+          echo 'a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73  .tooling/xcodegen.zip' | shasum -a 256 -c -
+          unzip -q .tooling/xcodegen.zip -d .tooling
+          python3 - <<'PY_RESOURCE'
+          from pathlib import Path
+          p = Path("project.yml")
+          source = p.read_text()
+          anchor = ("\n  VoiceMatrixTests:\n    type: bundle.unit-test\n"
+                    "    platform: iOS\n    sources:\n    - VoiceMatrixTests\n")
+          assert source.count(anchor) == 1
+          entries = "".join(f"    - path: .strict-f5-fixture/{name}\n      buildPhase: resources\n" for name in
+                            ("strict-f5-licensed.mp4", "strict-f5-fixture.json"))
+          entries += ("    - path: tests/fixtures/DiagnosticVoices\n"
+                      "      type: folder\n      buildPhase: resources\n")
+          p.write_text(source.replace(anchor, anchor + entries))
+          PY_RESOURCE
+          .tooling/xcodegen/bin/xcodegen generate
+          git restore -- project.yml
+          xcodebuild -resolvePackageDependencies -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -derivedDataPath strict-f5-build > strict-f5-resolve.log 2>&1 || { tail -140 strict-f5-resolve.log; exit 1; }
+          GRAPH=VoiceMatrix.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          test -s "$GRAPH"
+          shasum -a 256 "$GRAPH" > proof-metadata/package-graph.sha256
+      - name: Compile then run both real inference phases in separate app processes
+        run: |
+          set -euo pipefail
+          DEVICE=$(xcrun simctl list devices available -j | python3 tools/python-runtime/select_ios26_simulator.py)
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          common=(-disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath strict-f5-build CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES -parallel-testing-enabled NO)
+          xcodebuild "${common[@]}" build-for-testing > strict-f5-build.log 2>&1 || { tail -160 strict-f5-build.log; exit 1; }
+          for name in testRealStrictSourceSavesTwoReferences testGeneratesNewSpeechAfterProcessRelaunch; do
+            xcodebuild "${common[@]}" -only-testing:VoiceMatrixTests/StrictMatroskaF5Tests/"$name" test-without-building > "strict-f5-${name}.log" 2>&1 || { tail -160 "strict-f5-${name}.log"; exit 1; }
+            python3 - "strict-f5-${name}.log" "$name" <<'PY_TEST'
+          from pathlib import Path
+          import re
+          import sys
+          log = Path(sys.argv[1]).read_text()
+          name = sys.argv[2]
+          assert "** TEST SUCCEEDED **" in log
+          assert not re.search(r"Test Case .* (?:skipped|failed)", log)
+          assert re.search(r"Test Case .*StrictMatroskaF5Tests[ .]" + name + r"(?:\(\))?[\]']* passed", log), name
+          PY_TEST
+            xcrun simctl terminate "$DEVICE" com.voicematrix.app || true
+          done
+          shasum -a 256 -c proof-metadata/package-graph.sha256
+          CONTAINER=$(xcrun simctl get_app_container "$DEVICE" com.voicematrix.app data)
+          cp "$CONTAINER/Documents/strict-f5-proof/strict-f5-report.json" proof-metadata/strict-f5-report.json
+          python3 probes/mkv-f5-ios/verify.py proof-metadata/strict-f5-report.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: strict-f5-metadata-only
+          path: |
+            proof-metadata/source-sha.txt
+            proof-metadata/source-tree.txt
+            proof-metadata/package-graph.sha256
+            proof-metadata/strict-f5-report.json
+          if-no-files-found: warn
+          retention-days: 7

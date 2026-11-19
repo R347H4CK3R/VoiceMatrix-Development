@@ -462,6 +462,27 @@ enum LocalMatroskaDerivedMedia {
         }
         guard audioReader.status == .completed, frames == audioFrames else { throw Failure.unsupported("native PCM frame count") }
 
+        // VideoToolbox can omit duration on a decoded surface. Verify the
+        // MOV's actual compressed sample table first, before accepting absence.
+        do {
+            let storedReader = try AVAssetReader(asset: asset)
+            let stored = AVAssetReaderTrackOutput(track: videos[0], outputSettings: nil)
+            stored.alwaysCopiesSampleData = false
+            guard storedReader.canAdd(stored) else { throw Failure.unsupported("stored video output") }
+            storedReader.add(stored)
+            guard storedReader.startReading() else { throw Failure.unsupported("stored video read start") }
+            defer { if storedReader.status == .reading { storedReader.cancelReading() } }
+            try validateStoredVideoTiming(videoPTS: videoPTS, videoEnd: videoEnd, check: check) {
+                guard let buffer = stored.copyNextSampleBuffer() else { return nil }
+                let bytes = CMSampleBufferGetDataBuffer(buffer).map { CMBlockBufferGetDataLength($0) } ?? 0
+                return StoredVideoSample(samples: CMSampleBufferGetNumSamples(buffer), bytes: bytes,
+                                         hasImage: CMSampleBufferGetImageBuffer(buffer) != nil,
+                                         pts: CMSampleBufferGetPresentationTimeStamp(buffer),
+                                         duration: CMSampleBufferGetDuration(buffer))
+            }
+            guard storedReader.status == .completed else { throw Failure.unsupported("stored video reader incomplete") }
+        }
+
         let videoReader = try AVAssetReader(asset: asset)
         let decoded = AVAssetReaderTrackOutput(track: videos[0], outputSettings: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
@@ -479,49 +500,58 @@ enum LocalMatroskaDerivedMedia {
             }
             let pts = videoPTS[index]
             let next = index + 1 < videoPTS.count ? videoPTS[index + 1] : videoEnd
+            let decodedDuration = CMSampleBufferGetDuration(buffer)
             guard CMSampleBufferGetPresentationTimeStamp(buffer) == CMTime(value: pts, timescale: 1000),
-                  CMSampleBufferGetDuration(buffer) == CMTime(value: next - pts, timescale: 1000) else {
-                let observed = CMTimeRange(start: CMSampleBufferGetPresentationTimeStamp(buffer),
-                                           duration: CMSampleBufferGetDuration(buffer))
+                  !decodedDuration.isValid || decodedDuration == CMTime(value: next - pts, timescale: 1000) else {
+                let observed = CMTimeRange(start: CMSampleBufferGetPresentationTimeStamp(buffer), duration: decodedDuration)
                 let expected = CMTimeRange(start: CMTime(value: pts, timescale: 1000),
                                            duration: CMTime(value: next - pts, timescale: 1000))
-                let decodedNext = decoded.copyNextSampleBuffer().map { describe(sampleTiming($0)) } ?? "unavailable"
-                if videoReader.status == .reading { videoReader.cancelReading() }
-                let compressed = try compressedVideoTiming(asset, track: videos[0], index: index,
-                                                           packetLimit: videoPTS.count, check: check)
-                throw Failure.unsupported("native video frame timing: index=\(index) actual=\(describe(observed)) expected=\(describe(expected)) decodedNext=\(decodedNext) videoTrackRange=\(describe(videoRange)) \(compressed)")
+                throw Failure.unsupported("native video frame timing: index=\(index) actual=\(describe(observed)) expected=\(describe(expected))")
             }
             index += 1
         }
         guard videoReader.status == .completed, index == videoPTS.count else { throw Failure.unsupported("native video frame count") }
     }
 
-    /// Diagnostic-only path on a rejected decoded frame. This never changes
-    /// the rejection or publishes media; it separates decoder timing from MOV timing.
-    private static func compressedVideoTiming(_ asset: AVURLAsset, track: AVAssetTrack, index: Int,
-                                              packetLimit: Int, check: () throws -> Void) throws -> String {
-        try check()
-        guard let reader = try? AVAssetReader(asset: asset) else { return "compressedReader=unavailable" }
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
-        output.alwaysCopiesSampleData = false
-        guard reader.canAdd(output) else { return "compressedReader=unsupported" }
-        reader.add(output)
-        guard reader.startReading() else { return "compressedReaderStatus=\(reader.status.rawValue)" }
-        defer { if reader.status == .reading { reader.cancelReading() } }
-        var first = "unavailable", current = "unavailable", next = "unavailable"
-        for offset in 0..<min(packetLimit, index + 2) {
-            try check()
-            guard let buffer = output.copyNextSampleBuffer() else { break }
-            let summary = "samples=\(CMSampleBufferGetNumSamples(buffer)) \(describe(sampleTiming(buffer)))"
-            if offset == 0 { first = summary }
-            if offset == index { current = summary }
-            if offset == index + 1 { next = summary }
-        }
-        return "compressedFirst=\(first) compressedCurrent=\(current) compressedNext=\(next) compressedReaderStatus=\(reader.status.rawValue)"
+    struct StoredVideoSample {
+        let samples: Int
+        let bytes: Int
+        let hasImage: Bool
+        let pts: CMTime
+        let duration: CMTime
     }
 
-    private static func sampleTiming(_ sample: CMSampleBuffer) -> CMTimeRange {
-        CMTimeRange(start: CMSampleBufferGetPresentationTimeStamp(sample), duration: CMSampleBufferGetDuration(sample))
+    /// Input is a bounded series of lazy AVAssetReader observations. Consume
+    /// one extra at most to disprove exact count; allow just the observed
+    /// leading empty zero-time MOV marker, not arbitrary empty edit buffers.
+    static func validateStoredVideoTiming(videoPTS: [Int64], videoEnd: Int64,
+                                          check: () throws -> Void = {},
+                                          nextSample: () -> StoredVideoSample?) throws {
+        var index = 0, observations = 0
+        while true {
+            try check()
+            guard let sample = nextSample() else { break }
+            observations += 1
+            if observations == 1, sample.samples == 0, sample.bytes == 0, !sample.hasImage,
+               sample.pts == .zero, sample.duration == .zero {
+                continue
+            }
+            guard index < videoPTS.count, sample.samples == 1, sample.bytes > 0, !sample.hasImage else {
+                throw Failure.unsupported("unexpected stored video sample or marker at index \(index)")
+            }
+            let pts = videoPTS[index]
+            let next = index + 1 < videoPTS.count ? videoPTS[index + 1] : videoEnd
+            let expectedPTS = CMTime(value: pts, timescale: 1000)
+            let expectedDuration = CMTime(value: next - pts, timescale: 1000)
+            guard sample.pts.isNumeric, sample.duration.isNumeric, sample.pts == expectedPTS,
+                  sample.duration == expectedDuration else {
+                let actual = CMTimeRange(start: sample.pts, duration: sample.duration)
+                let expected = CMTimeRange(start: expectedPTS, duration: expectedDuration)
+                throw Failure.unsupported("stored video timing: index=\(index) actual=\(describe(actual)) expected=\(describe(expected))")
+            }
+            index += 1
+        }
+        guard index == videoPTS.count else { throw Failure.unsupported("stored video frame count") }
     }
 
     private static func describe(_ range: CMTimeRange) -> String {

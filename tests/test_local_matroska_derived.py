@@ -77,12 +77,14 @@ class DerivedSourcePolicy(unittest.TestCase):
                 self.assertIn(marker, source)
 
 
-    def test_decoded_timing_rejection_includes_passthrough_timing_evidence(self):
+    def test_stored_timing_is_exact_before_decoded_duration_can_be_absent(self):
         source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
-        for marker in ("compressedVideoTiming", "decodedNext=", "compressedFirst=",
-                       "compressedCurrent=", "compressedNext=", "videoTrackRange=", "outputSettings: nil"):
+        for marker in ("validateStoredVideoTiming", "observations == 1", "sample.samples == 0",
+                       "sample.bytes == 0", "sample.pts == .zero", "sample.duration == .zero",
+                       "sample.samples == 1", "sample.duration == expectedDuration",
+                       "index == videoPTS.count", "outputSettings: nil", "!decodedDuration.isValid"):
             self.assertIn(marker, source)
-        self.assertIn("CMSampleBufferGetDuration(buffer) == CMTime(value: next - pts", source)
+        self.assertLess(source.index("try validateStoredVideoTiming"), source.index("let decoded ="))
 
     def test_verified_packet_tape_pumps_each_ready_input_independently(self):
         source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
@@ -126,6 +128,7 @@ class DerivedNativeParity(unittest.TestCase):
                               "MP4SampleTable", "MatroskaWriter", "LocalMKVExport",
                               "LocalMatroskaReader", "LocalMatroskaDerivedMedia")),
                           ROOT / "probes/mkv-derived/main.swift", "-o", probe)
+            self.run_tool(probe, "stored-policy")
             for rate in (44100, 48000):
                 with self.subTest(rate=rate):
                     media = d / str(rate)

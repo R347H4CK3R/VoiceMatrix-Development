@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreMedia
 import CoreVideo
 import CryptoKit
 import Darwin
@@ -17,6 +18,8 @@ import Foundation
         let args = CommandLine.arguments
         func url(_ i: Int) -> URL { URL(fileURLWithPath: args[i]) }
         switch args[1] {
+        case "stored-policy":
+            try testStoredVideoTimingPolicy()
         case "export":
             _ = try await LocalMKVExport.export(input: url(2), destination: url(3), maxBytes: 1_000_000)
         case "video":
@@ -42,6 +45,42 @@ import Foundation
             )
             FileHandle.standardOutput.write(try JSONEncoder().encode(receipt))
         default: fatalError("Unknown test command")
+        }
+    }
+
+    static func testStoredVideoTimingPolicy() throws {
+        typealias Sample = LocalMatroskaDerivedMedia.StoredVideoSample
+        func timed(_ pts: Int64, _ duration: Int64, samples: Int = 1, bytes: Int = 7,
+                   hasImage: Bool = false) -> Sample {
+            Sample(samples: samples, bytes: bytes, hasImage: hasImage,
+                   pts: CMTime(value: pts, timescale: 1000), duration: CMTime(value: duration, timescale: 1000))
+        }
+        func verify(_ observations: [Sample]) throws {
+            var cursor = observations.makeIterator()
+            try LocalMatroskaDerivedMedia.validateStoredVideoTiming(videoPTS: [0, 57], videoEnd: 91) {
+                cursor.next()
+            }
+        }
+        let marker = timed(0, 0, samples: 0, bytes: 0)
+        let first = timed(0, 57)
+        let second = timed(57, 34)
+        try verify([first, second])
+        try verify([marker, first, second])
+        let malformed = [
+            [marker, marker, first, second], [first, second, marker],
+            [timed(0, 0, samples: 0, bytes: 1), first, second],
+            [timed(0, 0, samples: 0, bytes: 0, hasImage: true), first, second],
+            [timed(1, 0, samples: 0, bytes: 0), first, second],
+            [timed(0, 1, samples: 0, bytes: 0), first, second],
+            [timed(0, 58), second], [first, timed(58, 33)], [first, timed(57, 33)],
+            [timed(0, 57, samples: 2), second], [timed(0, 57, bytes: 0), second],
+            [first], [first, second, timed(91, 1)]
+        ]
+        for (i, observations) in malformed.enumerated() {
+            var rejected = false
+            do { try verify(observations) }
+            catch LocalMatroskaDerivedMedia.Failure.unsupported(_) { rejected = true }
+            precondition(rejected, "Malformed stored timing was admitted at case \(i)")
         }
     }
 

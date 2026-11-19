@@ -1,0 +1,425 @@
+{
+  "status": "FAILED",
+  "source_sha256": "bd333719eec5b65053a97e29f12618c9e82121fb0ab0c1c8854bb47a1114b101",
+  "precision": "FLOAT32",
+  "compute_units": "CPU_ONLY",
+  "thresholds": {
+    "max_abs": 0.001,
+    "rms": 0.0001
+  },
+  "python": "3.12.10 (v3.12.10:0cc81280367, Apr  8 2025, 08:46:59) [Clang 13.0.0 (clang-1300.0.29.30)]",
+  "platform": "macOS-26.7.2-arm64-arm-64bit",
+  "torch": "2.7.0",
+  "numpy": "1.26.4",
+  "coremltools": "9.0",
+  "scope": "valid-domain frontend parity only, NOT production ASR or whole RangeDim acceptance",
+  "cases": [
+    {
+      "name": "tone-257",
+      "samples": 257,
+      "valid_samples": 257,
+      "shape": [
+        1,
+        128,
+        2
+      ],
+      "length": 2,
+      "numpy_vs_source": {
+        "max_abs": 4.17414586295628e-06,
+        "rms": 3.8819238431638026e-07
+      },
+      "coreml_vs_source": {
+        "max_abs": 5.364418029785156e-07,
+        "rms": 1.792402822333486e-07
+      }
+    },
+    {
+      "name": "tone-319",
+      "samples": 319,
+      "valid_samples": 319,
+      "shape": [
+        1,
+        128,
+        2
+      ],
+      "length": 2,
+      "numpy_vs_source": {
+        "max_abs": 6.956177234229699e-07,
+        "rms": 1.6673977192370866e-07
+      },
+      "coreml_vs_source": {
+        "max_abs": 8.344650268554688e-06,
+        "rms": 7.962715424799676e-07
+      }
+    },
+    {
+      "name": "tone-320",
+      "samples": 320,
+      "valid_samples": 320,
+      "shape": [
+        1,
+        128,
+        3
+      ],
+      "length": 3,
+      "numpy_vs_source": {
+        "max_abs": 4.663988861008939e-06,
+        "rms": 1.1348250687129252e-06
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.0003024935722351074,
+        "rms": 5.281133405758438e-05
+      }
+    },
+    {
+      "name": "tone-399",
+      "samples": 399,
+      "valid_samples": 399,
+      "shape": [
+        1,
+        128,
+        3
+      ],
+      "length": 3,
+      "numpy_vs_source": {
+        "max_abs": 6.995586788183239e-06,
+        "rms": 1.2863549952939545e-06
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.000283658504486084,
+        "rms": 5.5896556886972464e-05
+      }
+    },
+    {
+      "name": "tone-400",
+      "samples": 400,
+      "valid_samples": 400,
+      "shape": [
+        1,
+        128,
+        3
+      ],
+      "length": 3,
+      "numpy_vs_source": {
+        "max_abs": 8.178453084650705e-06,
+        "rms": 1.352220340662479e-06
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.0002738535404205322,
+        "rms": 5.61973531545381e-05
+      }
+    },
+    {
+      "name": "tone-511",
+      "samples": 511,
+      "valid_samples": 511,
+      "shape": [
+        1,
+        128,
+        4
+      ],
+      "length": 4,
+      "numpy_vs_source": {
+        "max_abs": 1.031245113962409e-05,
+        "rms": 1.9168538613213127e-06
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.0003037452697753906,
+        "rms": 5.281477473571711e-05
+      }
+    },
+    {
+      "name": "tone-512",
+      "samples": 512,
+      "valid_samples": 512,
+      "shape": [
+        1,
+        128,
+        4
+      ],
+      "length": 4,
+      "numpy_vs_source": {
+        "max_abs": 8.200588477280668e-06,
+        "rms": 1.808891350748086e-06
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.00028443336486816406,
+        "rms": 5.064922139118112e-05
+      }
+    },
+    {
+      "name": "tone-15999",
+      "samples": 15999,
+      "valid_samples": 15999,
+      "shape": [
+        1,
+        128,
+        100
+      ],
+      "length": 100,
+      "numpy_vs_source": {
+        "max_abs": 4.739023251071339e-05,
+        "rms": 6.396653154391143e-06
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.001473546028137207,
+        "rms": 5.669946869485254e-05
+      }
+    },
+    {
+      "name": "tone-16000",
+      "samples": 16000,
+      "valid_samples": 16000,
+      "shape": [
+        1,
+        128,
+        101
+      ],
+      "length": 101,
+      "numpy_vs_source": {
+        "max_abs": 5.625937716208229e-05,
+        "rms": 4.7620121394863794e-06
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.0022462010383605957,
+        "rms": 7.301093215892372e-05
+      }
+    },
+    {
+      "name": "tone-239999",
+      "samples": 239999,
+      "valid_samples": 239999,
+      "shape": [
+        1,
+        128,
+        1500
+      ],
+      "length": 1500,
+      "numpy_vs_source": {
+        "max_abs": 0.0002869227694640847,
+        "rms": 2.8451761880363468e-05
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.005751609802246094,
+        "rms": 0.00011994220808699651
+      }
+    },
+    {
+      "name": "tone-240000",
+      "samples": 240000,
+      "valid_samples": 240000,
+      "shape": [
+        1,
+        128,
+        1501
+      ],
+      "length": 1501,
+      "numpy_vs_source": {
+        "max_abs": 0.00021386702534487156,
+        "rms": 2.0218443489264906e-05
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.008774161338806152,
+        "rms": 0.00010165766342209396
+      }
+    },
+    {
+      "name": "silence-400",
+      "samples": 400,
+      "valid_samples": 400,
+      "shape": [
+        1,
+        128,
+        3
+      ],
+      "length": 3,
+      "numpy_vs_source": {
+        "max_abs": 0.0,
+        "rms": 0.0
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.0,
+        "rms": 0.0
+      }
+    },
+    {
+      "name": "edge-impulses-400",
+      "samples": 400,
+      "valid_samples": 400,
+      "shape": [
+        1,
+        128,
+        3
+      ],
+      "length": 3,
+      "numpy_vs_source": {
+        "max_abs": 3.51080116978153e-07,
+        "rms": 1.2127448995056656e-07
+      },
+      "coreml_vs_source": {
+        "max_abs": 7.218122482299805e-05,
+        "rms": 6.625427997130073e-06
+      }
+    },
+    {
+      "name": "silence-16000",
+      "samples": 16000,
+      "valid_samples": 16000,
+      "shape": [
+        1,
+        128,
+        101
+      ],
+      "length": 101,
+      "numpy_vs_source": {
+        "max_abs": 0.2757534682750702,
+        "rms": 0.2757534682750702
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.2757534682750702,
+        "rms": 0.2757534682750702
+      }
+    },
+    {
+      "name": "edge-impulses-16000",
+      "samples": 16000,
+      "valid_samples": 16000,
+      "shape": [
+        1,
+        128,
+        101
+      ],
+      "length": 101,
+      "numpy_vs_source": {
+        "max_abs": 2.7974622540671845e-06,
+        "rms": 1.203267848021799e-06
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.00033092498779296875,
+        "rms": 4.133073720411224e-06
+      }
+    },
+    {
+      "name": "silence-240000",
+      "samples": 240000,
+      "valid_samples": 240000,
+      "shape": [
+        1,
+        128,
+        1501
+      ],
+      "length": 1501,
+      "numpy_vs_source": {
+        "max_abs": 0.2761078473353109,
+        "rms": 0.2761078473353109
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.7641724348068237,
+        "rms": 0.7641724348068237
+      }
+    },
+    {
+      "name": "edge-impulses-240000",
+      "samples": 240000,
+      "valid_samples": 240000,
+      "shape": [
+        1,
+        128,
+        1501
+      ],
+      "length": 1501,
+      "numpy_vs_source": {
+        "max_abs": 1.5433444776391525e-05,
+        "rms": 6.350618078757654e-06
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.0012950897216796875,
+        "rms": 2.5033005260280586e-05
+      }
+    },
+    {
+      "name": "padded-valid-160",
+      "samples": 240000,
+      "valid_samples": 160,
+      "shape": [
+        1,
+        128,
+        1501
+      ],
+      "length": 2,
+      "numpy_vs_source": {
+        "max_abs": 3.617100731712064e-06,
+        "rms": 1.6553264724718595e-08
+      },
+      "coreml_vs_source": {
+        "max_abs": 3.7550926208496094e-06,
+        "rms": 2.274984615926838e-08
+      }
+    },
+    {
+      "name": "padded-valid-319",
+      "samples": 240000,
+      "valid_samples": 319,
+      "shape": [
+        1,
+        128,
+        1501
+      ],
+      "length": 2,
+      "numpy_vs_source": {
+        "max_abs": 1.3215764711471678e-06,
+        "rms": 1.2634665990668079e-08
+      },
+      "coreml_vs_source": {
+        "max_abs": 1.2516975402832031e-06,
+        "rms": 1.7604422391929198e-08
+      }
+    },
+    {
+      "name": "padded-valid-16000",
+      "samples": 240000,
+      "valid_samples": 16000,
+      "shape": [
+        1,
+        128,
+        1501
+      ],
+      "length": 101,
+      "numpy_vs_source": {
+        "max_abs": 2.695611795508479e-05,
+        "rms": 1.1080663752647022e-06
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.0017758011817932129,
+        "rms": 1.4220168601793267e-05
+      }
+    },
+    {
+      "name": "padded-valid-239999",
+      "samples": 240000,
+      "valid_samples": 239999,
+      "shape": [
+        1,
+        128,
+        1501
+      ],
+      "length": 1500,
+      "numpy_vs_source": {
+        "max_abs": 0.0002211079629285198,
+        "rms": 2.6287400331872955e-05
+      },
+      "coreml_vs_source": {
+        "max_abs": 0.008362770080566406,
+        "rms": 0.00012568215546968328
+      }
+    }
+  ],
+  "current_case": null,
+  "unsupported_unpadded_lengths": [
+    1,
+    159,
+    160,
+    256
+  ],
+  "error": "Fixed parity limits exceeded: tone-15999, tone-16000, tone-239999, tone-240000, silence-16000, silence-240000, edge-impulses-240000, padded-valid-16000, padded-valid-239999"
+}

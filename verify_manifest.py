@@ -10,6 +10,7 @@ MANIFEST = "run-inputs.json"
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_FILES = 32
 REQUIRED = frozenset({
+    "stage_probe.py", "original-native-baseline.json", "NUMERICAL-STATUS.md",
     "acquire.py", "buffers.py", "README.md",
     "native_gate.py", "native_reference.py", "native-requirements.txt", "upstream_features_231.py",
     "oracle.py", "verify_manifest.py", "original-buffers/ATTRIBUTION.md",

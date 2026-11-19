@@ -7,6 +7,11 @@
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
+      "path": "NUMERICAL-STATUS.md",
+      "size": 2096,
+      "sha256": "01b109cb6bdbe1972eaab4b85e8ad706e5dbf296b1f938492c26369bdf20fcbf"
+    },
+    {
       "path": "README.md",
       "size": 7282,
       "sha256": "d53a7ed85924ebb958a6ebe47f04f20182fd201c1ead503fb590c0b6c3804b8a"
@@ -67,14 +72,24 @@
       "sha256": "744788a137aa808ccc97d9d3c185c649b2e9c2b99c3262887c3ac9bb3b7e1c4c"
     },
     {
+      "path": "original-native-baseline.json",
+      "size": 9335,
+      "sha256": "1d92810ff61a17c8aa98003f84f5ce5ef903f6b7f50b40ba59c40363f3a4389b"
+    },
+    {
+      "path": "stage_probe.py",
+      "size": 10673,
+      "sha256": "081c6c61fa48555ae37d38d94c25c2e6d9b23cc7803ff30d5efca3d638b8d440"
+    },
+    {
       "path": "upstream_features_231.py",
       "size": 28465,
       "sha256": "bd333719eec5b65053a97e29f12618c9e82121fb0ab0c1c8854bb47a1114b101"
     },
     {
       "path": "verify_manifest.py",
-      "size": 4313,
-      "sha256": "6247ef092a39f4cef7ba32d046876cf39219c5a6853e2fb69c3fc7aa77111729"
+      "size": 4391,
+      "sha256": "2164a2cc86dbc4d7fa93f85d1343fcb093918714159b1a65102158d38413d4ed"
     }
   ]
 }

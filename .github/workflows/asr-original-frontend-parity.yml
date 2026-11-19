@@ -1,10 +1,10 @@
 # Draft only. Do not push or dispatch until independently reviewed and explicitly authorized.
-name: Native original frontend parity (artifact only)
+name: Native original frontend stage probe (diagnostic only)
 
 on:
   push:
     branches:
-      - verification/asr-original-frontend-parity-v1
+      - verification/asr-original-frontend-stage-v2
     paths:
       - .github/workflows/asr-original-frontend-parity.yml
 
@@ -12,17 +12,17 @@ permissions:
   contents: read
 
 concurrency:
-  group: voicematrix-asr-original-frontend-native-artifact-v1
+  group: voicematrix-asr-original-frontend-native-stage-v2
   cancel-in-progress: false
 
 jobs:
   reference-export-parity:
-    if: ${{ github.repository == 'R347H4CK3R/VoiceMatrix-Development' && github.ref == 'refs/heads/verification/asr-original-frontend-parity-v1' && github.event.deleted == false }}
+    if: ${{ github.repository == 'R347H4CK3R/VoiceMatrix-Development' && github.ref == 'refs/heads/verification/asr-original-frontend-stage-v2' && github.event.deleted == false }}
     runs-on: macos-26
     env:
       CANDIDATE_SHA: ${{ github.sha }}
-      MANIFEST_SHA256: 7b4bf2b8b43a11da1d7086ad7152ab5a5ab8b180344fc367018585285781832a
-      VERIFIER_SHA256: 6247ef092a39f4cef7ba32d046876cf39219c5a6853e2fb69c3fc7aa77111729
+      MANIFEST_SHA256: 20803efb6c4096a41e338eedf9b735386c9e07c568b73c055d3f9d686f7b02bc
+      VERIFIER_SHA256: 2164a2cc86dbc4d7fa93f85d1343fcb093918714159b1a65102158d38413d4ed
     timeout-minutes: 20
     defaults:
       run:
@@ -79,7 +79,7 @@ jobs:
           diag="$RUNNER_TEMP/asr-native-frontend-diagnostic"
           "$py" -I -m pip --isolated --disable-pip-version-check install --no-cache-dir \
             --index-url https://pypi.org/simple --only-binary=:all: --require-hashes --no-deps \
-            --report "$diag/install-report.json" -r native-requirements.txt 2>&1 | tee "$diag/install.log"
+            --report "$diag/install-stage-probe-report.json" -r native-requirements.txt 2>&1 | tee "$diag/install.log"
           "$py" -I -m pip --isolated check 2>&1 | tee "$diag/pip-check.log"
       - name: Export and evaluate isolated frontend
         working-directory: ${{ runner.temp }}/asr-reviewed-inputs
@@ -89,9 +89,9 @@ jobs:
           py="$RUNNER_TEMP/asr-frontend-venv/bin/python"
           out="$RUNNER_TEMP/asr-native-frontend-output"
           diag="$RUNNER_TEMP/asr-native-frontend-diagnostic"
-          "$py" -E -s native_gate.py --output "$out" 2>&1 | tee "$diag/native.log"
-          "$py" -I -c 'import json, sys; r=json.load(open(sys.argv[1])); assert r["status"]=="VALID_DOMAIN_FRONTEND_PARITY_PASSED"' "$out/report.json"
-          cp "$diag/install-report.json" "$out/install-report.json"
+          "$py" -E -s stage_probe.py --output "$out" 2>&1 | tee "$diag/native.log"
+          "$py" -I -c 'import json, sys; r=json.load(open(sys.argv[1])); assert r["status"]=="DIAGNOSTIC_COMPLETED_NO_ACCEPTANCE"' "$out/stage-probe-report.json"
+          cp "$diag/install-stage-probe-report.json" "$out/install-stage-probe-report.json"
           cp run-inputs.json "$out/run-inputs.json"
           cp original-buffers/ATTRIBUTION.md "$out/ATTRIBUTION.md"
           cp original-buffers/provenance.json "$out/original-provenance.json"
@@ -101,29 +101,22 @@ jobs:
         if: ${{ always() }}
         run: |
           set -euo pipefail
-          report="$RUNNER_TEMP/asr-native-frontend-output/report.json"
+          report="$RUNNER_TEMP/asr-native-frontend-output/stage-probe-report.json"
           diag="$RUNNER_TEMP/asr-native-frontend-diagnostic"
           if [[ -f "$report" && ! -L "$report" && -d "$diag" ]]; then
-            cp "$report" "$diag/report.json"
+            cp "$report" "$diag/stage-probe-report.json"
           fi
       - name: Upload narrow diagnostics even on failure
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: asr-original-frontend-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          name: asr-original-frontend-stage-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/asr-native-frontend-diagnostic/runtime.txt
             ${{ runner.temp }}/asr-native-frontend-diagnostic/install.log
-            ${{ runner.temp }}/asr-native-frontend-diagnostic/install-report.json
+            ${{ runner.temp }}/asr-native-frontend-diagnostic/install-stage-probe-report.json
             ${{ runner.temp }}/asr-native-frontend-diagnostic/pip-check.log
             ${{ runner.temp }}/asr-native-frontend-diagnostic/native.log
-            ${{ runner.temp }}/asr-native-frontend-diagnostic/report.json
+            ${{ runner.temp }}/asr-native-frontend-diagnostic/stage-probe-report.json
           if-no-files-found: warn
-          retention-days: 7
-      - name: Upload successful native evidence only
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: asr-original-frontend-parity-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/asr-native-frontend-output
-          if-no-files-found: error
           retention-days: 7

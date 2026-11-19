@@ -173,7 +173,7 @@ enum LocalMatroskaDerivedMedia {
 
     private static func makeAudioFormat(_ track: LocalMatroskaReader.Track) throws -> CMFormatDescription {
         var asbd = AudioStreamBasicDescription(mSampleRate: track.sampleRate, mFormatID: kAudioFormatMPEG4AAC,
-                       mFormatFlags: UInt32(kMPEG4Object_AAC_LC), mBytesPerPacket: 0, mFramesPerPacket: 1024,
+                       mFormatFlags: UInt32(MPEG4ObjectID.AAC_LC.rawValue), mBytesPerPacket: 0, mFramesPerPacket: 1024,
                        mBytesPerFrame: 0, mChannelsPerFrame: UInt32(track.channels), mBitsPerChannel: 0, mReserved: 0)
         // Core Audio's AAC cookie is the MPEG-4 ES descriptor, not the
         // Matroska AudioSpecificConfig by itself. Preserve every ASC byte.

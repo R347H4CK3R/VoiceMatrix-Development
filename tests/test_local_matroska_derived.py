@@ -13,6 +13,46 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+
+def nv12_hashes(raw, width, height):
+    """Hash packed Y/U/V bytes in the native probe's visible Y+UV row order."""
+    if width <= 0 or height <= 0 or width % 2 or height % 2:
+        raise ValueError("NV12 oracle requires positive even dimensions")
+    luma = width * height
+    chroma = luma // 4
+    frame_size = luma + 2 * chroma
+    if not raw or len(raw) % frame_size:
+        raise ValueError("Missing or incomplete oracle video frame")
+    hashes = []
+    for offset in range(0, len(raw), frame_size):
+        frame = memoryview(raw)[offset:offset + frame_size]
+        uv = bytearray(2 * chroma)
+        uv[0::2] = frame[luma:luma + chroma]
+        uv[1::2] = frame[luma + chroma:]
+        digest = hashlib.sha256(frame[:luma])
+        digest.update(uv)
+        hashes.append(digest.hexdigest())
+    return hashes
+
+
+class MKVPixelOraclePacking(unittest.TestCase):
+    def test_hashes_canonical_nv12_with_ordered_interleaved_chroma(self):
+        # 4×2 planar frame: eight luma bytes, two U bytes, two V bytes.
+        planar = b"ABCDEFGH" + b"IJ" + b"KL"
+        canonical = b"ABCDEFGHIKJL"
+        alternate = planar[:-1] + b"M"
+        self.assertEqual(nv12_hashes(planar + alternate, 4, 2), [
+            hashlib.sha256(canonical).hexdigest(),
+            hashlib.sha256(canonical[:-1] + b"M").hexdigest(),
+        ])
+
+    def test_rejects_truncated_or_misaligned_oracle(self):
+        for raw, width, height in ((b"x" * 11, 4, 2), (b"", 4, 2), (b"x" * 12, 3, 2)):
+            with self.subTest(width=width, count=len(raw)):
+                with self.assertRaises(ValueError):
+                    nv12_hashes(raw, width, height)
+
+
 class DerivedSourcePolicy(unittest.TestCase):
     def test_production_adapter_exists(self):
         self.assertTrue((ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").is_file(),
@@ -75,6 +115,11 @@ class DerivedNativeParity(unittest.TestCase):
         # ffprobe reads the 1 ms MKV time base; no production table inference.
         oracle_ms = [int(p["pts"]) for p in packet_data["packets"]]
         self.assertGreater(len(set(b-a for a, b in zip(oracle_ms, oracle_ms[1:]))), 1)
+        oracle_video = self.run_tool("ffmpeg", "-v", "error", "-i", mkv, "-map", "0:v:0",
+                                     "-fps_mode", "passthrough", "-pix_fmt", "yuv420p",
+                                     "-c:v", "rawvideo", "-threads:v", "1", "-f", "rawvideo", "-")
+        oracle_pixel_hashes = nv12_hashes(oracle_video, 160, 120)
+        self.assertEqual(len(oracle_pixel_hashes), len(oracle_ms))
         receipt = json.loads(self.run_tool(probe, "derive", mkv, digest, mov))
         self.assertFalse(src.exists())
         self.assertEqual(hashlib.sha256(mkv.read_bytes()).hexdigest(), digest)
@@ -98,6 +143,7 @@ class DerivedNativeParity(unittest.TestCase):
         self.run_tool(probe, "video", mov, after_frames)
         before, after = (json.loads(file.read_bytes()) for file in (before_frames, after_frames))
         self.assertEqual([f["sha256"] for f in after], [f["sha256"] for f in before])
+        self.assertEqual([f["sha256"] for f in after], oracle_pixel_hashes)
         self.assertEqual([f["ptsMS"] for f in after], oracle_ms)
         self.assertEqual(len(after), receipt["videoFrames"])
 

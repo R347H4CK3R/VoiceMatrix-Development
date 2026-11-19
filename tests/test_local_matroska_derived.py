@@ -6,12 +6,49 @@ import platform
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+
+
+def pcm_error_evidence(actual, expected):
+    """Return packet-indexed error evidence without changing the parity gate."""
+    if not actual or len(actual) != len(expected) or len(actual) % 2:
+        raise ValueError("PCM diagnostic requires equal nonempty Int16 buffers")
+    pairs = list(zip(struct.iter_unpack("<h", actual), struct.iter_unpack("<h", expected)))
+    result = {}
+    for name, start, end in (("all", 0, len(pairs)), ("first", 0, min(len(pairs), 1024)),
+                             ("last", max(0, len(pairs) - 1024), len(pairs))):
+        differences = [abs(a - b) for (a,), (b,) in pairs[start:end]]
+        maximum = max(differences)
+        index = start + differences.index(maximum)
+        (a,), (b,) = pairs[index]
+        result[name] = {"maximum": maximum, "rms": math.sqrt(sum(d*d for d in differences) / len(differences)),
+                        "over16": sum(d > 16 for d in differences), "index": index,
+                        "aacPacket": index // 1024, "packetOffset": index % 1024,
+                        "actual": a, "expected": b}
+    return result
+
+
+class PCMErrorEvidence(unittest.TestCase):
+    def test_distinguishes_access_unit_and_edges(self):
+        values = [0] * 4096
+        values[17], values[1029], values[4092] = -18, 23, -19
+        report = pcm_error_evidence(struct.pack("<4096h", *values), bytes(len(values) * 2))
+        self.assertEqual((report["all"]["index"], report["all"]["aacPacket"], report["all"]["packetOffset"]),
+                         (1029, 1, 5))
+        self.assertEqual((report["all"]["actual"], report["all"]["expected"], report["all"]["over16"]), (23, 0, 3))
+        self.assertEqual((report["first"]["index"], report["last"]["index"]), (17, 4092))
+        self.assertAlmostEqual(report["all"]["rms"], math.sqrt((18**2 + 23**2 + 19**2) / 4096))
+
+    def test_rejects_unaligned_comparison(self):
+        for actual, expected in ((b"", b""), (b"1", b"1"), (b"12", b"1234")):
+            with self.assertRaises(ValueError):
+                pcm_error_evidence(actual, expected)
 
 
 def nv12_hashes(raw, width, height):
@@ -151,6 +188,35 @@ class DerivedNativeParity(unittest.TestCase):
                     media.mkdir()
                     self.check_fixture(probe, media, rate)
 
+    def compare_direct_native_aac(self, probe, mkv, folder, receipt, actual, expected):
+        wrapped, direct_path = folder / "direct-aac.mov", folder / "direct-native.pcm"
+        def diagnostic_tool(*args):
+            return subprocess.check_output([str(arg) for arg in args], timeout=15)
+
+        diagnostic_tool("ffmpeg", "-v", "error", "-i", mkv, "-map", "0:a:0", "-c:a", "copy",
+                      "-use_editlist", "0", wrapped)
+        def compressed(path):
+            data = json.loads(diagnostic_tool("ffprobe", "-v", "error", "-select_streams", "a:0",
+                                            "-show_packets", "-show_data_hash", "sha256", "-of", "json", path))
+            return [(p["size"], p["data_hash"]) for p in data["packets"]]
+        source_packets, wrapper_packets = compressed(mkv), compressed(wrapped)
+        if source_packets != wrapper_packets or len(source_packets) != receipt["audioPackets"]:
+            raise ValueError("diagnostic AAC access units were not copied exactly")
+        diagnostic_tool(probe, "pcm", wrapped, direct_path)
+        native = direct_path.read_bytes()
+        encoded_bytes = receipt["audioPackets"] * 1024 * 2
+        print("PCM_DIRECT_NATIVE_LENGTH", json.dumps({"rate": receipt["audioSampleRate"],
+              "directBytes": len(native), "fullBytes": encoded_bytes, "validBytes": len(actual),
+              "verifiedPackets": len(source_packets), "discardFrames": receipt["discardFrames"]},
+              sort_keys=True), flush=True)
+        # Without full decoded frame count, the independent container may impose
+        # its own trimming and cannot establish the exact decoder baseline.
+        if len(native) == encoded_bytes:
+            raw = native[:len(actual)]
+            print("PCM_DIRECT_NATIVE", receipt["audioSampleRate"],
+                  json.dumps({"derivedVsNative": pcm_error_evidence(actual, raw),
+                              "nativeVsFFmpeg": pcm_error_evidence(raw, expected)}, sort_keys=True), flush=True)
+
     def check_fixture(self, probe, d, rate):
         src, mkv, mov = (d / name for name in ("original.mp4", "verified.mkv", "derived.mov"))
         before_frames, after_frames, native_pcm = (d / name for name in ("before.json", "after.json", "native.pcm"))
@@ -200,6 +266,14 @@ class DerivedNativeParity(unittest.TestCase):
         self.run_tool(probe, "pcm", mov, native_pcm)
         pcm = native_pcm.read_bytes()
         self.assertEqual(len(pcm), len(oracle))
+        print("PCM_CROSS_DECODER", rate, json.dumps(pcm_error_evidence(pcm, oracle), sort_keys=True), flush=True)
+        # Diagnostic only: copy, do not decode or re-encode, the independently demuxed
+        # AAC samples into a native-readable audio-only MOV. Do not use this measurement
+        # to waive either the existing FFmpeg bound or any of the other assertions.
+        try:
+            self.compare_direct_native_aac(probe, mkv, d, receipt, pcm, oracle)
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+            print("PCM_DIRECT_NATIVE_UNAVAILABLE", rate, str(exc), file=sys.stderr, flush=True)
         delta = [abs(a-b) for (a,), (b,) in zip(struct.iter_unpack("<h", pcm), struct.iter_unpack("<h", oracle))]
         # Native/FFmpeg inverse-transform rounding differences, never a
         # duration/offset waiver. Inspect entire PCM as well as each edge.

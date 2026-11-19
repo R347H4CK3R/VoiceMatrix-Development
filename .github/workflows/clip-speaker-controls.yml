@@ -1,0 +1,44 @@
+name: Retained clip fixed speaker controls
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/retained-clip-speaker-review, verification/clip-speaker-controls]
+    paths:
+      - 'probes/clip-speaker-controls/**'
+      - '.github/workflows/clip-speaker-controls.yml'
+      - 'tests/fixtures/licensed-human-holdouts/**'
+permissions:
+  contents: read
+jobs:
+  fixed-controls:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare pinned licensed local speech and model
+        run: |
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          python3 tools/bundle_diarization.py --destination "$RUNNER_TEMP/clip-review-models"
+          python3 probes/clip-speaker-controls/prepare.py "$RUNNER_TEMP/clip-review-fixtures"
+          python3 -m unittest tests.test_clip_speaker_controls -v
+      - name: Compile production retained clip pipeline and run actual Core ML
+        run: |
+          set -o pipefail
+          for file in LocalSpeakerDiarization LocalSpeakerPolicy LocalOverlapPolicy ClipSpeakerReviewStore ClipSpeakerReviewCoordinator SeparationClipHandoff SeparationClipExtractor SeparationStore RetainedMediaReader VocalSeparationAssets; do
+            cp "VoiceMatrix/$file.swift" probes/clip-speaker-controls/Sources/Probe/
+          done
+          swift build --package-path probes/clip-speaker-controls -c release
+          probes/clip-speaker-controls/.build/release/Probe "$RUNNER_TEMP/clip-review-models" "$RUNNER_TEMP/clip-review-fixtures" "$RUNNER_TEMP/clip-review-results" | tee clip-speaker-controls.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retained-clip-fixed-controls-evidence
+          path: |
+            clip-speaker-controls.log
+            ${{ runner.temp }}/clip-review-fixtures/fixture.json
+            ${{ runner.temp }}/clip-review-results/*-control.json
+            ${{ runner.temp }}/clip-review-results/summary.json
+          if-no-files-found: warn

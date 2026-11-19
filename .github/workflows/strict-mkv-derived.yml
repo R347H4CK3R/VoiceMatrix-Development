@@ -1,0 +1,32 @@
+name: Strict MKV-derived native decode parity
+on:
+  workflow_dispatch:
+  push:
+    branches: [verification/strict-mkv-derived]
+    paths:
+      - 'VoiceMatrix/LocalMatroska*.swift'
+      - 'probes/mkv-derived/**'
+      - 'tests/test_local_matroska_derived.py'
+      - '.github/workflows/strict-mkv-derived.yml'
+permissions:
+  contents: read
+jobs:
+  derived:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Exact MKV-derived PCM and video with source absent and hostile paths
+        run: |
+          set -o pipefail
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          python3 -m unittest tests.test_local_matroska_derived -v 2>&1 | tee mkv-derived-native.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: strict-mkv-derived-native-evidence
+          path: mkv-derived-native.log
+          if-no-files-found: error

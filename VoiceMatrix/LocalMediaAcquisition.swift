@@ -6,13 +6,13 @@ enum LocalMediaAcquisition {
     struct Result: Codable { let file: String; let sha256: String; let bytes: Int64 }
     private struct Receipt: Codable { let input: URL; let parts: [LocalMediaURLPolicy.Part]; var files: [Result]; var merged: Result?; var matroska: Result? }
     typealias Progress = @Sendable (String) -> Void
-    static func acquire(input: URL, folder: URL, progress: @escaping Progress) async throws -> Result {
-        do { return try await acquireChecked(input:input,folder:folder,progress:progress) }
+    static func acquire(input: URL, folder: URL, prepareMatroska: Bool = true, progress: @escaping Progress) async throws -> Result {
+        do { return try await acquireChecked(input:input,folder:folder,prepareMatroska:prepareMatroska,progress:progress) }
         catch is CancellationError { throw CancellationError() }
         catch let failure as LocalMediaURLPolicy.Failure { throw failure }
         catch { throw LocalMediaURLPolicy.Failure.response }
     }
-    private static func acquireChecked(input:URL,folder:URL,progress:@escaping Progress) async throws -> Result {
+    private static func acquireChecked(input:URL,folder:URL,prepareMatroska:Bool,progress:@escaping Progress) async throws -> Result {
         let normalized=try LocalMediaURLPolicy.input(input.absoluteString)
         _ = try remainingBudget(folder:folder, reserveForMerge:false)
         let receiptURL=folder.appendingPathComponent("acquisition.json")
@@ -25,7 +25,7 @@ enum LocalMediaAcquisition {
             if let merged = receipt.merged {
                 try await verify(merged, folder: folder)
                 progress("Reusing verified retained download and merged source.")
-                try await retainMatroska(receipt: receipt, folder: folder, progress: progress)
+                if prepareMatroska { try await retainMatroska(receipt: receipt, folder: folder, progress: progress) }
                 return merged
             }
             progress("Resuming acquisition. Verified completed tracks are reused; partial attempts are kept, never appended.")
@@ -69,7 +69,7 @@ enum LocalMediaAcquisition {
         try Task.checkCancellation()
         receipt.merged=result
         try JSONEncoder().encode(receipt).write(to:receiptURL,options:.atomic)
-        try await retainMatroska(receipt: receipt, folder: folder, progress: progress)
+        if prepareMatroska { try await retainMatroska(receipt: receipt, folder: folder, progress: progress) }
         progress("Acquisition complete: \(result.bytes) verified bytes retained. Starting local media checks.")
         return result
     }

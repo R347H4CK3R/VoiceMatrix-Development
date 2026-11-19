@@ -172,6 +172,45 @@ enum LocalMatroskaWorkflow {
         return Output(acquisition: acquisition, mkv: mkv, derived: mov, timing: timing)
     }
 
+    /// Revalidate a completed strict publication without taking a writer lease,
+    /// invoking Python or repairing any missing or changed file.
+    static func validatePublished(jobDirectory: URL, jobID: UUID, attemptID: UUID,
+                                  acquisition: Media, mkv: Media, derived: Media) async throws {
+        try Task.checkCancellation()
+        guard jobDirectory.isFileURL else { throw Failure.unsafe }
+        try valid(acquisition, suffix: "mp4")
+        try valid(mkv, suffix: "mkv", owned: true)
+        try valid(derived, suffix: "mov", owned: true)
+        guard Set([acquisition.sha256, mkv.sha256, derived.sha256]).count == 3 else { throw Failure.changed }
+        let directory = jobDirectory.standardizedFileURL
+        let anchored = try identity(directory)
+        let journalURL = directory.appendingPathComponent("strict-matroska-v1.json")
+        func load() throws -> Data {
+            var bytes = Data()
+            try RetainedMediaReader.read(journalURL, maximumBytes: maxJournal) { bytes.append($0) }
+            return bytes
+        }
+        func same(_ left: Media, _ right: Media) -> Bool {
+            left.file == right.file && left.sha256 == right.sha256 && left.bytes == right.bytes
+        }
+        let snapshot = try load()
+        try validateJournalKeys(snapshot)
+        let journal = try JSONDecoder().decode(Journal.self, from: snapshot)
+        guard journal.schemaVersion == 1, journal.complete, journal.jobID == jobID,
+              journal.attemptID == attemptID, same(journal.acquisition, acquisition),
+              let journalMKV = journal.mkv, same(journalMKV, mkv),
+              let journalMOV = journal.derived, same(journalMOV, derived),
+              let timing = journal.timing else { throw Failure.changed }
+        try validate(timing, mkv: mkv, mov: derived, original: acquisition)
+        let original = directory.appendingPathComponent(acquisition.file)
+        if try exists(original) { try await LocalMediaAcquisition.verify(acquisition, folder: directory) }
+        try await LocalMediaAcquisition.verify(mkv, folder: directory)
+        try await LocalMediaAcquisition.verify(derived, folder: directory)
+        try Task.checkCancellation()
+        guard try identity(directory) == anchored, try load() == snapshot,
+              try identity(directory) == anchored else { throw Failure.changed }
+    }
+
     static func availableCapacity(_ directory: URL) throws -> Int64 {
         guard let capacity = try directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
             .volumeAvailableCapacityForImportantUsage else { throw Failure.budget }

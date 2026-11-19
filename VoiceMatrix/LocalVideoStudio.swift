@@ -19,6 +19,13 @@ import CryptoKit
         let previewFile: String
         let previewSHA256: String
     }
+    struct StrictMatroska: Codable {
+        let schemaVersion: Int
+        let attemptID: UUID
+        var original: LocalMediaAcquisition.Result?
+        var mkv: LocalMediaAcquisition.Result?
+        var derived: LocalMediaAcquisition.Result?
+    }
     struct Job: Codable, Identifiable {
         let id: UUID
         let created: Date
@@ -27,6 +34,7 @@ import CryptoKit
         var message: String
         var originalAcquisitionURL: URL?
         var acquisitionURL: URL?
+        var strictMatroska: StrictMatroska?
         var sourceFile: String?
         var sourceSHA256: String?
         var analysisFile: String?
@@ -42,6 +50,32 @@ import CryptoKit
         var qualityPolicyVersions: [String:Int]?
         var completed = false
         var events: [Event] = []
+
+        var validStrictMatroska: Bool {
+            guard let state = strictMatroska else { return true }
+            func matches(_ media: LocalMediaAcquisition.Result, filename: String) -> Bool {
+                media.file.range(of: filename, options: .regularExpression) != nil &&
+                media.sha256.utf8.count == 64 &&
+                media.sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil &&
+                (1...LocalMediaURLPolicy.maximumBytes).contains(media.bytes)
+            }
+            guard state.schemaVersion == 1, let acquisitionURL,
+                  (try? LocalMediaURLPolicy.input(acquisitionURL.absoluteString)) == acquisitionURL else { return false }
+            if let original = state.original,
+               !matches(original, filename: "^[A-Za-z0-9_-]{1,128}[.]mp4$") { return false }
+            if state.mkv == nil && state.derived == nil {
+                return sourceFile == nil && sourceSHA256 == nil && !completed && analysisFile == nil &&
+                    analysisSHA256 == nil && visualEvidence == nil && similarity == nil &&
+                    referenceFile == nil && previewFile == nil && voiceID == nil &&
+                    speakerVoiceIDs == nil && speakerAssets == nil && speakerOutcomes == nil &&
+                    qualityPolicyVersions == nil
+            }
+            guard let original = state.original, let mkv = state.mkv, let derived = state.derived,
+                  matches(mkv, filename: "^strict-[a-f0-9-]{36}[.]mkv$"),
+                  matches(derived, filename: "^strict-[a-f0-9-]{36}[.]mov$"),
+                  Set([original.sha256, mkv.sha256, derived.sha256]).count == 3 else { return false }
+            return sourceFile == derived.file && sourceSHA256 == derived.sha256
+        }
 
         // Do not compare a new speaker/reference against an earlier attempt's audio.
         var matchingPreviewFile: String? {
@@ -113,6 +147,7 @@ import CryptoKit
             func safe(_ value: String?) -> Bool { value == nil || (value!.range(of: "^[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]+)*$", options: .regularExpression) != nil) }
             guard safe(job.sourceFile), safe(job.analysisFile), safe(job.referenceFile), safe(job.previewFile) else { return unreadable() }
             if let input = job.acquisitionURL, (try? LocalMediaURLPolicy.input(input.absoluteString)) == nil { return unreadable() }
+            guard job.validStrictMatroska else { return unreadable() }
             return job
         }.sorted { $0.created > $1.created }
         historyReadFailures = rejected
@@ -133,12 +168,28 @@ import CryptoKit
     func verifiedMKVExport() async -> URL? {
         guard !busy, let job = current, let digest = job.sourceSHA256 else { return nil }
         let directory = root.appendingPathComponent(job.id.uuidString.lowercased(), isDirectory: true)
-        let export = try? await LocalMediaAcquisition.verifiedMatroska(folder: directory, sourceSHA256: digest)
-        guard !Task.isCancelled, current?.id == job.id, !busy else { return nil }
+        let export: URL?
+        if let strict = job.strictMatroska {
+            #if os(iOS)
+            guard job.validStrictMatroska, let original = strict.original,
+                  let mkv = strict.mkv, let derived = strict.derived else { return nil }
+            do {
+                try await LocalMatroskaWorkflow.validatePublished(jobDirectory: directory, jobID: job.id,
+                                                                  attemptID: strict.attemptID, acquisition: original,
+                                                                  mkv: mkv, derived: derived)
+                export = directory.appendingPathComponent(mkv.file)
+            } catch { return nil }
+            #else
+            return nil
+            #endif
+        } else {
+            export = try? await LocalMediaAcquisition.verifiedMatroska(folder: directory, sourceSHA256: digest)
+        }
+        guard !Task.isCancelled, current?.id == job.id, current?.sourceSHA256 == digest, !busy else { return nil }
         return export
     }
     var retainedSeparationSource: SeparationClipHandoff.Source? {
-        guard !busy, let job=current, let name=job.sourceFile, let sha=job.sourceSHA256,
+        guard !busy, let job=current, job.validStrictMatroska, let name=job.sourceFile, let sha=job.sourceSHA256,
               name.range(of:"^[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]+)*$",options:.regularExpression) != nil,
               sha.range(of:"^[0-9a-f]{64}$",options:.regularExpression) != nil else {return nil}
         return SeparationClipHandoff.Source(jobID:job.id,url:folder.appendingPathComponent(name),sha256:sha)
@@ -252,7 +303,7 @@ import CryptoKit
         }
         catch { notice = LocalMediaURLPolicy.Failure.url.errorDescription! }
     }
-    func start(_ source: URL, authorized: Bool, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio, referenceInput: SeparationStore.ReferenceInput? = nil) {
+    func start(_ source: URL, authorized: Bool, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio, referenceInput: SeparationStore.ReferenceInput? = nil, strictForNewLink: Bool = true) {
         guard referenceInput == nil || (source.isFileURL && referenceInput?.url == source) else { return }
         guard authorized, !busy, active else { return }
         guard !audio.processingInUse, !audio.microphoneInUse else { notice = "Stop the other recording or speech job first."; return }
@@ -263,7 +314,13 @@ import CryptoKit
             guard free >= 800_000_000, retained < 2_000_000_000 else { throw LocalError.storage }
             let now = Date()
             current = Job(id: UUID(), created: now, updated: now, stage: "Received", message: "Source selected; preparing retained acquisition.")
-            if !source.isFileURL { current?.acquisitionURL = try LocalMediaURLPolicy.input(source.absoluteString); current?.originalAcquisitionURL = source }
+            if !source.isFileURL {
+                current?.acquisitionURL = try LocalMediaURLPolicy.input(source.absoluteString)
+                current?.originalAcquisitionURL = source
+                #if os(iOS)
+                if strictForNewLink { current?.strictMatroska = StrictMatroska(schemaVersion: 1, attemptID: UUID()) }
+                #endif
+            }
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
             try update("Received", source.isFileURL ? "App received the selected local media. Nothing is uploaded." : "App received the URL. Downloading directly from its website; no laptop or conversion service. The private URL is not shown in this log.")
             run(source: source.isFileURL ? source : nil, library: library, audio: audio, speech: speech, referenceInput: referenceInput)
@@ -278,10 +335,11 @@ import CryptoKit
     /// start creates a distinct UUID folder and repeats normal storage, source and processing gates.
     func retryAcquisition(jobID: UUID, authorized: Bool, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio) {
         guard authorized, !busy, active, current?.id == jobID, let source = freshAcquisitionURL else { return }
-        start(source, authorized: true, library: library, audio: audio, speech: speech)
+        start(source, authorized: true, library: library, audio: audio, speech: speech,
+              strictForNewLink: current?.strictMatroska != nil)
     }
     func resume(library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio) {
-        guard !busy, active, let job = current, !job.completed, job.sourceFile != nil || job.acquisitionURL != nil else { return }
+        guard !busy, active, let job = current, job.validStrictMatroska, !job.completed, job.sourceFile != nil || job.acquisitionURL != nil else { return }
         run(source: nil, library: library, audio: audio, speech: speech)
     }
     private enum LocalError: LocalizedError {
@@ -301,237 +359,9 @@ import CryptoKit
         try Task.checkCancellation()
         if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical { throw LocalError.thermal }
     }
-    private func run(source: URL?, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio, referenceInput: SeparationStore.ReferenceInput? = nil) {
-        guard let lease = audio.claimProcessing() else { notice = "Stop the other recording or speech job first."; return }
-        busy = true
-        let run = UUID(); runToken = run
-        let jobFolder = folder
-        operation = Task {
-            var libraryOwner: UUID?
-            defer { if let libraryOwner { library.endLocalGeneration(libraryOwner) }; busy = false; audio.releaseProcessing(lease); reloadHistory() }
-            do {
-                try check()
-                // Do not acquire or analyze private media when this build cannot synthesize a preview.
-                guard let bundle = f5Bundle else { throw LocalError.engine }
-                libraryOwner = try await library.beginLocalGeneration()
-                if current?.sourceFile == nil, let input = current?.acquisitionURL {
-                    try update("Acquiring source", "Preparing a bounded direct website download. Partial files and completed tracks remain retained.")
-                    let result = try await LocalMediaAcquisition.acquire(input: input, folder: jobFolder) { [weak self] message in
-                        Task { @MainActor in
-                            guard let self, self.runToken == run, self.busy, self.current?.stage == "Acquiring source" else { return }
-                            try? self.update("Acquiring source", message, log: (!message.hasPrefix("Received ") || message.hasPrefix("Received the ")) && !message.hasPrefix("Merging tracks:"))
-                        }
-                    }
-                    try check()
-                    current?.sourceFile = result.file; current?.sourceSHA256 = result.sha256
-                    try update("Source retained", "Downloaded source and any original separate tracks are retained. Processing now stays entirely on this iPhone.")
-                }
-                if let source {
-                    let access = source.startAccessingSecurityScopedResource()
-                    defer { if access { source.stopAccessingSecurityScopedResource() } }
-                    let ext = try LocalMediaImportPolicy.fileExtension(source)
-                    let destination = jobFolder.appendingPathComponent("source." + ext)
-                    try update("Copying source", "Keeping a private source copy for recovery.")
-                    let copy = Task.detached { () throws -> String in
-                        if let referenceInput { return try referenceInput.copyVerified(to: destination) }
-                        let v = try source.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
-                        guard v.isRegularFile == true, v.isSymbolicLink != true, let size = v.fileSize, size > 0, size <= 536_870_912 else { throw LocalError.source }
-                        guard FileManager.default.createFile(atPath: destination.path, contents: nil) else { throw LocalError.storage }
-                        let input = try FileHandle(forReadingFrom: source), output = try FileHandle(forWritingTo: destination)
-                        defer { try? input.close(); try? output.close() }
-                        var hash = SHA256(), count = 0
-                        var lastNotice = Date()
-                        while let bytes = try input.read(upToCount: 1_048_576), !bytes.isEmpty {
-                            try Task.checkCancellation(); count += bytes.count
-                            guard count <= size else { throw LocalError.source }
-                            try output.write(contentsOf: bytes); hash.update(data: bytes)
-                            if Date().timeIntervalSince(lastNotice) >= 1 {
-                                lastNotice = Date(); let copied = count
-                                Task { @MainActor [weak self] in
-                                    guard let self, self.runToken == run, self.busy, self.current?.stage == "Copying source" else { return }
-                                    try? self.update("Copying source", "Copied \(copied) of \(size) bytes into retained app storage.", log: false)
-                                }
-                            }
-                        }
-                        guard count == size else { throw LocalError.source }
-                        try output.synchronize()
-                        return hash.finalize().map { String(format: "%02x", $0) }.joined()
-                    }
-                    let digest = try await withTaskCancellationHandler { try await copy.value } onCancel: { copy.cancel() }
-                    if let referenceInput {
-                        // Bind the actual retained bytes, not just a pre-navigation check.
-                        let copiedBytes = try destination.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? -1
-                        try referenceInput.validateCopied(digest: digest, bytes: copiedBytes)
-                    }
-                    try check()
-                    current?.sourceFile = destination.lastPathComponent; current?.sourceSHA256 = digest
-                    try update("Source retained", "Private source copy committed. It will not be deleted automatically.")
-                }
-                guard let name = current?.sourceFile, let expectedHash = current?.sourceSHA256 else { throw LocalError.source }
-                let retained = jobFolder.appendingPathComponent(name)
-                let digestTask = Task.detached { () throws -> String in
-                    var hash = SHA256()
-                    do {
-                        try RetainedMediaReader.read(retained, maximumBytes: LocalMediaURLPolicy.maximumBytes) {
-                            hash.update(data: $0)
-                        }
-                    } catch is CancellationError { throw CancellationError() }
-                    catch { throw LocalError.source }
-                    return hash.finalize().map { String(format: "%02x", $0) }.joined()
-                }
-                let actualHash = try await withTaskCancellationHandler { try await digestTask.value } onCancel: { digestTask.cancel() }
-                guard expectedHash == actualHash else { throw LocalError.source }
-                try update("Checking local transcription", "Checking the bundled Parakeet speech recognizer. No OS speech assets or server recognition are used.")
-                try await transcriber.authorize()
-                await speech.releaseModelsForCharacter()
-                await engine.finishRequest(keepWarm: false)
-                let analysis: LocalSpeakerDiarization.Analysis
-                var retainedAnalysis: LocalSpeakerDiarization.Analysis?
-                if let name = current?.analysisFile, let digest = current?.analysisSHA256 {
-                    let url = jobFolder.appendingPathComponent(name)
-                    let v = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
-                    guard v.isRegularFile == true, v.isSymbolicLink != true, (v.fileSize ?? Int.max) <= 4_000_000 else { throw LocalError.source }
-                    let data = try Data(contentsOf: url)
-                    guard Self.hash(data) == digest else { throw LocalError.source }
-                    let storedAnalysis = try JSONDecoder().decode(LocalSpeakerDiarization.Analysis.self, from: data)
-                    let validated=try LocalSpeakerDiarization.validatedForCurrentPolicy(storedAnalysis)
-                    if validated.selectionPolicyVersion == 5 {
-                        guard validated.rawOverlap?.sourceSHA256 == expectedHash else {throw LocalError.source}
-                        retainedAnalysis=validated
-                    } else {
-                        try update("Overlap analysis upgrade", "Older speaker evidence has no independent overlap coverage. Reanalyzing retained media before creating new references; existing voices remain available.")
-                    }
-                }
-                if let retainedAnalysis {
-                    analysis=retainedAnalysis
-                    try update("Speaker analysis retained", "Reusing source-bound speaker and independent overlap evidence.")
-                } else {
-                    try update("Analyzing speakers", "Loading bundled speaker analysis. Speaker groups are not character identities.")
-                    analysis = try await LocalSpeakerDiarization.analyze(source: retained, bundle: speakerBundle) { [weak self] message in
-                        Task { @MainActor in
-                            guard let self, self.runToken == run, self.busy, self.current?.stage == "Analyzing speakers" else { return }
-                            try? self.update("Analyzing speakers", message, log: false)
-                        }
-                    }
-                    try check()
-                    guard analysis.selectionPolicyVersion == 5,analysis.rawOverlap?.sourceSHA256 == expectedHash else {throw LocalError.source}
-                    // Fresh analysis invalidates every job association, including missing old analysis metadata.
-                    // Existing library profiles and retained files are not deleted.
-                    do {
-                        current?.speakerVoiceIDs=nil;current?.speakerAssets=nil;current?.speakerOutcomes=nil
-                        current?.qualityPolicyVersions=nil;current?.visualEvidence=nil
-                        current?.referenceFile=nil;current?.previewFile=nil;current?.similarity=nil;current?.voiceID=nil
-                    }
-                    let data = try JSONEncoder().encode(analysis)
-                    let name = "diarization-" + UUID().uuidString.lowercased() + ".json"
-                    try data.write(to: jobFolder.appendingPathComponent(name), options: .atomic)
-                    current?.analysisFile = name; current?.analysisSHA256 = Self.hash(data)
-                    try update("Speaker analysis retained", "Saved the source-bound speaker analysis before creating references.")
-                }
-                let groups = analysis.speakerWindows
-                guard !groups.isEmpty else { throw LocalError.candidate }
-                try update("Speaker groups found", "Found \(groups.count) tentative speaker groups. Detected overlaps are excluded; music separation and character names are not verified.")
-                if let report = current?.visualEvidence,
-                   (try? LocalVisualEvidence.validate(report,sourceSHA256:expectedHash,folder:jobFolder,groups:groups)) != nil {
-                    try update("Visual evidence retained", "Reusing source-bound frames and visible text. They do not establish a character identity.")
-                } else {
-                    try update("Inspecting video frames", "Sampling up to 12 speaker-timed frames locally. Visible characters may not be the speakers; OCR text is not a verified name.")
-                    do {
-                        let report = try await LocalVisualEvidence.analyze(source:retained,sourceSHA256:expectedHash,groups:groups,folder:jobFolder) { [weak self] done,total in
-                            Task { @MainActor in
-                                guard let self, self.runToken == run, self.busy, self.current?.stage == "Inspecting video frames" else { return }
-                                try? self.update("Inspecting video frames", "Inspected \(done) of \(total) sampled video frames.",log:false)
-                            }
-                        }
-                        try check()
-                        current?.visualEvidence = report
-                        try update("Visual evidence retained", report.audioOnly ? "Audio-only source: no visible character evidence. Speaker labels stay unidentified." : "Retained \(report.frames.count) sampled frames; \(report.unavailableFrames) unavailable; \(report.omittedSpeakers) speakers outside the sampling bound. Identity remains unverified.")
-                    } catch is CancellationError { throw CancellationError() }
-                    catch LocalVisualEvidence.Failure.sourceChanged { throw LocalError.source }
-                    catch {
-                        try check()
-                        // Unsupported visual media is optional only while retained source bytes still match.
-                        do { try await LocalVisualEvidence.verifySource(retained,sha256:expectedHash) }
-                        catch is CancellationError { throw CancellationError() }
-                        catch { throw LocalError.source }
-                        try check()
-                        try update("Visual evidence unavailable", "Video frames could not be inspected safely. Continuing audio analysis without names or visible-character claims; existing media is retained.")
-                    }
-                }
-                if current?.speakerVoiceIDs == nil { current?.speakerVoiceIDs = [:] }
-                if current?.speakerOutcomes == nil { current?.speakerOutcomes = [:] }
-                if current?.qualityPolicyVersions == nil { current?.qualityPolicyVersions = [:] }
-                var saved = 0, unresolved = 0
-                for speaker in groups {
-                    try check()
-                    if current?.qualityPolicyVersions?[speaker.speaker] == LocalSoundQualityPolicy.version, let id = current?.speakerVoiceIDs?[speaker.speaker], let existing = library.profiles.first(where: { $0.id == id }),
-                       current?.speakerAssets?[speaker.speaker]?.referenceSHA256 == existing.referenceSHA256,
-                       validatedSpeakerAssetURL(speaker.speaker, preview: true) != nil {
-                        saved += 1
-                        try update("Reference already saved", "Reused \(existing.name) (ID \(existing.id)). Library now contains \(library.profiles.count) voices; previous voices were kept.")
-                        continue
-                    }
-                    var previews = 0, imported = false
-                    for (index, window) in speaker.windows.enumerated() {
-                        try check()
-                        try update("Selecting reference", "Speaker \(speaker.speaker): checking candidate \(index + 1) of \(speaker.windows.count). Detected overlap was excluded; this is not music separation.")
-                        var candidate=try LocalReferenceAttempt(sourceSHA256:expectedHash,speaker:speaker.speaker,start:window.start,end:window.end)
-                        try candidate.record(.selected,reason:"Non-overlapping speaker window selected",directory:jobFolder)
-                        let attempt=candidate.id
-                        let clip: LocalVideoAudio.Reference
-                        do { clip = try await LocalVideoAudio.extract(source: retained, start: window.start, seconds: window.seconds) }
-                        catch LocalVideoAudio.Failure.unusableAudio, LocalVideoAudio.Failure.invalidTimeline {
-                            try candidate.record(.extractionRejected,reason:"Clip failed single-track, audibility or clipping checks",directory:jobFolder)
-                            try update("Candidate rejected", "Speaker reference audio was unusable. Source and attempt evidence were retained.")
-                            continue
-                        }
-                        let referenceDigest=Self.hash(clip.wave)
-                        try candidate.record(.extracted,reason:"Bounded reference audio extracted",referenceSHA256:referenceDigest,directory:jobFolder)
-                        let reference = jobFolder.appendingPathComponent("reference-" + attempt + ".wav")
-                        try clip.wave.write(to: reference, options: .atomic)
-                        current?.selectReference(reference.lastPathComponent)
-                        try update("Screening candidate", "Checking speaker \(speaker.speaker) for music, singing and speech evidence on this iPhone.")
-                        let quality: LocalSoundQuality.Evidence
-                        do {
-                            quality = try await LocalSoundQuality.analyze(source: reference) { [weak self] message in
-                                Task { @MainActor in
-                                    guard let self, self.runToken == run, self.busy, self.current?.stage == "Screening candidate", self.current?.referenceFile == reference.lastPathComponent else { return }
-                                    try? self.update("Screening candidate", message, log: false)
-                                }
-                            }
-                        } catch {
-                            let failure: [String:Any] = ["schemaVersion":1,"policyVersion":LocalSoundQualityPolicy.version,"sourceSHA256":Self.hash(clip.wave),"status":"Screening did not complete","reason":error.localizedDescription]
-                            try? JSONSerialization.data(withJSONObject:failure,options:[.sortedKeys]).write(to:jobFolder.appendingPathComponent("quality-" + attempt + ".json"),options:.atomic)
-                            throw error
-                        }
-                        guard quality.sourceSHA256 == Self.hash(clip.wave) else { throw LocalError.source }
-                        try JSONEncoder().encode(quality).write(to:jobFolder.appendingPathComponent("quality-" + attempt + ".json"),options:.atomic)
-                        guard quality.decision.admitted else {
-                            try candidate.record(.screeningRejected,reason:quality.decision.reason,referenceSHA256:referenceDigest,directory:jobFolder)
-                            try update("Candidate needs review", quality.decision.reason)
-                            continue
-                        }
-                        try check()
-                        try update("Transcribing reference", "Recognizing this candidate locally. Model-detected overlaps were excluded. Music and character identity are not verified.")
-                        let transcript: String
-                        do { transcript = try await transcriber.transcribeReference(reference) { [weak self] in
-                            guard let self, self.runToken == run, self.busy, self.current?.stage == "Transcribing reference", self.current?.referenceFile == reference.lastPathComponent else { return }
-                            try? self.update("Transcribing reference", "On-device recognition is producing results.", log: false)
-                        } }
-                        catch OnDeviceTranscription.Failure.noSpeech {
-                            try candidate.record(.referenceNoSpeech,reason:"No speech recognized in reference",referenceSHA256:referenceDigest,directory:jobFolder)
-                            try update("Candidate rejected", "No reference speech was recognized. Audio and attempt evidence were retained.")
-                            continue
-                        }
-                        guard let transcriptionEvidence = transcriber.lastEvidence,
-                              transcriptionEvidence.inputSHA256 == Self.hash(clip.wave) else { throw LocalError.candidate }
-                        try JSONEncoder().encode(transcriptionEvidence).write(to: jobFolder.appendingPathComponent("transcription-evidence-" + attempt + ".json"), options: .atomic)
-                        try Data(transcript.utf8).write(to: jobFolder.appendingPathComponent("transcript-" + attempt + ".txt"), options: .atomic)
-                        try candidate.record(.transcribed,reason:"Transcript evidence retained",referenceSHA256:referenceDigest,directory:jobFolder)
-                        do {try F5SpeechChunks.validateReference(text:transcript,seconds:clip.seconds)}
-                        catch is F5ChunkError {
-                            try candidate.record(.referenceIncompatible,reason:"Transcript or duration exceeds speech engine limits",referenceSHA256:referenceDigest,directory:jobFolder)
-                            try update("Candidate needs review", "The recognized reference does not fit the speech engine. Transcript evidence was kept; trying another candidate.")
+    #if os(iOS)
+    private func prepareStrictMatroska(jobFolder: URL, token: UUID) async throws {
+        guard let job = current, job.validStrictMatroska, var strict = job.strictMat…6088 tokens truncated…pt evidence was kept; trying another candidate.")
                             continue
                         }
                         try check(); previews += 1

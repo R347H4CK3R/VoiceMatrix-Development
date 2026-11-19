@@ -156,4 +156,31 @@ final class LocalMatroskaWorkflowTests: XCTestCase {
         do { _ = try await work.value; XCTFail("Cancellation ignored") } catch is CancellationError { }
         XCTAssertEqual(fixture.remuxes, 0)
     }
+    func testPublishedValidationPermitsOriginalAbsentAndRejectsOrphanSwap() async throws {
+        let fixture = try Fixture()
+        let output = try await fixture.run()
+        let folder = fixture.directory
+        let original = folder.appendingPathComponent(fixture.original.file)
+        let backup = folder.appendingPathComponent("preserved-original.backup")
+        try FileManager.default.moveItem(at: original, to: backup)
+        let journal = folder.appendingPathComponent("strict-matroska-v1.json")
+        let unchanged = try Data(contentsOf: journal)
+        try await Workflow.validatePublished(jobDirectory: folder, jobID: fixture.job, attemptID: fixture.attempt,
+                                             acquisition: output.acquisition, mkv: output.mkv, derived: output.derived)
+        let orphan = Workflow.Media(file: "strict-" + UUID().uuidString.lowercased() + ".mkv",
+                                    sha256: Fixture.hash(Data("orphan MKV".utf8)), bytes: 10)
+        try Data("orphan MKV".utf8).write(to: folder.appendingPathComponent(orphan.file), options: .withoutOverwriting)
+        try await LocalMediaAcquisition.verify(orphan, folder: folder)
+        let before = try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
+        do {
+            try await Workflow.validatePublished(jobDirectory: folder, jobID: fixture.job, attemptID: fixture.attempt,
+                                                 acquisition: output.acquisition, mkv: orphan, derived: output.derived)
+            XCTFail("Independently valid orphan must not replace the journal-bound MKV")
+        } catch { XCTAssertEqual(error as? Workflow.Failure, .changed) }
+        XCTAssertEqual(try Data(contentsOf: journal), unchanged)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted(), before)
+        XCTAssertEqual(Fixture.hash(try Data(contentsOf: backup)), fixture.original.sha256)
+        XCTAssertEqual(fixture.remuxes, 1)
+        XCTAssertEqual(fixture.derives, 1)
+    }
 }

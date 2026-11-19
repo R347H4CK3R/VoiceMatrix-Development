@@ -17,6 +17,7 @@ enum ClipSpeakerReviewAnalyzer {
 
 #if os(iOS)
 import Combine
+import FluidAudio
 
 @MainActor final class ClipSpeakerReviewCoordinator: ObservableObject {
     typealias Clip = SeparationClipHandoff.Input
@@ -142,6 +143,21 @@ import Combine
         }
     }
 
+    func saveTurnLabel(_ name: String?, turn: ClipSpeakerReviewStore.Turn, for clip: Clip) {
+        guard !busy, verified, activeClip == clip, let result else { return }
+        do {
+            self.result = try store.saveTurnLabel(name, turn: turn, expected: result, for: clip)
+            status = name == nil ? "Turn label removed." : "Label saved only for this turn."
+        } catch {
+            if (error as? ClipSpeakerReviewStore.Failure) != .alias,
+               (error as? ClipSpeakerReviewStore.Failure) != .bounds {
+                verified = false
+                self.result = nil
+            }
+            status = friendly(error)
+        }
+    }
+
     func togglePlayback(_ clip: Clip, audio: AudioStore) {
         guard !busy, verified, activeClip == clip, !audio.processingInUse, !audio.microphoneInUse else { return }
         if audio.playing == clip.url { audio.stop(); return }
@@ -158,11 +174,14 @@ import Combine
 
     private func description(_ review: Review) -> String {
         review.groups.isEmpty
-            ? "Not enough speaker evidence to show turns. This can happen with silence, short speech or difficult audio."
+            ? "No usable speaker turns were found. Speech or overlap may still be present."
             : "Local speaker guesses are ready to review. They do not identify people or verify clean references."
     }
 
     private func friendly(_ error: Error) -> String {
+        if let diarization = error as? OfflineDiarizationError, case .noSpeechDetected = diarization {
+            return "No usable speaker turns were found. Speech or overlap may still be present."
+        }
         if error is ClipSpeakerReviewStore.Failure || error is LocalSpeakerDiarization.Failure { return error.localizedDescription }
         return "The clip or its speaker evidence could not be verified. Existing files were kept."
     }

@@ -2,6 +2,7 @@ import XCTest
 import Foundation
 import CryptoKit
 import AVFoundation
+import FluidAudio
 @testable import VoiceMatrix
 
 final class ClipSpeakerReviewTests: XCTestCase {
@@ -82,6 +83,40 @@ final class ClipSpeakerReviewTests: XCTestCase {
         XCTAssertNil(reopened.alias(for: "a"))
         XCTAssertNil(try f.store.saveAlias(nil, speaker: "z", expected: reopened, for: f.clip).alias(for: "z"))
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: f.store.root.path), [f.sidecar.lastPathComponent])
+        try f.assertOriginalsUnchanged()
+    }
+
+    func testManualLabelBindsOnlyToExactTurnAndPreservesModelEvidence() throws {
+        let f = try fixture()
+        let analysis = try f.analysis(segments: [
+            .init(speaker: "z", start: 0, end: 2),
+            .init(speaker: "z", start: 2, end: 4)
+        ])
+        let initial = try f.store.publish(analysis, for: f.clip)
+        let turns = try XCTUnwrap(initial.groups.first).turns
+        XCTAssertEqual(turns.count, 2)
+        let saved = try f.store.saveTurnLabel("First", turn: turns[0], expected: initial, for: f.clip)
+        let reopened = try XCTUnwrap(f.store.load(for: f.clip))
+        XCTAssertEqual(reopened.binding, initial.binding)
+        XCTAssertEqual(reopened.turnLabel(for: turns[0]), "First")
+        XCTAssertNil(reopened.turnLabel(for: turns[1]))
+        XCTAssertNil(reopened.alias(for: "z"))
+        XCTAssertThrowsError(try f.store.saveTurnLabel("Stale", turn: turns[1], expected: initial, for: f.clip))
+        let shifted = ClipSpeakerReviewStore.Turn(index: turns[0].index, speaker: "z", start: 0, end: 1)
+        XCTAssertThrowsError(try f.store.saveTurnLabel("Wrong interval", turn: shifted, expected: reopened, for: f.clip))
+        let sidecar = try Data(contentsOf: f.sidecar)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: sidecar) as? [String: Any])
+        var labels = try XCTUnwrap(json["turnLabels"] as? [[String: Any]])
+        var turn = try XCTUnwrap(labels[0]["turn"] as? [String: Any])
+        turn["index"] = 1 // Same speaker, but the time bounds no longer match the index.
+        labels[0]["turn"] = turn
+        json["turnLabels"] = labels
+        try JSONSerialization.data(withJSONObject: json).write(to: f.sidecar, options: .atomic)
+        XCTAssertThrowsError(try f.store.load(for: f.clip))
+        try sidecar.write(to: f.sidecar, options: .atomic)
+        let removed = try f.store.saveTurnLabel(nil, turn: turns[0], expected: saved, for: f.clip)
+        XCTAssertNil(removed.turnLabel(for: turns[0]))
+        XCTAssertEqual(removed.binding, initial.binding)
         try f.assertOriginalsUnchanged()
     }
 
@@ -329,6 +364,28 @@ final class ClipSpeakerReviewTests: XCTestCase {
         XCTAssertTrue(finished)
         XCTAssertFalse(audio.processingInUse)
         XCTAssertNotNil(try f.store.load(for: f.clip))
+        try f.assertOriginalsUnchanged()
+    }
+
+    @MainActor
+    func testNoSpeechIsAnExplicitRetryableNoUsableTurnOutcome() async throws {
+        let f = try fixture()
+        let audio = AudioStore(recordingRoot: f.store.root.deletingLastPathComponent().appendingPathComponent("recordings"))
+        let coordinator = ClipSpeakerReviewCoordinator(store: f.store, analyze: { _,_,_ in
+            throw OfflineDiarizationError.noSpeechDetected
+        })
+        coordinator.activate(f.clip)
+        XCTAssertTrue(coordinator.start(f.clip, authorized: true, audio: audio, isCurrent: { true }))
+        let finished = await waitUntil { !coordinator.busy }
+        XCTAssertTrue(finished)
+        XCTAssertEqual(coordinator.status, "No usable speaker turns were found. Speech or overlap may still be present.")
+        XCTAssertTrue(coordinator.verified)
+        XCTAssertNil(coordinator.result)
+        XCTAssertNil(try f.store.load(for: f.clip))
+        XCTAssertFalse(audio.processingInUse)
+        XCTAssertTrue(coordinator.start(f.clip, authorized: true, audio: audio, isCurrent: { true }))
+        let retryFinished = await waitUntil { !coordinator.busy }
+        XCTAssertTrue(retryFinished)
         try f.assertOriginalsUnchanged()
     }
 

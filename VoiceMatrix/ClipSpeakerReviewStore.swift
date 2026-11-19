@@ -33,10 +33,24 @@ struct ClipSpeakerReviewStore: Sendable {
         let name: String
     }
 
+    struct Turn: Codable, Equatable, Identifiable, Sendable {
+        let index: Int
+        let speaker: String
+        let start: Double
+        let end: Double
+        var id: Int { index }
+    }
+
+    struct TurnLabel: Codable, Equatable, Sendable {
+        let binding: Binding
+        let turn: Turn
+        let name: String
+    }
+
     struct Group: Identifiable {
         let id: String
         let speaker: String
-        let turns: [LocalSpeakerPolicy.Segment]
+        let turns: [Turn]
         let hasPolicyWindow: Bool
     }
 
@@ -45,14 +59,28 @@ struct ClipSpeakerReviewStore: Sendable {
         let binding: Binding
         let analysis: Analysis
         var aliases: [Alias]
+        // Missing in existing sidecars; the model analysis and its digest are unchanged.
+        var turnLabels: [TurnLabel]? = nil
+
+        func turnLabel(for turn: Turn) -> String? { turnLabels?.first { $0.turn == turn }?.name }
+
+        func includes(_ turn: Turn) -> Bool {
+            guard analysis.rawOverlap?.counts.contains(where: { $0 > 0 }) == true,
+                  analysis.segments.indices.contains(turn.index) else { return false }
+            let segment = analysis.segments[turn.index]
+            return segment.speaker == turn.speaker && segment.start == turn.start && segment.end == turn.end
+        }
 
         func alias(for speaker: String) -> String? { aliases.first { $0.speaker == speaker }?.name }
 
         // IDs are names for anonymous guesses, scoped to this exact analysis.
         var groups: [Group] {
             guard analysis.rawOverlap?.counts.contains(where: { $0 > 0 }) == true else { return [] }
-            let turns = Dictionary(grouping: analysis.segments, by: \.speaker).mapValues {
-                $0.sorted { ($0.start, $0.end) < ($1.start, $1.end) }
+            let indexed = analysis.segments.enumerated().map { index, segment in
+                Turn(index: index, speaker: segment.speaker, start: segment.start, end: segment.end)
+            }
+            let turns = Dictionary(grouping: indexed, by: \.speaker).mapValues {
+                $0.sorted { ($0.start, $0.end, $0.index) < ($1.start, $1.end, $1.index) }
             }
             let order = turns.keys.sorted { (turns[$0]![0].start, $0) < (turns[$1]![0].start, $1) }
             let windows = Set(analysis.speakerWindows.filter { !$0.windows.isEmpty }.map(\.speaker))
@@ -167,12 +195,27 @@ struct ClipSpeakerReviewStore: Sendable {
 
     func saveAlias(_ name: String?, speaker: String, expected: Review, for clip: Clip) throws -> Review {
         guard var current = try load(for: clip), current.binding == expected.binding,
-              current.aliases == expected.aliases,
+              current.aliases == expected.aliases, current.turnLabels == expected.turnLabels,
               current.groups.contains(where: { $0.speaker == speaker }) else { throw Failure.unsafe }
         let normalized = try name.map(Self.checkedAlias)
         current.aliases.removeAll { $0.speaker == speaker }
         if let normalized { current.aliases.append(Alias(binding: current.binding, speaker: speaker, name: normalized)) }
         current.aliases.sort { $0.speaker < $1.speaker }
+        try write(current, to: sidecar(clip), replacing: true)
+        return current
+    }
+
+    func saveTurnLabel(_ name: String?, turn: Turn, expected: Review, for clip: Clip) throws -> Review {
+        guard var current = try load(for: clip), current.binding == expected.binding,
+              current.aliases == expected.aliases, current.turnLabels == expected.turnLabels,
+              current.includes(turn) else { throw Failure.unsafe }
+        var labels = current.turnLabels ?? []
+        labels.removeAll { $0.turn == turn }
+        if let name {
+            guard labels.count < 32 else { throw Failure.bounds }
+            labels.append(TurnLabel(binding: current.binding, turn: turn, name: try Self.checkedAlias(name)))
+        }
+        current.turnLabels = labels.isEmpty ? nil : labels.sorted { $0.turn.index < $1.turn.index }
         try write(current, to: sidecar(clip), replacing: true)
         return current
     }
@@ -201,6 +244,12 @@ struct ClipSpeakerReviewStore: Sendable {
         for alias in review.aliases {
             guard alias.binding == review.binding, speakers.contains(alias.speaker),
                   try Self.checkedAlias(alias.name) == alias.name else { throw Failure.unsafe }
+        }
+        let labels = review.turnLabels ?? []
+        guard labels.count <= 32, Set(labels.map { $0.turn.index }).count == labels.count else { throw Failure.unsafe }
+        for label in labels {
+            guard label.binding == review.binding, review.includes(label.turn),
+                  try Self.checkedAlias(label.name) == label.name else { throw Failure.unsafe }
         }
         return review
     }

@@ -11,6 +11,8 @@ struct ClipSpeakerReviewView: View {
     @State private var authorized = false
     @State private var drafts: [String: String] = [:]
 
+    @State private var turnDrafts: [Int: String] = [:]
+
     let clip: SeparationClipHandoff.Input
     let source: SeparationClipHandoff.Source
 
@@ -60,14 +62,13 @@ struct ClipSpeakerReviewView: View {
                 }
             }
             if let result = review.result {
+                Text("Automatic grouping is uncertain and may group different speakers together. A manual turn label applies only to that interval.")
+                    .font(.caption)
+                    .accessibilityIdentifier("clip-speaker-review-grouping-uncertainty")
                 ForEach(result.groups) { group in
                     Section {
                         if let alias = result.alias(for: group.speaker) {
                             Text("Your label: \(alias)").accessibilityIdentifier("clip-speaker-review-alias-" + group.id)
-                        }
-                        ForEach(Array(group.turns.enumerated()), id: \.offset) { _, turn in
-                            Text(String(format: "%.2f–%.2f s", turn.start, min(turn.end, Double(clip.frames) / 44_100)))
-                                .monospacedDigit()
                         }
                         if !group.hasPolicyWindow {
                             Text("No clean window met the existing speaker policy. A guessed turn is not a usable voice reference here.")
@@ -100,6 +101,9 @@ struct ClipSpeakerReviewView: View {
                             .disabled(unavailable)
                             .accessibilityIdentifier("clip-speaker-review-remove-" + group.id)
                         }
+                        ForEach(group.turns) { turn in
+                            turnControls(turn, result: result)
+                        }
                     } header: {
                         Text("Speaker guess \(group.id)")
                             .accessibilityIdentifier("clip-speaker-review-speaker-" + group.id)
@@ -119,9 +123,45 @@ struct ClipSpeakerReviewView: View {
         .onChange(of: local.retainedSeparationSource) { _,_ in synchronize() }
     }
 
+    @ViewBuilder
+    private func turnControls(_ turn: ClipSpeakerReviewStore.Turn, result: ClipSpeakerReviewStore.Review) -> some View {
+        let key = String(turn.index)
+        let interval = String(format: "%.2f–%.2f s", turn.start, min(turn.end, Double(clip.frames) / 44_100))
+        Text(interval).monospacedDigit()
+        if let name = result.turnLabel(for: turn) {
+            Text("Your turn label: \(name)")
+                .accessibilityIdentifier("clip-speaker-review-turn-name-" + key)
+        }
+        TextField("Label turn \(interval)", text: Binding(
+            get: { turnDrafts[turn.id] ?? result.turnLabel(for: turn) ?? "" },
+            set: { turnDrafts[turn.id] = $0 }
+        ))
+        .disabled(unavailable)
+        .accessibilityIdentifier("clip-speaker-review-turn-label-" + key)
+        Button("Save turn label for \(interval)") {
+            guard isCurrent, let draft = turnDrafts[turn.id] else { return }
+            review.saveTurnLabel(draft, turn: turn, for: clip)
+            if review.result?.turnLabel(for: turn) == (try? ClipSpeakerReviewStore.checkedAlias(draft)) {
+                turnDrafts[turn.id] = nil
+            }
+        }
+        .disabled(unavailable || turnDrafts[turn.id] == nil)
+        .accessibilityIdentifier("clip-speaker-review-turn-save-" + key)
+        if result.turnLabel(for: turn) != nil {
+            Button("Remove turn label for \(interval)") {
+                guard isCurrent else { return }
+                review.saveTurnLabel(nil, turn: turn, for: clip)
+                turnDrafts[turn.id] = nil
+            }
+            .disabled(unavailable)
+            .accessibilityIdentifier("clip-speaker-review-turn-remove-" + key)
+        }
+    }
+
     private func synchronize() {
         authorized = false
         drafts = [:]
+        turnDrafts = [:]
         if isCurrent {
             review.activate(clip)
         } else {

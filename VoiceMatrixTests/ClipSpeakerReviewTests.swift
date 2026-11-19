@@ -6,6 +6,36 @@ import FluidAudio
 @testable import VoiceMatrix
 
 final class ClipSpeakerReviewTests: XCTestCase {
+    @MainActor func testConsentEpochRejectsStaleControlWritesAcrossLifecycle() {
+        let consent = ClipSpeakerReviewConsent()
+        let old = consent.epoch
+        XCTAssertFalse(consent.authorized)
+        XCTAssertTrue(consent.set(true, epoch: old, isCurrent: true))
+        XCTAssertTrue(consent.authorized)
+        consent.invalidate()
+        XCTAssertFalse(consent.authorized)
+        XCTAssertNotEqual(consent.epoch, old)
+        XCTAssertFalse(consent.set(true, epoch: old, isCurrent: true), "A queued old control event cannot grant a new session")
+        XCTAssertFalse(consent.authorized)
+        let inactive = consent.epoch
+        XCTAssertFalse(consent.set(true, epoch: inactive, isCurrent: false))
+        XCTAssertFalse(consent.authorized)
+        XCTAssertFalse(consent.set(false, epoch: consent.epoch, isCurrent: false))
+        XCTAssertFalse(consent.authorized)
+        let fresh = consent.epoch
+        XCTAssertTrue(consent.set(true, epoch: fresh, isCurrent: true))
+        XCTAssertTrue(consent.authorized)
+        XCTAssertFalse(consent.set(false, epoch: old, isCurrent: true), "Stale events cannot change a fresh explicit choice")
+        XCTAssertTrue(consent.authorized)
+        XCTAssertTrue(consent.set(false, epoch: fresh, isCurrent: true))
+        XCTAssertFalse(consent.authorized)
+        XCTAssertTrue(consent.set(true, epoch: fresh, isCurrent: true))
+        consent.invalidate()
+        XCTAssertFalse(consent.authorized)
+        XCTAssertFalse(consent.set(true, epoch: fresh, isCurrent: true))
+        XCTAssertFalse(consent.authorized)
+    }
+
     private struct Fixture {
         let clip: SeparationClipHandoff.Input
         let source: SeparationClipHandoff.Source

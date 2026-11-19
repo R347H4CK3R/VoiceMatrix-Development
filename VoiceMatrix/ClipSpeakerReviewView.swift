@@ -8,7 +8,7 @@ struct ClipSpeakerReviewView: View {
     @Environment(\.scenePhase) private var scene
     @StateObject private var review = ClipSpeakerReviewCoordinator()
     @State private var visible = false
-    @State private var authorized = false
+    @StateObject private var consent = ClipSpeakerReviewConsent()
     @State private var drafts: [String: String] = [:]
 
     @State private var turnDrafts: [Int: String] = [:]
@@ -37,20 +37,18 @@ struct ClipSpeakerReviewView: View {
             }
             Section("Speaker turns") {
                 if review.verified, review.result == nil, !review.busy {
-                    Toggle("I am authorized to analyze this clip and its voices", isOn: $authorized)
-                        .disabled(unavailable)
-                        .accessibilityIdentifier("clip-speaker-review-authorization")
+                    authorizationToggle(epoch: consent.epoch)
                     Button("Find speaker turns") {
-                        let permission = authorized
-                        authorized = false
+                        let permission = consent.authorized
+                        consent.invalidate()
                         review.start(clip, authorized: permission, audio: audio, isCurrent: { isCurrent })
                     }
-                    .disabled(!authorized || unavailable)
+                    .disabled(!consent.authorized || unavailable)
                     .accessibilityIdentifier("clip-speaker-review-run")
                 }
                 if review.busy {
                     ProgressView()
-                    Button("Cancel analysis", role: .cancel) { authorized = false; review.cancel() }
+                    Button("Cancel analysis", role: .cancel) { consent.invalidate(); review.cancel() }
                         .disabled(review.cancelling)
                         .accessibilityIdentifier("clip-speaker-review-cancel")
                 }
@@ -116,11 +114,29 @@ struct ClipSpeakerReviewView: View {
         .onAppear { visible = true; synchronize() }
         .onDisappear { visible = false; synchronize() }
         .onChange(of: scene) { _,_ in synchronize() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            suspendReview()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            synchronize()
+        }
         .onChange(of: clip) { previous,_ in
             if audio.playing == previous.url { audio.stop() }
             synchronize()
         }
         .onChange(of: local.retainedSeparationSource) { _,_ in synchronize() }
+    }
+
+    private func authorizationToggle(epoch: UUID) -> some View {
+        Toggle("I am authorized to analyze this clip and its voices", isOn: Binding(
+            get: { consent.authorized },
+            set: { value in
+                consent.set(value, epoch: epoch, isCurrent: isCurrent && review.verified && !review.busy)
+            }
+        ))
+        .id(epoch)
+        .disabled(unavailable)
+        .accessibilityIdentifier("clip-speaker-review-authorization")
     }
 
     @ViewBuilder
@@ -158,8 +174,16 @@ struct ClipSpeakerReviewView: View {
         }
     }
 
+    private func suspendReview() {
+        consent.invalidate()
+        drafts = [:]
+        turnDrafts = [:]
+        review.deactivate()
+        if audio.playing == clip.url { audio.stop() }
+    }
+
     private func synchronize() {
-        authorized = false
+        consent.invalidate()
         drafts = [:]
         turnDrafts = [:]
         if isCurrent {

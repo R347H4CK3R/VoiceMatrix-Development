@@ -13,16 +13,16 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-          fetch-depth: 12
+          fetch-depth: 13
       - name: Verify only the pinned software package context
         env:
-          PACKAGE_CONTEXT_CODE_PARENT: 1c3065cccf2e27d76cf9aa222c97310191f0b4be
+          PACKAGE_CONTEXT_CODE_PARENT: acac4a4cc6b795a00669ea6474164d377b2a4b05
         run: |
           set -euo pipefail
           guard() { printf 'audit_package_context_activation_guard=%s\n' "$1" >&2; exit 1; }
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || guard checkout
           [[ "$(git cat-file -p HEAD | sed -n 's/^parent //p')" == "$PACKAGE_CONTEXT_CODE_PARENT" ]] || guard actual-code-parent
-          [[ "$(git cat-file -p "$PACKAGE_CONTEXT_CODE_PARENT" | sed -n 's/^parent //p')" == 9fb76c75c3cdb85a1a4f52bfab1d1b38eaba2b5d ]] || guard prior-diagnosed-source
+          [[ "$(git cat-file -p "$PACKAGE_CONTEXT_CODE_PARENT" | sed -n 's/^parent //p')" == e316ee42868c242fae4028433b3dc4feb5bfed2f ]] || guard prior-diagnosed-source
           git diff --quiet "$PACKAGE_CONTEXT_CODE_PARENT" HEAD -- . ':(exclude).github/workflows/physical-audit-package-context.yml' || guard activation-scope
           git cat-file -e 42da8f3ed18ca1c0f1462032db5dc05ce77362a1^{tree} || guard reviewed-runtime-parent
           [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]] || guard runner-platform

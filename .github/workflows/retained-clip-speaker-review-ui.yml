@@ -2,7 +2,7 @@ name: Retained clip speaker review UI on real speech
 'on':
   workflow_dispatch:
   push:
-    branches: [feature/retained-clip-speaker-review, verification/clip-speaker-review-ui, feature/friendly-voice-studio]
+    branches: [feature/retained-clip-speaker-review, verification/clip-speaker-review-ui, feature/friendly-voice-studio, verification/friendly-consent-lifecycle]
     paths:
       - 'VoiceMatrix/ClipSpeakerReview*.swift'
       - 'VoiceMatrix/LocalVideoStudioView.swift'
@@ -68,6 +68,9 @@ jobs:
       - name: Exercise actual prepare, review, resume, label and reopen UI
         run: |
           set -o pipefail
+          xcrun simctl spawn "$CLIP_REVIEW_UI_SIMULATOR" log stream --style json --level debug --predicate 'subsystem == "com.voicematrix.app" AND category == "ConsentLifecycle"' > speaker-review-evidence/consent-lifecycle.json 2>&1 &
+          LOG_PID=$!
+          trap 'kill "$LOG_PID" 2>/dev/null || true' EXIT
           xcodebuild test-without-building -skipPackagePluginValidation -project VoiceMatrix.xcodeproj -scheme VoiceMatrix -destination "platform=iOS Simulator,id=$CLIP_REVIEW_UI_SIMULATOR" -derivedDataPath speaker-review-ui-build -resultBundlePath speaker-review-evidence/review-ui.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 300 -maximum-test-execution-time-allowance 420 -only-testing:VoiceMatrixUITests/ClipSpeakerReviewUITests/testReviewRequiresFreshConsentAndKeepsClipSpecificAliasAcrossRelaunch > speaker-review-evidence/review-ui.log 2>&1 || { tail -180 speaker-review-evidence/review-ui.log; exit 1; }
           python3 - <<'PY'
           import pathlib,re

@@ -1,6 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import UIKit
+import OSLog
 
 struct ClipSpeakerReviewView: View {
     @EnvironmentObject private var local: LocalVideoStudio
@@ -37,7 +38,11 @@ struct ClipSpeakerReviewView: View {
             }
             Section("Speaker turns") {
                 if review.verified, review.result == nil, !review.busy {
-                    Toggle("I am authorized to analyze this clip and its voices", isOn: $authorized)
+                    Toggle("I am authorized to analyze this clip and its voices", isOn: Binding(get: { authorized }, set: { value in
+                        traceConsent("toggle-write-\(value)")
+                        authorized = value
+                        traceConsent("toggle-written")
+                    }))
                         .disabled(unavailable)
                         .accessibilityIdentifier("clip-speaker-review-authorization")
                     Button("Find speaker turns") {
@@ -113,9 +118,10 @@ struct ClipSpeakerReviewView: View {
         }
         .navigationTitle("Review speaker turns")
         .accessibilityIdentifier("clip-speaker-review")
-        .onAppear { visible = true; synchronize() }
-        .onDisappear { visible = false; synchronize() }
-        .onChange(of: scene) { _,_ in synchronize() }
+        .onAppear { visible = true; synchronize("appear") }
+        .onDisappear { visible = false; synchronize("disappear") }
+        .onChange(of: scene) { old,new in synchronize("scene-\(old)-to-\(new)") }
+        .onChange(of: authorized) { old,new in traceConsent("authorization-\(old)-to-\(new)") }
         .onChange(of: clip) { previous,_ in
             if audio.playing == previous.url { audio.stop() }
             synchronize()
@@ -158,7 +164,8 @@ struct ClipSpeakerReviewView: View {
         }
     }
 
-    private func synchronize() {
+    private func synchronize(_ reason: String = "input-change") {
+        traceConsent("reset-before-\(reason)")
         authorized = false
         drafts = [:]
         turnDrafts = [:]
@@ -168,6 +175,14 @@ struct ClipSpeakerReviewView: View {
             review.deactivate()
             if audio.playing == clip.url { audio.stop() }
         }
+        traceConsent("reset-after-\(reason)")
+    }
+
+    private func traceConsent(_ event: String) {
+        #if DEBUG
+        let state = "event=\(event) scene=\(scene) application=\(UIApplication.shared.applicationState.rawValue) visible=\(visible) authorized=\(authorized) verified=\(review.verified) current=\(isCurrent)"
+        Logger(subsystem: "com.voicematrix.app", category: "ConsentLifecycle").notice("\(state, privacy: .public)")
+        #endif
     }
 }
 #endif

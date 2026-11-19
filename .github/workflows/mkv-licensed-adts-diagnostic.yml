@@ -1,0 +1,44 @@
+name: Exact retained clip Apple ADTS diagnostic (not a release gate)
+on:
+  push:
+    branches: [verification/mkv-licensed-adts-diagnostic]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: mkv-licensed-adts-diagnostic
+  cancel-in-progress: false
+jobs:
+  measure:
+    if: github.repository == 'R347H4CK3R/VoiceMatrix-Development' && github.ref == 'refs/heads/verification/mkv-licensed-adts-diagnostic'
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify exact source and download pinned earlier test archive read-only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(uname -m)" = arm64
+          mkdir -p diagnostic-metadata
+          echo "$GITHUB_SHA" > diagnostic-metadata/diagnostic-source-sha.txt
+          gh api repos/R347H4CK3R/VoiceMatrix-Development/actions/artifacts/14514418920/zip > pinned-evidence.zip
+          echo 'e64b90d15c187070d6b184c5ee18173b2e84c764e491c3417c9778ae25f60a8b  pinned-evidence.zip' | shasum -a 256 -c -
+      - name: Measure using independent Apple ExtAudioFileRead on exact packet bytes
+        run: |
+          set -euo pipefail
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          command -v ffprobe
+          xcrun swiftc -parse-as-library VoiceMatrix/{MP4SampleTable,MatroskaWriter,LocalMKVExport,LocalMatroskaReader,LocalMatroskaDerivedMedia}.swift probes/mkv-derived/main.swift -o direct-native-probe
+          python3 probes/mkv-licensed-adts/diagnose.py pinned-evidence.zip "$PWD/direct-native-probe" | tee diagnostic-metadata/metrics.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: exact-retained-clip-adts-metadata-only
+          path: diagnostic-metadata/
+          if-no-files-found: warn
+          retention-days: 7

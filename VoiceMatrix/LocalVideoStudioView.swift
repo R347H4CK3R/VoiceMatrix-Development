@@ -46,10 +46,23 @@ struct LocalVideoStudioView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("On this iPhone").font(.title2.bold())
-                Text("Import a local video or recording, or acquire supported public website media directly. Extraction, English transcription, reference-conditioned preview and voice registration run inside this app. No laptop or server fallback.")
-                Text("Bundled analysis groups speakers and excludes detected overlap. Local sound screening rejects likely music, singing or insufficient speech. It does not identify characters, remove music or train RVC models. Every accepted reference must pass a word check; resemblance needs listening review.").font(.footnote).foregroundStyle(.secondary)
-                Button(selected == nil ? "Choose video or audio" : "Choose a different file") { importing = true }
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("YOUR VIDEO → YOUR STUDIO", systemImage: "sparkles")
+                        .font(.caption.bold()).foregroundStyle(StudioPalette.mint)
+                    Text("Make a voice from video")
+                        .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                    Text("Add a link or choose a file. Review short clips, then listen to a voice preview.")
+                        .foregroundStyle(.secondary)
+                    StudioSteps()
+                    Text("Results are experimental. You choose the labels and check how each voice sounds.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(StudioPalette.surface, in: RoundedRectangle(cornerRadius: 24))
+                Text("1 · Add a video or audio file").font(.title3.bold())
+                Button { importing = true } label: {
+                    Label(selected == nil ? "Choose a file" : "Choose a different file", systemImage: "folder.fill")
+                        .frame(minHeight: 44)
+                }
                     .buttonStyle(.bordered).disabled(local.busy || checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-import")
                 if selected != nil { Label("Local media selected", systemImage: "doc.fill") }
                 if separatedInput != nil {
@@ -57,9 +70,10 @@ struct LocalVideoStudioView: View {
                         .font(.footnote).accessibilityIdentifier("local-video-separated-source")
                 }
                 if checkingSeparatedInput { ProgressView("Verifying saved vocals…") }
-                TextField("YouTube or supported HTTPS media URL", text: $sourceURL)
+                Text("Or paste a video link").font(.headline)
+                TextField("https://…", text: $sourceURL)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    .textFieldStyle(.roundedBorder).disabled(local.busy || checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-url")
+                    .textFieldStyle(.roundedBorder).frame(minHeight: 44).disabled(local.busy || checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-url").accessibilityLabel("Video link")
                 PasteButton(payloadType: String.self) { values in
                     authorized = false
                     if separatedInput != nil { selected = nil }
@@ -73,22 +87,32 @@ struct LocalVideoStudioView: View {
                         selected = nil
                         selectionError = nil
                     } catch { selectionError = error.localizedDescription }
-                }.buttonStyle(.bordered).disabled(local.busy || checkingSeparatedInput || clipPreparing)
+                }.buttonStyle(.bordered).controlSize(.large).frame(minHeight: 44).disabled(local.busy || checkingSeparatedInput || clipPreparing)
                     .accessibilityLabel("Paste video URL from Clipboard")
                     .accessibilityIdentifier("local-video-paste")
-                Text("URL acquisition needs internet to contact the source website. YouTube link support is limited: many public pages provide no downloadable media URLs. Direct media on upload.wikimedia.org or archive.org are supported candidates. A bundled resolver can try standard public streams on this iPhone. Sign-in, age/access verification and DRM are not bypassed; those sources need authorized local-file import.").font(.footnote).foregroundStyle(.secondary)
-                Toggle("I am authorized to use this media and its voices", isOn: $authorized).disabled(local.busy || checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-authorization")
-                Button("Generate speaker references") {
+                Text("Links need internet. If a link is not supported, choose a file you have permission to use.").font(.footnote).foregroundStyle(.secondary)
+                Toggle("I have permission to use this video or audio and its voices", isOn: $authorized).disabled(local.busy || checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-authorization")
+                Button("Create previews from this file") {
                     if let selected { local.start(selected, authorized: authorized, library: library, audio: audio, speech: speech, referenceInput: separatedInput) }
                 }.buttonStyle(.borderedProminent).disabled(selected == nil || !authorized || local.busy || checkingSeparatedInput || clipPreparing)
                     .accessibilityIdentifier("local-video-generate")
-                Button("Download URL and generate references") {
+                Button("Download link and create previews") {
                     local.startURL(sourceURL, authorized: authorized, library: library, audio: audio, speech: speech)
                 }.buttonStyle(.borderedProminent).disabled(sourceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !authorized || local.busy || clipPreparing)
                     .accessibilityIdentifier("local-video-download")
-                if let selectionError { Text(selectionError).foregroundStyle(.red) }
+                Text("First add media and turn on permission above. Then choose the matching create button. Nothing starts just by pasting a link.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                if let selectionError {
+                    Label(selectionError, systemImage: "exclamationmark.circle").foregroundStyle(.red)
+                    Text("Try another link or choose a file. Your saved work is unchanged.").font(.footnote)
+                }
                 Text(local.notice).accessibilityIdentifier("local-video-status")
-                Text("Compatible H.264/AAC downloads also retain a genuine MKV export. Unsupported codecs, reordered frames or tight storage keep the verified MP4 fallback. Analysis uses the MP4 companion inside this app, not a laptop.").font(.footnote).foregroundStyle(.secondary)
+                DisclosureGroup("What this can do") {
+                    Text("Extraction, English transcription and voice previews run inside this app. No laptop or server fallback.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Bundled analysis groups speakers and excludes detected overlap. Local sound screening rejects likely music, singing or insufficient speech. It does not identify characters, remove music or train RVC models. Every accepted reference must pass a word check; resemblance needs listening review.").font(.footnote).foregroundStyle(.secondary)
+                    Text("URL acquisition needs internet to contact the source website. YouTube link support is limited: many public pages provide no downloadable media URLs. Direct media on upload.wikimedia.org or archive.org are supported candidates. A bundled resolver can try standard public streams on this iPhone. Sign-in, age/access verification and DRM are not bypassed; those sources need authorized local-file import.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Compatible H.264/AAC downloads also retain a genuine MKV export. Unsupported codecs, reordered frames or tight storage keep the verified MP4 fallback. Analysis uses the MP4 companion inside this app, not a laptop.").font(.footnote).foregroundStyle(.secondary)
+                }
                 if let mkvExport, !local.busy {
                     ShareLink(item: mkvExport) { Label("Save or share retained MKV", systemImage: "square.and.arrow.up") }
                         .accessibilityIdentifier("local-video-share-mkv")
@@ -105,7 +129,7 @@ struct LocalVideoStudioView: View {
                         }
                         Button("Import an authorized local file instead") { importing = true }
                             .buttonStyle(.borderedProminent).disabled(checkingSeparatedInput || clipPreparing).accessibilityIdentifier("local-video-import-fallback")
-                        Text("Choose a video or audio file you already have permission to use in Files, then enable authorization and tap Generate speaker references. The earlier job and its partial files remain retained.").font(.footnote).foregroundStyle(.secondary)
+                        Text("Choose a video or audio file you already have permission to use in Files, then enable authorization and tap Create previews from this file. The earlier job and its partial files remain retained.").font(.footnote).foregroundStyle(.secondary)
                     }
                     Button("Resume retained job") { local.resume(library: library, audio: audio, speech: speech) }.buttonStyle(.bordered).disabled(clipPreparing)
                 }
@@ -174,8 +198,8 @@ struct LocalVideoStudioView: View {
                     }.accessibilityIdentifier("local-video-visual-evidence")
                 }
                 Divider()
-                Text("Live processing log").font(.headline)
-                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                DisclosureGroup {
+                    TimelineView(.periodic(from: .now, by: 1)) { timeline in
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Log view refreshed " + timeline.date.formatted(date: .omitted, time: .standard)).font(.caption)
                         if let job = local.current {
@@ -193,6 +217,10 @@ struct LocalVideoStudioView: View {
                         } else { Text("No local job has started.").font(.caption) }
                     }
                 }.accessibilityIdentifier("local-video-live-log")
+                } label: {
+                    Text("Processing details").accessibilityIdentifier("local-video-log-toggle")
+                        .frame(minHeight: 44)
+                }
                 if local.current != nil {
                     DisclosureGroup("Complete retained event history") {
                         Text("Oldest entries first, 100 per page. Older jobs may only have their previously saved snapshot. Refresh reads actual events without changing activity timestamps.").font(.caption)
@@ -230,6 +258,8 @@ struct LocalVideoStudioView: View {
                 }
             }.padding(20)
         }
+        .background(StudioPalette.background)
+        .controlSize(.large)
         .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItemGroup(placement:.keyboard) {
@@ -313,7 +343,7 @@ struct LocalVideoStudioView: View {
         }
     }
     private func retainedClipControls(_ source: SeparationClipHandoff.Source) -> some View {
-        GroupBox("Prepare a short clip from retained media") {
+        GroupBox("2 · Pick a short clip") {
             VStack(alignment:.leading,spacing:10) {
                 Text("Choose 0.5–10 seconds from the retained source. Speaker review needs 3–10 seconds. Preparing a clip does not start either analysis or experimental separation.").font(.footnote)
                 TextField("Start in seconds",text:$clipStart).keyboardType(.decimalPad)

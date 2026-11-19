@@ -1,6 +1,43 @@
 import XCTest
 import UIKit
 @MainActor final class LocalVideoStudioUITests: XCTestCase {
+    func testFriendlyStudioAtAccessibilityTextSizeDoesNotStartWork() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-tutorialSeen", "YES", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL", "-laptopURL", "https://127.0.0.1:9"]
+        app.launch()
+        let hero = app.buttons["local-video-studio"]
+        XCTAssertTrue(hero.waitForExistence(timeout: 25))
+        for _ in 0..<5 where !hero.isHittable { app.swipeUp() }
+        XCTAssertTrue(hero.isHittable)
+        hero.tap()
+        XCTAssertTrue(app.navigationBars["Video Voice Studio"].waitForExistence(timeout: 15))
+        let steps = app.descendants(matching: .any).matching(identifier: "video-studio-steps").firstMatch
+        for _ in 0..<5 where !steps.isHittable { app.swipeUp() }
+        XCTAssertTrue(steps.exists)
+        XCTAssertGreaterThanOrEqual(steps.frame.minX, 0)
+        XCTAssertLessThanOrEqual(steps.frame.maxX, app.frame.width)
+        let guidance = XCTAttachment(screenshot: app.screenshot())
+        guidance.name = "Three steps at largest accessibility text"
+        guidance.lifetime = .keepAlways
+        add(guidance)
+        let choose = app.buttons["local-video-import"]
+        for _ in 0..<10 where !choose.isHittable { app.swipeUp() }
+        XCTAssertTrue(choose.isHittable)
+        XCTAssertGreaterThanOrEqual(choose.frame.height, 44)
+        let permission = app.switches["local-video-authorization"]
+        for _ in 0..<10 where !permission.isHittable { app.swipeUp() }
+        XCTAssertTrue(permission.isHittable)
+        XCTAssertEqual(permission.value as? String, "0")
+        let create = app.buttons["local-video-generate"]
+        for _ in 0..<5 where !create.isHittable { app.swipeUp() }
+        XCTAssertFalse(create.isEnabled)
+        XCTAssertFalse(app.buttons["local-video-download"].isEnabled)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Friendly studio largest accessibility text, permission required"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testLegacyLaptopLogOffersStandaloneRecoveryWithoutStartingWork() {
         let app = XCUIApplication()
         app.launchArguments = ["-tutorialSeen", "YES", "-laptopURL", "https://127.0.0.1:9"]
@@ -60,6 +97,12 @@ import UIKit
             XCTAssertFalse(generate.isEnabled)
             XCTAssertTrue(app.buttons["local-video-import"].exists)
             XCTAssertTrue(app.buttons["local-video-paste"].exists)
+            let details = app.buttons["Processing details"]
+            for _ in 0..<8 where !details.isHittable { app.swipeUp() }
+            XCTAssertTrue(details.exists)
+            XCTAssertFalse(app.staticTexts["No local job has started."].exists)
+            details.tap()
+            XCTAssertTrue(app.staticTexts["No local job has started."].waitForExistence(timeout: 10))
             let log = app.descendants(matching: .any).matching(identifier: "local-video-live-log").firstMatch
             for _ in 0..<8 where !log.isHittable { app.swipeUp() }
             XCTAssertTrue(log.exists)

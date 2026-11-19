@@ -9,7 +9,7 @@ public actor AsrManager {
     internal let config: ASRConfig
     private let audioConverter: AudioConverter = AudioConverter()
 
-    internal var preprocessorModel: MLModel?
+    internal var frontend: AsrFrontend?
     internal var encoderModel: MLModel?
     /// Shorter-window encoder functions (see `AsrModels.encoderLadder`).
     internal var encoderLadder: [EncoderLadderFunction] = []
@@ -98,7 +98,7 @@ public actor AsrManager {
 
         if let models {
             self.asrModels = models
-            self.preprocessorModel = models.preprocessor
+            self.frontend = models.frontend
             self.encoderModel = models.encoder
             self.encoderLadder = models.encoderLadder
             self.decoderModel = models.decoder
@@ -177,10 +177,11 @@ public actor AsrManager {
 
         if asrModels?.usesSplitFrontend == true {
             // Split frontend: need both preprocessor and encoder
-            return preprocessorModel != nil && encoderModel != nil
+            return frontend != nil && encoderModel != nil
         } else {
             // Fused frontend: preprocessor contains encoder
-            return preprocessorModel != nil
+            guard case .some(.coreML(_)) = frontend else { return false }
+            return true
         }
     }
 
@@ -190,7 +191,7 @@ public actor AsrManager {
         logger.info("Loading AsrManager with provided models")
 
         self.asrModels = models
-        self.preprocessorModel = models.preprocessor
+        self.frontend = models.frontend
         self.encoderModel = models.encoder
         self.encoderLadder = models.encoderLadder
         self.decoderModel = models.decoder
@@ -271,7 +272,7 @@ public actor AsrManager {
 
     public func cleanup() {
         asrModels = nil
-        preprocessorModel = nil
+        frontend = nil
         encoderModel = nil
         encoderLadder = []
         decoderModel = nil

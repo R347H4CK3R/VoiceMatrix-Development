@@ -1,0 +1,13 @@
+Original-buffer Parakeet frontend and separately converted model components
+
+Parakeet TDT 0.6B v3 by NVIDIA:
+https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/tree/541d1f99c6b0c3cd0b11a95167540bb8edefd82b
+Licensed CC BY 4.0: https://creativecommons.org/licenses/by/4.0/
+Original checkpoint SHA256: 3cbdc85877e668ca7b82d0d56770eb1fac76691f55d6b97545e8d61ca588d10d.
+Selected original window/filterbank Float32 bytes are unchanged. Independent Swift Double mathematical preprocessing replaces the original finite-precision implementation; the prior Float32 output parity failure is retained in diagnostic evidence. This is not FluidInference's converted Preprocessor.mlmodelc.
+
+Core ML encoder, decoder, joint and vocabulary converted by mattt for AnySpeechRecognizer:
+https://huggingface.co/mattt/parakeet-tdt-0.6b-v3-coreml/tree/f2f43eaa239d1ea45191c2a2d5bd0f980dae1b1f
+The pinned conversion manifest designates these components CC BY 4.0 and credits NVIDIA; it describes float16 decoder/joint weights and int8 encoder quantization. Component bytes are unchanged. Encoder.mlmodelc is renamed Encoder_v2.mlmodelc solely for the existing verified runtime filename contract. Encoder8s and the ambiguous converted preprocessor are excluded.
+
+Independent frontend source checkpoint602a31f89efbddfde890dd28149235f897b04563 is Apache2 code informed by pinned NeMo2.3.1 abddc854389e9efcaf38c605ef66af675fc5f8f7 and mattt/AnySpeechRecognizer06e0842b164bdb7ddc16f365757a807980745bf8. Code licenses/notices are separate from the CC BY4 model grant. No permission for source recordings or voice likeness is conferred by model licensing.

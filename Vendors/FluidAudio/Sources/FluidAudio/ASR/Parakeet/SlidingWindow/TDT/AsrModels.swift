@@ -91,6 +91,18 @@ public enum AsrModelVersion: Sendable {
     }
 }
 
+/// Select the frontend for an explicitly local load. Managed model loaders always use CoreML.
+public enum AsrLocalFrontend: Sendable {
+    case coreML
+    /// Original NeMo 2.3.1 math backed by the two pinned NVIDIA Float32 frontend buffers.
+    case originalNemo231
+}
+
+enum AsrFrontend: Sendable {
+    case coreML(MLModel)
+    case originalNemo231(Parakeet231Frontend)
+}
+
 public struct AsrModels: Sendable {
 
     /// Required model names for ASR
@@ -98,7 +110,12 @@ public struct AsrModels: Sendable {
 
     /// Separate encoder model (nil for fused models like tdtCtc110m where preprocessor includes encoder)
     public let encoder: MLModel?
-    public let preprocessor: MLModel
+    let frontend: AsrFrontend
+    /// The CoreML preprocessor, or nil when the explicitly requested native frontend is active.
+    public var preprocessor: MLModel? {
+        guard case .coreML(let model) = frontend else { return nil }
+        return model
+    }
     public let decoder: MLModel
     public let joint: MLModel
     /// Optional CTC decoder head for custom vocabulary (encoder features → CTC logits)
@@ -125,9 +142,26 @@ public struct AsrModels: Sendable {
         vocabulary: [Int: String],
         version: AsrModelVersion
     ) {
+        self.init(
+            encoder: encoder, frontend: .coreML(preprocessor), decoder: decoder, joint: joint,
+            ctcHead: ctcHead, encoderLadder: encoderLadder, configuration: configuration,
+            vocabulary: vocabulary, version: version)
+    }
+
+    private init(
+        encoder: MLModel?,
+        frontend: AsrFrontend,
+        decoder: MLModel,
+        joint: MLModel,
+        ctcHead: MLModel?,
+        encoderLadder: [EncoderLadderFunction] = [],
+        configuration: MLModelConfiguration,
+        vocabulary: [Int: String],
+        version: AsrModelVersion
+    ) {
         self.encoder = encoder
         self.encoderLadder = encoderLadder
-        self.preprocessor = preprocessor
+        self.frontend = frontend
         self.decoder = decoder
         self.joint = joint
         self.ctcHead = ctcHead
@@ -380,13 +414,21 @@ extension AsrModels {
     /// Use this for compatible community weights such as Orukeet. The directory must contain
     /// the version's `.mlmodelc` components and vocabulary; missing files fail locally.
     /// Compile portable `.mlpackage` files on the destination device with `MLModel.compileModel(at:)`.
+    /// The original native frontend is an explicit v3 Encoder_v2 opt-in that requires the two pinned
+    /// `Frontend/` Float32 buffers instead of the CoreML preprocessor.
     public static func loadLocal(
         from directory: URL,
         version: AsrModelVersion = .v3,
         configuration: MLModelConfiguration? = nil,
         encoderPrecision: ParakeetEncoderPrecision = .int8,
-        encoderComputeUnits: MLComputeUnits? = nil
+        encoderComputeUnits: MLComputeUnits? = nil,
+        localFrontend: AsrLocalFrontend = .coreML
     ) throws -> AsrModels {
+        if case .originalNemo231 = localFrontend {
+            guard version == .v3, encoderPrecision == .int8V2, directory.isFileURL else {
+                throw AsrModelsError.loadingFailed("Original NeMo frontend requires the local v3 Encoder_v2")
+            }
+        }
         try checkPlatformSupport(for: version)
         let config = configuration ?? defaultConfiguration()
         _ = try resolvedEncoderComputeUnits(
@@ -418,10 +460,25 @@ extension AsrModels {
         let ctcHead =
             try FileManager.default.fileExists(atPath: ctcURL.path)
             ? component(Names.ctcHeadFile, units: config.computeUnits) : nil
+        let frontend: AsrFrontend
+        switch localFrontend {
+        case .coreML:
+            frontend = .coreML(try component(
+                Names.preprocessorFile, units: version.hasFusedEncoder ? config.computeUnits : .cpuOnly))
+        case .originalNemo231:
+            guard let encoder else {
+                throw AsrModelsError.loadingFailed("Original NeMo frontend requires a split encoder")
+            }
+            try verifyOriginalNemo231Encoder(encoder.modelDescription)
+            let window = try readOriginalFrontendBuffer(
+                from: directory, relativePath: "Frontend/window.f32le", expectedSize: 400 * 4)
+            let filterbank = try readOriginalFrontendBuffer(
+                from: directory, relativePath: "Frontend/filterbank.f32le", expectedSize: 128 * 257 * 4)
+            frontend = .originalNemo231(try Parakeet231Frontend(windowLE: window, filterbankLE: filterbank))
+        }
         return try AsrModels(
             encoder: encoder,
-            preprocessor: component(
-                Names.preprocessorFile, units: version.hasFusedEncoder ? config.computeUnits : .cpuOnly),
+            frontend: frontend,
             decoder: component(names.decoder, units: config.computeUnits),
             joint: component(names.joint, units: config.computeUnits),
             ctcHead: ctcHead,
@@ -429,6 +486,52 @@ extension AsrModels {
             vocabulary: vocabulary,
             version: version
         )
+    }
+
+    private static func readOriginalFrontendBuffer(
+        from directory: URL, relativePath: String, expectedSize: Int
+    ) throws -> Data {
+        guard directory.isFileURL else { throw AsrModelsError.loadingFailed("ASR model root must be local") }
+        let url = directory.appendingPathComponent(relativePath)
+        for folder in [directory, url.deletingLastPathComponent()] {
+            let values = try folder.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true else {
+                throw AsrModelsError.loadingFailed("Invalid original frontend directory")
+            }
+        }
+        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+        guard values.isRegularFile == true, values.isSymbolicLink != true, values.fileSize == expectedSize else {
+            throw AsrModelsError.loadingFailed("Invalid original frontend buffer")
+        }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        guard let data = try handle.read(upToCount: expectedSize + 1), data.count == expectedSize else {
+            throw AsrModelsError.loadingFailed("Invalid original frontend buffer length")
+        }
+        return data
+    }
+
+    private static func verifyOriginalNemo231Encoder(_ description: MLModelDescription) throws {
+        func matches(
+            _ features: [String: MLFeatureDescription],
+            _ expected: [(String, MLMultiArrayDataType, [Int])]
+        ) -> Bool {
+            guard features.count == expected.count else { return false }
+            return expected.allSatisfy { entry in
+                guard let feature = features[entry.0], feature.type == .multiArray,
+                    let constraint = feature.multiArrayConstraint else { return false }
+                return constraint.dataType == entry.1 && constraint.shape.map(\.intValue) == entry.2
+            }
+        }
+        guard matches(
+            description.inputDescriptionsByName,
+            [("mel", .float32, [1, 128, 1501]), ("mel_length", .int32, [1])]),
+            matches(
+                description.outputDescriptionsByName,
+                [("encoder", .float32, [1, 1024, 188]), ("encoder_length", .int32, [1])])
+        else {
+            throw AsrModelsError.loadingFailed("Encoder_v2 does not match the original frontend's fixed 15-second ABI")
+        }
     }
 
     /// Load ASR models from a directory

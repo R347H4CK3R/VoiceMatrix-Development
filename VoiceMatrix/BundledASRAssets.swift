@@ -4,8 +4,8 @@ import CryptoKit
 /// Every selected asset is pinned. Unlisted files (including an optional CTC model)
 /// are rejected before FluidAudio can discover/load them. No runtime downloader.
 enum BundledASRAssets {
-    static let revision = "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe"
-    static let lockSHA256 = "9916ff1ec288709815d015d9201885087e4d12e54f94740daee6e21caddff7a8"
+    static let revision = "f2f43eaa239d1ea45191c2a2d5bd0f980dae1b1f"
+    static let lockSHA256 = "f58c59e24e41e17f701d7b2b7fc4aa45343c232a2119fb6540357f676a6416ce"
     struct Lock: Decodable {
         struct File: Decodable { let size: Int; let sha256: String }
         let schemaVersion: Int
@@ -34,8 +34,8 @@ enum BundledASRAssets {
         let data = try handle.read(upToCount: 65_537) ?? Data()
         guard data.count == size, hex(SHA256.hash(data: data)) == lockSHA256 else { throw Failure.invalid }
         let lock = try JSONDecoder().decode(Lock.self, from: data)
-        guard lock.schemaVersion == 1, lock.repository == "FluidInference/parakeet-tdt-0.6b-v3-coreml",
-              lock.revision == revision, lock.files.count == 20 else { throw Failure.invalid }
+        guard lock.schemaVersion == 1, lock.repository == "mattt/parakeet-tdt-0.6b-v3-coreml",
+              lock.revision == revision, lock.files.count == 19 else { throw Failure.invalid }
         return lock
     }
     static func verify(_ root: URL) throws {

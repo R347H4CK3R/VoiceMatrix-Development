@@ -101,7 +101,8 @@ import FluidAudio
         // right-context token corruption in the original 6-bit Encoder.mlmodelc.
         let manager = AsrManager(config: ASRConfig(parallelChunkConcurrency: 1), models:
             try AsrModels.loadLocal(from: bundle, version: .v3, configuration: config,
-                                    encoderPrecision: .int8V2, encoderComputeUnits: .cpuAndNeuralEngine))
+                                    encoderPrecision: .int8V2, encoderComputeUnits: .cpuAndNeuralEngine,
+                                    localFrontend: .originalNemo231))
         do {
             try Task.checkCancellation()
             var decoder = try TdtDecoderState(decoderLayers: 2)

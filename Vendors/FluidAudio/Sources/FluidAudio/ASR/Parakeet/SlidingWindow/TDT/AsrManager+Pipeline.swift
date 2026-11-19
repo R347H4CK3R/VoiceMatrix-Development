@@ -164,17 +164,31 @@ extension AsrManager {
             }
         }
         let declaredLength: Int? = lengthPolicy.contains(.preprocessorFull) ? nil : effectiveLength
-        let preprocessorInput = try await preparePreprocessorInput(inputAudio, actualLength: declaredLength)
-        let preprocessorAudioArray = preprocessorInput.featureValue(for: "audio_signal")?.multiArrayValue
+        let preprocessorInput: MLFeatureProvider?
+        if case .some(.originalNemo231(_)) = frontend {
+            preprocessorInput = nil
+        } else {
+            preprocessorInput = try await preparePreprocessorInput(inputAudio, actualLength: declaredLength)
+        }
+        let preprocessorAudioArray = preprocessorInput?.featureValue(for: "audio_signal")?.multiArrayValue
         do {
-            guard let preprocessorModel = preprocessorModel else {
-                throw ASRError.notInitialized
-            }
+            // As with legacy CoreML, recheck state after any suspension during input preparation.
+            guard let frontend else { throw ASRError.notInitialized }
             try Task.checkCancellation()
-            let preprocessorOutput = try await preprocessorModel.compatPrediction(
-                from: preprocessorInput,
-                options: predictionOptions
-            )
+            let preprocessorOutput: MLFeatureProvider
+            switch frontend {
+            case .coreML(let preprocessorModel):
+                guard let preprocessorInput else { throw ASRError.notInitialized }
+                preprocessorOutput = try await preprocessorModel.compatPrediction(
+                    from: preprocessorInput,
+                    options: predictionOptions
+                )
+            case .originalNemo231(let native):
+                guard preprocessorInput == nil, encoderModel != nil else { throw ASRError.notInitialized }
+                preprocessorOutput = try Self.nativePreprocessorOutput(
+                    native, audio: inputAudio, validSamples: declaredLength ?? inputAudio.count)
+                try Task.checkCancellation()
+            }
             let encoderOutputProvider: MLFeatureProvider
             if let defaultEncoder = encoderModel {
                 // Split frontend: run separate encoder — the smallest ladder
@@ -240,6 +254,37 @@ extension AsrManager {
         }
     }
 
+    /// Adapt only the original frontend's mel and length tensors to the fixed split v3 encoder.
+    internal static func nativePreprocessorOutput(
+        _ frontend: Parakeet231Frontend, audio: [Float], validSamples: Int
+    ) throws -> MLFeatureProvider {
+        guard audio.count == ASRConstants.maxModelSamples else {
+            throw ASRError.processingFailed("Original frontend requires the existing 15-second padded audio window")
+        }
+        let result = try frontend.features(audio, validSamples: validSamples)
+        guard result.frames == 1501, result.mel.count == 128 * 1501,
+            result.validFrames == validSamples / 160 + 1
+        else {
+            throw ASRError.processingFailed("Original frontend returned incompatible mel dimensions")
+        }
+        let mel = try MLMultiArray(shape: [1, 128, 1501], dataType: .float32)
+        guard mel.strides[1].intValue == 1501, mel.strides[2].intValue == 1 else {
+            throw ASRError.processingFailed("Original frontend requires a contiguous mel tensor")
+        }
+        result.mel.withUnsafeBufferPointer { source in
+            if let baseAddress = source.baseAddress {
+                let destination = mel.dataPointer.bindMemory(to: Float.self, capacity: source.count)
+                destination.update(from: baseAddress, count: source.count)
+            }
+        }
+        let length = try MLMultiArray(shape: [1], dataType: .int32)
+        length[0] = NSNumber(value: result.validFrames)
+        return try MLDictionaryFeatureProvider(dictionary: [
+            "mel": MLFeatureValue(multiArray: mel),
+            "mel_length": MLFeatureValue(multiArray: length),
+        ])
+    }
+
     /// The encoder input with `mel_length` set to the padded mel frame count,
     /// so the encoder treats the zero padding as valid audio (the
     /// `.encoderFull` recovery policy). Inputs without `mel`/`mel_length`
@@ -300,7 +345,7 @@ extension AsrManager {
     private func prepareEncoderInput(
         encoder: MLModel,
         preprocessorOutput: MLFeatureProvider,
-        originalInput: MLFeatureProvider
+        originalInput: MLFeatureProvider?
     ) throws -> MLFeatureProvider {
         let inputDescriptions = encoder.modelDescription.inputDescriptionsByName
 
@@ -320,13 +365,13 @@ extension AsrManager {
                 continue
             }
 
-            if let fallback = originalInput.featureValue(for: name) {
+            if let fallback = originalInput?.featureValue(for: name) {
                 features[name] = fallback
                 continue
             }
 
             let availableInputs = preprocessorOutput.featureNames.sorted().joined(separator: ", ")
-            let fallbackInputs = originalInput.featureNames.sorted().joined(separator: ", ")
+            let fallbackInputs = originalInput?.featureNames.sorted().joined(separator: ", ") ?? ""
             throw ASRError.processingFailed(
                 "Missing required encoder input: \(name). Available inputs: \(availableInputs), "
                     + "fallback inputs: \(fallbackInputs)"

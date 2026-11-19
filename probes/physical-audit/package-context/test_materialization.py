@@ -6,6 +6,7 @@ import plistlib
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("materialization", HERE / "materialization.py")
@@ -18,6 +19,29 @@ class MaterializationTests(unittest.TestCase):
     def binary(platform=2, payload=b""):
         return (struct.pack("<8I", 0xFEEDFACF, 0x100000C, 0, 6, 1, 24, 0, 0)
                 + struct.pack("<6I", 0x32, 24, platform, 26 << 16, 26 << 16, 0) + payload)
+
+    def setUp(self):
+        selected = {key: {**v, "binary_sha": hashlib.sha256(self.binary()).hexdigest()} if v["required"] else v
+                    for key, v in gate.PINS.items()}
+        scoped = patch.object(gate, "PINS", selected)
+        scoped.start()
+        self.addCleanup(scoped.stop)
+
+    @staticmethod
+    def legacy(extra=b""):
+        marker = struct.pack("<4I", 0x25, 16, 10 << 16, 0)
+        return struct.pack("<8I", 0xFEEDFACF, 0x100000C, 0, 1, 1 + bool(extra), len(marker) + len(extra), 0, 0) + marker + extra
+
+    @staticmethod
+    def archive(content):
+        header = (b"member.o/".ljust(16) + b"0".ljust(12) + b"0".ljust(6)
+                  + b"0".ljust(6) + b"644".ljust(8) + str(len(content)).encode().ljust(10) + b"`\n")
+        return b"!<arch>\n" + header + content + (b"\n" if len(content) % 2 else b"")
+
+    @staticmethod
+    def fat(payload, offset=32, count=1, alignment=3):
+        h = struct.pack(">7I", 0xCAFEBABE, count, 0x100000C, 0, offset, len(payload), alignment)
+        return h + b"\0" * max(0, offset - len(h)) + payload
 
     def fixture(self, root):
         rows = []
@@ -73,6 +97,40 @@ class MaterializationTests(unittest.TestCase):
             self.assertFalse(result["requiredValidated"])
             self.assertEqual(result["status"], "unowned-artifact-store")
 
+    def test_reviewed_single_arm64_fat_ar_is_valid_but_wrong_geometry_or_platform_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            binary = Path(td) / "fat"
+            valid_payload = self.archive(self.binary())
+            binary.write_bytes(self.fat(valid_payload))
+            self.assertTrue(gate.ios_device_binary(binary))
+            for invalid in (
+                self.fat(valid_payload, offset=29),
+                self.fat(valid_payload, offset=8),
+                self.fat(valid_payload, count=2),
+                self.fat(valid_payload, alignment=20),
+                self.fat(self.archive(self.binary(platform=7))),
+                self.fat(valid_payload) + b"trailing",
+                self.fat(valid_payload)[:28] + b"oops" + self.fat(valid_payload)[32:]
+            ):
+                binary.write_bytes(invalid)
+                self.assertFalse(gate.ios_device_binary(binary))
+
+    def test_legacy_requires_exact_sha_and_no_conflicting_platform_commands(self):
+        with tempfile.TemporaryDirectory() as td:
+            binary = Path(td) / "legacy.a"
+            raw = self.archive(self.legacy())
+            binary.write_bytes(raw)
+            exact = hashlib.sha256(raw).hexdigest()
+            self.assertFalse(gate.ios_device_binary(binary))
+            self.assertFalse(gate.ios_device_binary(binary, legacy_sha="0"*64))
+            self.assertTrue(gate.ios_device_binary(binary, legacy_sha=exact))
+            for extra in (struct.pack("<6I", 0x32, 24, 7, 26 << 16, 26 << 16, 0),
+                          struct.pack("<4I", 0x24, 16, 10 << 16, 0),
+                          struct.pack("<4I", 0x25, 16, 10 << 16, 0)):
+                bad = self.archive(self.legacy(extra))
+                binary.write_bytes(bad)
+                self.assertFalse(gate.ios_device_binary(binary, legacy_sha=hashlib.sha256(bad).hexdigest()))
+
     def test_symlink_alias_inside_own_artifacts_cannot_pass(self):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td); rows = self.fixture(p)
@@ -90,6 +148,9 @@ class MaterializationTests(unittest.TestCase):
             p.write_bytes(b"!<arch>\n"+head+b)
             self.assertTrue(gate.ios_device_binary(p))
             p.write_bytes(b"!<arch>\n"+head+self.binary(platform=7))
+            self.assertFalse(gate.ios_device_binary(p))
+            fake_member = b"__.SYMDEFX".ljust(16) + self.archive(b"not a real index")[24:]
+            p.write_bytes(b"!<arch>\n" + fake_member + self.archive(b)[8:])
             self.assertFalse(gate.ios_device_binary(p))
 
     def test_escape_and_content_change_are_not_hidden(self):

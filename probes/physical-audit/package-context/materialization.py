@@ -9,10 +9,13 @@ import sys
 PINS = {
     "onnxruntime": {"identity": "onnxruntime", "required": True, "label": "onnx",
                     "url": "https://download.onnxruntime.ai/pod-archive-onnxruntime-c-1.24.2.zip",
-                    "sha": "f7100a992d2a8135168c8afd831e6a58b465349101982aa58b3e11d36e600b54"},
+                    "sha": "f7100a992d2a8135168c8afd831e6a58b465349101982aa58b3e11d36e600b54",
+                    "binary_sha": "6cd9d2a7e174f2de317861331bc4454729bab187da92562f8163dee1be8cb55a"},
     "NemoTextProcessing": {"identity": "fluidaudio", "required": True, "label": "fluid-nemo",
                            "url": "https://github.com/FluidInference/text-processing-rs/releases/download/v0.3.1/NemoTextProcessing.xcframework.zip",
-                           "sha": "5fa8c10d4ec26c1bb2413125f351a7222a4c68a23b74476680fbada7e26fc6aa"},
+                           "sha": "5fa8c10d4ec26c1bb2413125f351a7222a4c68a23b74476680fbada7e26fc6aa",
+                           "binary_sha": "c55443e6c8a49c836f09a96ef5fd4d0f927d791de0ab17106cd74f5886ef393f",
+                           "allow_legacy": True},
     "CSpeechCore": {"identity": "speech-swift", "required": False, "label": "speechswift-optional",
                     "url": "https://github.com/soniqo/speech-core/releases/download/v0.0.14/SpeechCore.xcframework.zip",
                     "sha": "68517f044b98a54e8779dccab850ae383ad5a5595471430c9e10118abec345cd"},
@@ -54,7 +57,7 @@ def files_digest(path):
     return hashlib.sha256(json.dumps(records, separators=(",", ":")).encode()).hexdigest()
 
 
-def ios_macho(handle, start, size):
+def ios_macho(handle, start, size, legacy=False):
     if size < 32:
         return None
     handle.seek(start)
@@ -66,7 +69,7 @@ def ios_macho(handle, start, size):
         return False
     block = handle.read(length)
     cursor = 0
-    found = []
+    found, old_ios = [], []
     for _ in range(count):
         if cursor + 8 > len(block):
             return False
@@ -76,45 +79,82 @@ def ios_macho(handle, start, size):
         if cmd == 0x32:
             if span < 24:
                 return False
-            found.append(struct.unpack_from("<I", block, cursor + 8)[0])
+            platform, _, _, ntools = struct.unpack_from("<4I", block, cursor + 8)
+            if span != 24 + ntools * 8:
+                return False
+            found.append(platform)
+        elif cmd == 0x25:  # LC_VERSION_MIN_IPHONEOS, older than LC_BUILD_VERSION.
+            if span != 16:
+                return False
+            old_ios.append(struct.unpack_from("<2I", block, cursor + 8))
+        elif cmd in (0x24, 0x2F, 0x30):  # conflicting legacy macOS/tvOS/watchOS
+            return False
         cursor += span
-    return cursor == len(block) and found == [2]
+    if cursor != len(block):
+        return False
+    if found:
+        return found == [2] and not old_ios
+    # The one exact reviewed Rust device archive has only this legacy encoding.
+    # Authorization is decided above this reader by SHA of the complete archive.
+    return legacy and kind == 1 and old_ios in ([(0x000A0000, 0)], [(0x000A0000, 0x001A0200)])
 
 
-def ios_device_binary(path):
+def ios_payload(handle, start, size, legacy=False, require_ar=False):
+    end = start + size
+    handle.seek(start)
+    signature = handle.read(8)
+    if signature != b"!<arch>\n":
+        return not require_ar and ios_macho(handle, start, size, legacy) is True
+    position, seen = start + 8, 0
+    for _ in range(65536):
+        if position == end:
+            return bool(seen)
+        if position + 60 > end:
+            return False
+        handle.seek(position)
+        h = handle.read(60)
+        if h[-2:] != b"`\n":
+            return False
+        try:
+            length = int(h[48:58])
+            name = h[:16].decode("ascii").strip()
+            extended = int(name[3:]) if name.startswith("#1/") else 0
+        except (ValueError, UnicodeDecodeError):
+            return False
+        if not 0 <= extended <= min(length, 4096) or position + 60 + length > end:
+            return False
+        if extended:
+            name = handle.read(extended).rstrip(b"\x00").decode("ascii", errors="replace")
+        if name not in ("/", "//", "/SYM64/", "__.SYMDEF", "__.SYMDEF SORTED", "__.SYMDEF_64", "__.SYMDEF_64 SORTED"):
+            if ios_macho(handle, position + 60 + extended, length - extended, legacy) is not True:
+                return False
+            seen += 1
+        position += 60 + length + length % 2
+    return False
+
+
+def ios_device_binary(path, legacy_sha=None):
     size = path.stat().st_size
     if not 0 < size <= BYTE_CAP:
         return False
     with path.open("rb") as handle:
-        signature = handle.read(8)
-        if signature != b"!<arch>\n":
-            return ios_macho(handle, 0, size) is True
-        position, seen = 8, 0
-        for _ in range(65536):
-            if position == size:
-                return bool(seen)
-            if position + 60 > size:
-                return False
-            handle.seek(position)
-            h = handle.read(60)
-            if h[-2:] != b"`\n":
-                return False
-            try:
-                length = int(h[48:58])
-                name = h[:16].decode("ascii").strip()
-                extended = int(name[3:]) if name.startswith("#1/") else 0
-            except (ValueError, UnicodeDecodeError):
-                return False
-            if not 0 <= extended <= min(length, 4096) or position + 60 + length > size:
-                return False
-            if extended:
-                name = handle.read(extended).rstrip(b"\x00").decode("ascii", errors="replace")
-            if name not in ("/", "//", "/SYM64/") and not name.startswith("__.SYMDEF"):
-                if ios_macho(handle, position + 60 + extended, length - extended) is not True:
-                    return False
-                seen += 1
-            position += 60 + length + length % 2
-    return False
+        legacy = bool(legacy_sha and hashlib.file_digest(handle, "sha256").hexdigest() == legacy_sha)
+        handle.seek(0)
+        head = handle.read(28)
+        if head[:4] != b"\xca\xfe\xba\xbe":
+            return ios_payload(handle, 0, size, legacy=legacy)
+        # Exact accepted universal shape: big-endian FAT32, one ARM64 ALL
+        # architecture, exactly bounded/aligned payload and no extra slices.
+        if len(head) != 28:
+            return False
+        _, count, cpu, subtype, offset, length, alignment = struct.unpack(">7I", head)
+        if ((count, cpu, subtype) != (1, 0x100000C, 0) or alignment > 20
+                or not len(head) <= offset <= len(head) + 4096 or offset % (1 << alignment)
+                or length == 0 or offset + length != size):
+            return False
+        if any(handle.read(offset - len(head))):
+            return False  # Fat header padding is not an untracked member or slice.
+        return ios_payload(handle, offset, length, require_ar=True)
 
 
 def check_entry(row, pin, own):
@@ -164,8 +204,13 @@ def check_entry(row, pin, own):
             binary = library
         if binary.is_symlink() or not binary.is_file() or not binary.stat().st_size:
             return {"status": "missing-ios-device-slice"}
-        if not ios_device_binary(binary):
+        binary_sha = pin.get("binary_sha")
+        if not ios_device_binary(binary, legacy_sha=binary_sha if pin.get("allow_legacy") else None):
             return {"status": "invalid-ios-device-binary"}
+        if binary_sha is not None:
+            with binary.open("rb") as handle:
+                if hashlib.file_digest(handle, "sha256").hexdigest() != binary_sha:
+                    return {"status": "device-binary-pin-mismatch"}
         return {"status": "validated-state-and-ios-slice", "iosSliceSHA256": files_digest(slice_root)}
     except (OSError, TypeError, KeyError, ValueError, AttributeError, RuntimeError, plistlib.InvalidFileException):
         return {"status": "invalid-materialization"}

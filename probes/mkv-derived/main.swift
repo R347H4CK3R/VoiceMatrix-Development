@@ -66,6 +66,14 @@ import Foundation
         let second = timed(57, 34)
         try verify([first, second])
         try verify([marker, first, second])
+        func terminal(samples: Int = 0, bytes: Int = 0, hasImage: Bool = false,
+                      pts: CMTime = .invalid, duration: CMTime = .zero, dts: CMTime = .invalid,
+                      emptyMedia: String = "absent", endsPrevious: String = "absent") -> Sample {
+            Sample(samples: samples, bytes: bytes, hasImage: hasImage, pts: pts, duration: duration,
+                   dts: dts, emptyMedia: emptyMedia, endsPreviousSampleDuration: endsPrevious)
+        }
+        try verify([first, second, terminal()])
+        try verify([marker, first, second, terminal()])
         let malformed = [
             [marker, marker, first, second], [first, second, marker],
             [timed(0, 0, samples: 0, bytes: 1), first, second],
@@ -74,7 +82,16 @@ import Foundation
             [timed(0, 1, samples: 0, bytes: 0), first, second],
             [timed(0, 58), second], [first, timed(58, 33)], [first, timed(57, 33)],
             [timed(0, 57, samples: 2), second], [timed(0, 57, bytes: 0), second],
-            [first], [first, second, timed(91, 1)]
+            [first], [first, second, timed(91, 1)],
+            [terminal(), first, second], [first, terminal(), second], [first, terminal()],
+            [first, second, terminal(), terminal()], [first, second, terminal(), marker],
+            [first, second, terminal(), timed(91, 1)],
+            [first, second, terminal(samples: 1)], [first, second, terminal(bytes: 1)],
+            [first, second, terminal(hasImage: true)], [first, second, terminal(pts: .zero)],
+            [first, second, terminal(dts: .zero)], [first, second, terminal(duration: .invalid)],
+            [first, second, terminal(duration: CMTime(value: 1, timescale: 1000))],
+            [first, second, terminal(emptyMedia: "true")],
+            [first, second, terminal(endsPrevious: "true")]
         ]
         for (i, observations) in malformed.enumerated() {
             var rejected = false

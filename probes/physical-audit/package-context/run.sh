@@ -57,6 +57,7 @@ common=(-project "$project" -scheme VoiceMatrixPhysicalAudit -disableAutomaticPa
 report_failure() {
   printf 'audit_package_context_failed_phase=%s\n' "$1"
   "${offline[@]}" python3 "$hosted/native_failure.py" "$2" "$3"
+  "${offline[@]}" python3 "$probe/failure_context.py" "$3"
   exit "$2"
 }
 # Only this already-reviewed dependency materialization is allowed to reach the network.

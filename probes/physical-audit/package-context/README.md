@@ -33,3 +33,20 @@ Run 44538411837 passed frozen resolution but the first snapshot rejected ONNX an
 - ONNX: 52,138,597-byte official archive, original SHA in Package.swift. Its 41,190,992-byte device binary has SHA 6cd9d2a7e174f2de317861331bc4454729bab187da92562f8163dee1be8cb55a. It is a single-slice big-endian FAT32 wrapper, exact ARM64 ALL slice at aligned offset 32, around a static archive. Its one actual Mach-O object has ARM64 and LC_BUILD_VERSION platform 2. The old reader only accepted a thin Mach-O or direct ar archive, so it never entered that wrapper. The fix verifies the exact standalone geometry, one CPU, no overlapping/trailing slices, ar and the nested device platform.
 - Nemo: 87,267,919-byte official archive, exact original package SHA. Its 29,432,088-byte device ar binary has SHA c55443e6c8a49c836f09a96ef5fd4d0f927d791de0ab17106cd74f5886ef393f. All 451 non-index members are ARM64 Mach-O objects with one LC_VERSION_MIN_IPHONEOS (0x25) and no conflicting platform command; 407 have min iOS 10.0/SDK unspecified and 44 have SDK 26.2. The modern-only verifier rejected all. No broad legacy exception: the exact previously established Nemo archive payload SHA and trusted SwiftPM source archive pin are both required, plus unique device slot/owned path, ARM64 object and only a matching legacy platform record. Other legacy binaries, simulator, alternate architecture, duplicate/mixed platform commands, malformed wrappers and path drift stay rejected. The Mach-O scope follows Apple's load-command headers and LLVM's legacy platform interpretation: https://github.com/apple-oss-distributions/xnu/blob/main/EXTERNAL_HEADERS/mach-o/loader.h and https://github.com/llvm/llvm-project/blob/main/lld/MachO/InputFiles.cpp .
 - Reproduction (no downloads baked in): python3 probes/physical-audit/package-context/replay_official_inputs.py /absolute/approved/onnx.zip /absolute/approved/nemo.zip. No SDK dependency, compiled app, shell execution of assets or file upload. Passing the reader on official bytes does not prove actual SwiftPM state continuity or offline A/B planning; those remain to be measured natively.
+
+### Exact failure discriminator
+
+The first corrected native probe verified all device slices, then failed before regeneration.
+The previous generic diagnostic combined several types of permission error. On a failing
+phase only, the added parser reports fixed identifiers for full-line spellings, including
+manifest evaluation and sandbox application refusal separately. It reads only the same
+bounded private log, emits no excerpts, and deletes the owned scratch as before. Unknown
+text gets an empty list, not an explanation. A sandbox-application marker alongside an
+invalid-manifest marker is consistent with nested manifest sandboxing, but is not by itself
+proof the markers originated from the same child. The native profile, flags and exact
+graph/materialization gates are unchanged.
+
+SwiftPM 6.3 public reference: ManifestLoader runs compiled manifests under
+Sandbox.apply before treating nonzero exit as invalid manifest; Basics/Sandbox uses
+/usr/bin/sandbox-exec on macOS. This explains the hypothesis without assuming that
+the installed Xcode embeds exactly the upstream source or weakening either boundary.

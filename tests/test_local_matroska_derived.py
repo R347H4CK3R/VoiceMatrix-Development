@@ -77,6 +77,26 @@ class DerivedSourcePolicy(unittest.TestCase):
                 self.assertIn(marker, source)
 
 
+    def test_verified_packet_tape_pumps_each_ready_input_independently(self):
+        source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
+        for marker in ("IndexedPacket", "spooling-mkv-packets", "packetIndexLimit",
+                       "if !audioFinished, audio.isReadyForMoreMediaData",
+                       "if !videoFinished, video.isReadyForMoreMediaData",
+                       "if !progressed"):
+            self.assertIn(marker, source)
+        self.assertLess(source.index("try reader.forEachPacket"), source.index("writer.startWriting()"))
+        self.assertNotIn("while !input.isReadyForMoreMediaData", source)
+        probe = (ROOT / "probes/mkv-derived/main.swift").read_text()
+        self.assertIn("appendProgress:", probe)
+        self.assertIn('"cancel-pump"', probe)
+
+    def test_explicit_zero_start_trim_is_first_aac_packet_only(self):
+        source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
+        self.assertIn("explicitZeroStartTrim: audioIndex == 0", source)
+        self.assertIn("kCMSampleBufferAttachmentKey_TrimDurationAtStart", source)
+        self.assertIn("CMTimeCopyAsDictionary(.zero", source)
+
+
 # The reference used by both fixture rates is generated independently by
 # ffmpeg from the exact verified MKV, after the sole original has been removed.
 @unittest.skipUnless(platform.system() == "Darwin" and all(shutil.which(p) for p in ("swiftc", "ffmpeg", "ffprobe")),
@@ -164,6 +184,11 @@ class DerivedNativeParity(unittest.TestCase):
         status = subprocess.run([probe, "cancel", mkv, digest, canceled], capture_output=True, timeout=240)
         self.assertEqual(status.returncode, 2, status.stderr)
         self.assertFalse(canceled.exists())
+        pump_canceled = d / "pump-cancel.mov"
+        status = subprocess.run([probe, "cancel-pump", mkv, digest, pump_canceled],
+                                capture_output=True, timeout=240)
+        self.assertEqual(status.returncode, 2, status.stderr)
+        self.assertFalse(pump_canceled.exists())
         tiny = d / "tiny.mov"
         status = subprocess.run([probe, "derive", mkv, digest, tiny, "100"],
                                 capture_output=True, timeout=240)

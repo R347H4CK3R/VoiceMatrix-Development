@@ -34,9 +34,19 @@ enum LocalMatroskaDerivedMedia {
         }
     }
 
+    private struct IndexedPacket {
+        let offset: UInt64
+        let size: Int
+        let pts: Int64
+        let duration: UInt64
+        let key: Bool
+        let discardNanoseconds: UInt64
+    }
+
     static func derive(sourceMKV: URL, expectedSHA256: String, destination: URL,
                        maximumBytes: Int64 = 536_870_912,
-                       packetProgress: @Sendable (Int) -> Void = { _ in }) async throws -> Receipt {
+                       packetProgress: @Sendable (Int) -> Void = { _ in },
+                       appendProgress: @Sendable (Int) -> Void = { _ in }) async throws -> Receipt {
         let deadline = ContinuousClock.now + .seconds(180)
         var phase = "source-validation"
         var track = "none"
@@ -70,7 +80,43 @@ enum LocalMatroskaDerivedMedia {
         try fm.createDirectory(at: staging, withIntermediateDirectories: false,
                                attributes: [.posixPermissions: 0o700])
         defer { try? fm.removeItem(at: staging) }
+        // Validate and spool before starting the writer. Waiting on writer
+        // readiness during the sequential MKV callback can prevent the other
+        // track from catching up, deadlocking AVFoundation interleaving.
+        phase = "spooling-mkv-packets"
+        let tapeURL = staging.appendingPathComponent("packets")
+        guard fm.createFile(atPath: tapeURL.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
+            throw Failure.destination
+        }
+        let tape = try FileHandle(forUpdating: tapeURL)
+        defer { try? tape.close() }
+        let packetIndexLimit = 300_000
+        var bytes: UInt64 = 0
+        var audioTape = [IndexedPacket]()
+        var videoTape = [IndexedPacket]()
+        try reader.forEachPacket { packet in
+            try check()
+            count += 1
+            lastMKVPTS = packet.presentationMilliseconds
+            track = packet.trackNumber == reader.video.number ? "video" : "audio"
+            guard count <= packetIndexLimit, UInt64(packet.bytes.count) <= UInt64(maximumBytes) - bytes else {
+                throw Failure.limit
+            }
+            packetProgress(count)
+            try check()
+            let indexed = IndexedPacket(offset: bytes, size: packet.bytes.count,
+                                        pts: packet.presentationMilliseconds, duration: packet.durationMilliseconds,
+                                        key: packet.isKeyFrame, discardNanoseconds: packet.discardPaddingNanoseconds)
+            try tape.write(contentsOf: packet.bytes)
+            bytes += UInt64(indexed.size)
+            if track == "video" { videoTape.append(indexed) }
+            else { audioTape.append(indexed) }
+        }
+        try check() // Final cue and full source hash checks succeeded.
+        guard let last = videoTape.last, !audioTape.isEmpty else { throw Failure.unsupported("empty track") }
+
         phase = "writer-startup"
+        track = "none"
         let output = staging.appendingPathComponent("derived.mov")
         let writer = try AVAssetWriter(outputURL: output, fileType: .mov)
         writer.directoryForTemporaryFiles = staging
@@ -92,76 +138,80 @@ enum LocalMatroskaDerivedMedia {
         defer { if writer.status == .writing { writer.cancelWriting() } }
         writer.startSession(atSourceTime: .zero)
 
-        var pending: LocalMatroskaReader.Packet?
+        var audioIndex = 0, videoIndex = 0
+        var audioFinished = false, videoFinished = false
         var removed: Int64 = 0
-        var payloadBytes: Int64 = 0
 
-        func append(_ packet: LocalMatroskaReader.Packet, into input: AVAssetWriterInput,
-                    format: CMFormatDescription, pts: CMTime, duration: CMTime, trim: CMTime? = nil) throws {
+        func append(_ item: IndexedPacket, into input: AVAssetWriterInput,
+                    format: CMFormatDescription, pts: CMTime, duration: CMTime,
+                    trim: CMTime? = nil, explicitZeroStartTrim: Bool = false) throws {
             track = input === video ? "video" : "audio"
-            phase = "preparing-append"
-            try check()
-            payloadBytes += Int64(packet.bytes.count)
-            guard payloadBytes <= maximumBytes else { throw Failure.limit }
-            phase = "waiting-for-input-readiness"
-            while !input.isReadyForMoreMediaData {
-                try check()
-                guard writer.status == .writing else { throw Failure.unsupported("writer stopped") }
-                // This synchronous packet callback is off the UI actor.
-                // The monotonic deadline also bounds a stalled writer input.
-                Darwin.usleep(2_000)
-            }
             phase = "appending-packet"
-            let buffer = try sample(packet, format: format, pts: pts, duration: duration, endTrim: trim)
-            guard input.append(buffer) else { throw Failure.unsupported("packet append: \(String(describing: writer.error))") }
-            if input === video { lastVideoPTS = packet.presentationMilliseconds }
-            else { lastAudioPTS = packet.presentationMilliseconds }
-        }
-
-        func appendVideo(_ packet: LocalMatroskaReader.Packet, duration: Int64) throws {
-            try append(packet, into: video, format: videoFormat,
-                       pts: CMTime(value: packet.presentationMilliseconds, timescale: 1000),
-                       duration: CMTime(value: duration, timescale: 1000))
-            videoPTS.append(packet.presentationMilliseconds)
-        }
-
-        phase = "reading-mkv-packets"
-        try reader.forEachPacket { packet in
             try check()
-            count += 1
-            lastMKVPTS = packet.presentationMilliseconds
-            track = packet.trackNumber == reader.video.number ? "video" : "audio"
-            phase = "packet-progress-callback"
-            packetProgress(count)
-            try check()
-            if packet.trackNumber == reader.video.number {
-                if let previous = pending {
-                    // PTS is authoritative where the individually rounded
-                    // MKV duration and next video timestamp differ by 1 ms.
-                    try appendVideo(previous, duration: packet.presentationMilliseconds - previous.presentationMilliseconds)
-                }
-                pending = packet
-            } else {
-                // The reader already validated that MKV PTS agrees with this
-                // exact AAC frame clock. SeekPreRoll is not a leading trim.
-                removed = Int64((packet.discardPaddingNanoseconds * UInt64(rate) + 500_000_000) / 1_000_000_000)
-                let trim = removed == 0 ? nil : CMTime(value: removed, timescale: rate)
-                try append(packet, into: audio, format: audioFormat,
-                           pts: CMTime(value: audioPackets * 1024, timescale: rate),
-                           duration: CMTime(value: 1024, timescale: rate), trim: trim)
-                audioPackets += 1
+            try tape.seek(toOffset: item.offset)
+            guard let data = try tape.read(upToCount: item.size), data.count == item.size else {
+                throw Failure.unsupported("truncated staged packet")
             }
-            phase = "reading-mkv-packets"
-            track = "none"
+            let packet = LocalMatroskaReader.Packet(trackNumber: input === video ? reader.video.number : reader.audio.number,
+                            presentationMilliseconds: item.pts, durationMilliseconds: item.duration,
+                            isKeyFrame: item.key, discardPaddingNanoseconds: item.discardNanoseconds, bytes: data)
+            let buffer = try sample(packet, format: format, pts: pts, duration: duration,
+                                    endTrim: trim, explicitZeroStartTrim: explicitZeroStartTrim)
+            guard input.append(buffer) else { throw Failure.unsupported("packet append failed (writerStatus=\(writer.status.rawValue))") }
+            if input === video { lastVideoPTS = item.pts }
+            else { lastAudioPTS = item.pts }
         }
-        guard let last = pending else { throw Failure.unsupported("no video") }
-        try appendVideo(last, duration: Int64(last.durationMilliseconds))
-        let videoEnd = last.presentationMilliseconds + Int64(last.durationMilliseconds)
+
+        while !audioFinished || !videoFinished {
+            track = "both"
+            phase = "waiting-for-input-readiness"
+            try check()
+            guard writer.status == .writing else { throw Failure.unsupported("writer stopped (writerStatus=\(writer.status.rawValue))") }
+            var progressed = false
+            if !audioFinished, audio.isReadyForMoreMediaData {
+                let item = audioTape[audioIndex]
+                // AAC packets have a 1024-frame clock. Seek pre-roll does not
+                // imply a leading assembly edit. Zero is an explicit native
+                // trim experiment; the decoded oracle still gates publication.
+                removed = Int64((item.discardNanoseconds * UInt64(rate) + 500_000_000) / 1_000_000_000)
+                let trim = removed == 0 ? nil : CMTime(value: removed, timescale: rate)
+                try append(item, into: audio, format: audioFormat,
+                           pts: CMTime(value: Int64(audioIndex) * 1024, timescale: rate),
+                           duration: CMTime(value: 1024, timescale: rate), trim: trim,
+                           explicitZeroStartTrim: audioIndex == 0)
+                audioIndex += 1
+                audioPackets += 1
+                appendProgress(audioIndex + videoIndex)
+                try check()
+                if audioIndex == audioTape.count {
+                    audio.markAsFinished()
+                    audioFinished = true
+                }
+                progressed = true
+            }
+            if !videoFinished, video.isReadyForMoreMediaData {
+                let item = videoTape[videoIndex]
+                let duration = videoIndex + 1 < videoTape.count
+                    ? videoTape[videoIndex + 1].pts - item.pts : Int64(item.duration)
+                try append(item, into: video, format: videoFormat,
+                           pts: CMTime(value: item.pts, timescale: 1000),
+                           duration: CMTime(value: duration, timescale: 1000))
+                videoIndex += 1
+                videoPTS.append(item.pts)
+                appendProgress(audioIndex + videoIndex)
+                try check()
+                if videoIndex == videoTape.count {
+                    video.markAsFinished()
+                    videoFinished = true
+                }
+                progressed = true
+            }
+            if !progressed { Darwin.usleep(2_000) }
+        }
+        let videoEnd = last.pts + Int64(last.duration)
         let audioFrames = audioPackets * 1024 - removed
         phase = "finishing-writer"
         track = "none"
-        video.markAsFinished()
-        audio.markAsFinished()
 
         let finish = DispatchSemaphore(value: 0)
         writer.finishWriting { finish.signal() }
@@ -223,7 +273,8 @@ enum LocalMatroskaDerivedMedia {
     }
 
     private static func sample(_ packet: LocalMatroskaReader.Packet, format: CMFormatDescription,
-                               pts: CMTime, duration: CMTime, endTrim: CMTime?) throws -> CMSampleBuffer {
+                               pts: CMTime, duration: CMTime, endTrim: CMTime?,
+                               explicitZeroStartTrim: Bool) throws -> CMSampleBuffer {
         var block: CMBlockBuffer?
         let size = packet.bytes.count
         guard CMBlockBufferCreateWithMemoryBlock(allocator: kCFAllocatorDefault, memoryBlock: nil,
@@ -246,6 +297,11 @@ enum LocalMatroskaDerivedMedia {
             let dictionary = unsafeBitCast(entry, to: CFMutableDictionary.self)
             CFDictionarySetValue(dictionary, Unmanaged.passUnretained(kCMSampleAttachmentKey_NotSync).toOpaque(),
                                  Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
+        }
+        if explicitZeroStartTrim {
+            CMSetAttachment(output, key: kCMSampleBufferAttachmentKey_TrimDurationAtStart,
+                            value: CMTimeCopyAsDictionary(.zero, allocator: kCFAllocatorDefault),
+                            attachmentMode: kCMAttachmentMode_ShouldPropagate)
         }
         if let endTrim {
             CMSetAttachment(output, key: kCMSampleBufferAttachmentKey_TrimDurationAtEnd,

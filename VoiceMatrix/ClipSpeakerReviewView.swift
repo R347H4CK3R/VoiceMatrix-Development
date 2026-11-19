@@ -61,7 +61,7 @@ struct ClipSpeakerReviewView: View {
             }
             if let result = review.result {
                 ForEach(result.groups) { group in
-                    Section("Speaker guess \(group.id)") {
+                    Section {
                         if let alias = result.alias(for: group.speaker) {
                             Text("Your label: \(alias)").accessibilityIdentifier("clip-speaker-review-alias-" + group.id)
                         }
@@ -100,8 +100,10 @@ struct ClipSpeakerReviewView: View {
                             .disabled(unavailable)
                             .accessibilityIdentifier("clip-speaker-review-remove-" + group.id)
                         }
+                    } header: {
+                        Text("Speaker guess \(group.id)")
+                            .accessibilityIdentifier("clip-speaker-review-speaker-" + group.id)
                     }
-                    .accessibilityIdentifier("clip-speaker-review-speaker-" + group.id)
                 }
             }
         }

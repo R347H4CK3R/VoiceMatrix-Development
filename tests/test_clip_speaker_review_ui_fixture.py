@@ -17,6 +17,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ClipSpeakerReviewUIFixtureTests(unittest.TestCase):
+    def test_speaker_section_identifier_is_header_only_and_failures_keep_hierarchy(self):
+        view = (ROOT / "VoiceMatrix/ClipSpeakerReviewView.swift").read_text()
+        self.assertIn('} header: {\n                        Text("Speaker guess \\(group.id)")', view)
+        self.assertIn('.accessibilityIdentifier("clip-speaker-review-label-" + group.id)', view)
+        ui = (ROOT / "VoiceMatrixUITests/ClipSpeakerReviewUITests.swift").read_text()
+        self.assertIn('XCTAttachment(string: app.debugDescription)', ui)
+
     def test_oracle_rejects_missing_changed_and_unexpected_app_outputs(self):
         from tools.seed_clip_speaker_review_ui import seed, check, sha, SOURCE_JOB_ID
         with tempfile.TemporaryDirectory() as location:

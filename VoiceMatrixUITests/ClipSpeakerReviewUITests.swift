@@ -10,6 +10,10 @@ import XCTest
             let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: upward ? 0.33 : 0.72))
             from.press(forDuration: 0.01, thenDragTo: to)
         }
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "Full accessibility hierarchy when reveal failed"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
         XCTAssertTrue(element.exists && element.isHittable, "Could not reveal \(element)")
     }
 

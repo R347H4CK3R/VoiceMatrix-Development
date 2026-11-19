@@ -1,0 +1,45 @@
+name: Strict MKV source native checks
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/python-mkv-source]
+    paths:
+      - 'VoiceMatrix/LocalMatroska*.swift'
+      - 'VoiceMatrixTests/LocalMatroska*.swift'
+      - 'probes/mkv-reader/**'
+      - 'tests/test_local_matroska_reader_target.py'
+      - '.github/workflows/strict-mkv-source.yml'
+permissions:
+  contents: read
+jobs:
+  reader:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Real compressed packet parity with original MP4 removed
+        run: |
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          python3 -m unittest tests.test_local_matroska_reader_target -v
+      - name: Native hostile container and preservation tests
+        run: |
+          set -o pipefail
+          P="$RUNNER_TEMP/MKVReaderChecks"
+          mkdir -p "$P/Sources/NativeMatroska" "$P/Tests/NativeMatroskaTests"
+          cp VoiceMatrix/{LocalMatroskaReader,MatroskaWriter}.swift "$P/Sources/NativeMatroska/"
+          sed 's/@testable import VoiceMatrix/@testable import NativeMatroska/' VoiceMatrixTests/LocalMatroskaReaderTests.swift > "$P/Tests/NativeMatroskaTests/LocalMatroskaReaderTests.swift"
+          cat > "$P/Package.swift" <<'SWIFT'
+          // swift-tools-version: 5.10
+          import PackageDescription
+          let package = Package(name: "NativeMatroska", platforms: [.macOS("15.0")], targets: [.target(name: "NativeMatroska"), .testTarget(name: "NativeMatroskaTests", dependencies: ["NativeMatroska"])])
+          SWIFT
+          swift test --package-path "$P" 2>&1 | tee mkv-reader-native.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: strict-mkv-reader-native-evidence
+          path: mkv-reader-native.log
+          if-no-files-found: warn

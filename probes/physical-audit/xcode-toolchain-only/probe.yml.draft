@@ -1,0 +1,28 @@
+# INERT, source-only proposal. Root approval required before installing as a workflow.
+name: Single network-denied Xcode device stub (no package or output)
+on:
+  push:
+    branches: [verification/physical-audit-xcode-toolchain]
+permissions:
+  contents: read
+jobs:
+  toolchain:
+    if: github.repository == 'R347H4CK3R/VoiceMatrix-Development' && github.ref == 'refs/heads/verification/physical-audit-xcode-toolchain' && github.event.repository.private == false && github.run_attempt == 1
+    runs-on: macos-26
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Run no-resource bounded Xcode toolchain probe
+        env:
+          EXPECTED_PROBE_SOURCE_PARENT: NEEDS_APPROVED_EXACT_PROBE_PARENT
+        run: |
+          set -euo pipefail
+          guard() { printf 'audit_toolchain_activation_guard=%s\n' "$1" >&2; exit 1; }
+          [[ "$EXPECTED_PROBE_SOURCE_PARENT" =~ ^[a-f0-9]{40}$ ]] || guard parent-format
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || guard source
+          [[ "$(git cat-file -p HEAD | sed -n 's/^parent //p')" == "$EXPECTED_PROBE_SOURCE_PARENT" ]] || guard parent
+          git diff --quiet "$EXPECTED_PROBE_SOURCE_PARENT" HEAD -- . ':(exclude).github/workflows/physical-audit-xcode-toolchain.yml' || guard scope
+          bash probes/physical-audit/xcode-toolchain-only/run.sh

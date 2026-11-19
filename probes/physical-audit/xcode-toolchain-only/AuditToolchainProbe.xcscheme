@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme version="1.7">
+  <BuildAction parallelizeBuildables="NO" buildImplicitDependencies="NO">
+    <BuildActionEntries>
+      <BuildActionEntry buildForTesting="NO" buildForRunning="YES" buildForProfiling="NO" buildForArchiving="YES" buildForAnalyzing="NO">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A10000000000000000000005" BuildableName="AuditToolchainProbe.app" BlueprintName="AuditToolchainProbe" ReferencedContainer="container:AuditToolchainProbe.xcodeproj"/>
+      </BuildActionEntry>
+    </BuildActionEntries>
+  </BuildAction>
+  <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="NO"/>
+</Scheme>

@@ -25,7 +25,12 @@ import UIKit
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "Top edge of the real field focuses text entry")
         field.typeText(invalid)
-        app.buttons["Done"].tap()
+        let done = app.toolbars.buttons.matching(identifier: "Done")
+        XCTAssertEqual(done.count, 1, "Use the accessory toolbar, not the keyboard return key")
+        XCTAssertTrue(done.element.isHittable)
+        done.element.tap()
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 10), .completed)
         let paste = app.buttons["local-video-paste"]
         reveal(paste)
         XCTAssertGreaterThanOrEqual(paste.frame.height, 44)

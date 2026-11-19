@@ -116,26 +116,34 @@ def check(container, baseline, identity):
     assert media_inventory(container) == approved_media, "Unexpected media or mutation"
     reviews = support / "VocalSeparation-SpeakerReviews"
     assert reviews.is_dir() and not reviews.is_symlink(), "No owned review persisted"
-    clip_id, clip_sha, receipt_sha, frames = clips[8]
-    sidecar = reviews / (clip_id + ".json")
-    assert list(reviews.iterdir()) == [sidecar] and sidecar.is_file() and not sidecar.is_symlink(), (
-        "Only the explicitly authorized first clip may have an analysis")
-    record = json.loads(sidecar.read_text())
-    binding = record["binding"]
-    assert record["version"] == 1 and binding["clipID"] == clip_id and binding["clipSHA256"] == clip_sha
-    assert binding["receiptSHA256"] == receipt_sha and re.fullmatch(r"[0-9a-f]{64}", binding["analysisSHA256"])
-    analysis = record["analysis"]
-    assert analysis["selectionPolicyVersion"] == 5 and analysis["modelRevision"] == MODEL_REVISION
-    assert abs(analysis["seconds"] - frames / 44_100) <= 1 / 16000 + 1e-9
-    overlap = analysis["rawOverlap"]
-    assert overlap["sourceSHA256"] == clip_sha and overlap["modelRevision"] == MODEL_REVISION
-    assert overlap["version"] == 1 and overlap["duration"] == analysis["seconds"] and any(n > 0 for n in overlap["counts"])
-    first = min(analysis["segments"], key=lambda turn: (turn["start"], turn["speaker"]))
-    assert record["aliases"] == [{"binding": binding, "name": "QA narrator", "speaker": first["speaker"]}]
+    expected_sidecars = {reviews / (clip[0] + ".json") for clip in clips.values()}
+    assert set(reviews.iterdir()) == expected_sidecars, "Exactly two explicitly authorized reviews must persist"
+    for seconds, (clip_id, clip_sha, receipt_sha, frames) in clips.items():
+        sidecar = reviews / (clip_id + ".json")
+        assert sidecar.is_file() and not sidecar.is_symlink()
+        record = json.loads(sidecar.read_text())
+        binding = record["binding"]
+        assert record["version"] == 1 and binding["clipID"] == clip_id and binding["clipSHA256"] == clip_sha
+        assert binding["receiptSHA256"] == receipt_sha and re.fullmatch(r"[0-9a-f]{64}", binding["analysisSHA256"])
+        analysis = record["analysis"]
+        assert analysis["selectionPolicyVersion"] == 5 and analysis["modelRevision"] == MODEL_REVISION
+        assert abs(analysis["seconds"] - frames / 44_100) <= 1 / 16000 + 1e-9
+        overlap = analysis["rawOverlap"]
+        assert overlap["sourceSHA256"] == clip_sha and overlap["modelRevision"] == MODEL_REVISION
+        assert overlap["version"] == 1 and overlap["duration"] == analysis["seconds"] and any(n > 0 for n in overlap["counts"])
+        assert analysis["segments"], "Expected actual model turns for each clip"
+        if seconds == 8:
+            first = min(analysis["segments"], key=lambda turn: (turn["start"], turn["speaker"]))
+            assert record["aliases"] == [{"binding": binding, "name": "QA narrator", "speaker": first["speaker"]}]
+            assert record.get("turnLabels") == [{"binding": binding, "name": "QA relabeled turn",
+                                                  "turn": {"index": 0, **analysis["segments"][0]}}]
+            reviewed_clip_seconds = analysis["seconds"]
+        else:
+            assert record["aliases"] == [] and not record.get("turnLabels"), "Labels propagated across clips"
     proof = {"identity": identity, "beforeContainer": before["beforeContainer"], "afterContainer": str(container),
-             "sourceSHA256": before["sourceSHA256"], "reviewedClipSeconds": analysis["seconds"],
-             "oneExplicitlyAnalyzedClip": True, "clipSpecificAlias": True, "preservedSourcesAndVoices": True,
-             "noUnexpectedMedia": True, "speakerIdentityVerified": False}
+             "sourceSHA256": before["sourceSHA256"], "reviewedClipSeconds": reviewed_clip_seconds,
+             "twoExplicitlyAnalyzedClips": True, "clipSpecificAlias": True, "exactTurnLabel": True,
+             "preservedSourcesAndVoices": True, "noUnexpectedMedia": True, "speakerIdentityVerified": False}
     print(json.dumps(proof, sort_keys=True))
 
 

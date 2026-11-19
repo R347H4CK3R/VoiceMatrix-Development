@@ -61,16 +61,18 @@ class ClipSpeakerReviewUIFixtureTests(unittest.TestCase):
                                     clipSHA256=sha(data))
                 metadata = json.dumps(clip_receipt).encode()
                 (folder / "receipt.json").write_bytes(metadata)
-                if seconds != 8:
-                    continue
                 file = reviews / (identifier + ".json")
                 binding = dict(clipID=identifier, clipSHA256=sha(data), receiptSHA256=sha(metadata), analysisSHA256="a" * 64)
                 revision = "df2625ac79a7ac6b65ad868fee6d80f320da4232"
-                record = dict(version=1, binding=binding, analysis=dict(seconds=8, modelRevision=revision, selectionPolicyVersion=5,
-                    rawOverlap=dict(sourceSHA256=sha(data), version=1, modelRevision=revision, duration=8, counts=[1]),
-                    segments=[dict(speaker="anonymous", start=1, end=7)]),
-                    aliases=[dict(binding=binding, speaker="anonymous", name="QA narrator")])
+                record = dict(version=1, binding=binding, analysis=dict(seconds=seconds, modelRevision=revision, selectionPolicyVersion=5,
+                    rawOverlap=dict(sourceSHA256=sha(data), version=1, modelRevision=revision, duration=seconds, counts=[1]),
+                    segments=[dict(speaker="anonymous", start=1, end=seconds - 1)]),
+                    aliases=[dict(binding=binding, speaker="anonymous", name="QA narrator")] if seconds == 8 else [])
+                if seconds == 8:
+                    record["turnLabels"] = [dict(binding=binding, turn=dict(index=0, **record["analysis"]["segments"][0]), name="QA relabeled turn")]
                 file.write_text(json.dumps(record))
+                if seconds == 5:
+                    second_file, second_record = file, record
             captured = io.StringIO()
             with redirect_stdout(captured):
                 check(container, receipt_path, identity)
@@ -83,6 +85,18 @@ class ClipSpeakerReviewUIFixtureTests(unittest.TestCase):
                 check(container, receipt_path, identity)
             record["aliases"][0]["binding"] = binding
             file.write_text(json.dumps(record))
+            record["turnLabels"][0]["turn"]["end"] -= 1
+            file.write_text(json.dumps(record))
+            with self.assertRaises(AssertionError):
+                check(container, receipt_path, identity)
+            record["turnLabels"][0]["turn"]["end"] += 1
+            file.write_text(json.dumps(record))
+            second_record["turnLabels"] = record["turnLabels"]
+            second_file.write_text(json.dumps(second_record))
+            with self.assertRaises(AssertionError):
+                check(container, receipt_path, identity)
+            second_record.pop("turnLabels")
+            second_file.write_text(json.dumps(second_record))
             voice_root = support / "CharacterReferences"
             voice_root.mkdir()
             profile = voice_root / "unrequested-profile.json"

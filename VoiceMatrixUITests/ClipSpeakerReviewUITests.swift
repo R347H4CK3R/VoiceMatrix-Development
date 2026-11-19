@@ -79,6 +79,9 @@ import XCTest
         let run = app.buttons["clip-speaker-review-run"]
         let label = app.textFields["clip-speaker-review-label-S1"]
         let alias = app.staticTexts["clip-speaker-review-alias-S1"]
+        let turnField = app.textFields["clip-speaker-review-turn-label-0"]
+        let turnName = app.staticTexts["clip-speaker-review-turn-name-0"]
+        let turnSave = app.buttons["clip-speaker-review-turn-save-0"]
         XCTAssertTrue(consent.waitForExistence(timeout: 15))
         XCTAssertEqual(consent.value as? String, "0")
         XCTAssertFalse(run.isEnabled)
@@ -112,6 +115,14 @@ import XCTest
         save.tap()
         reveal(alias, in: app, upward: false)
         XCTAssertTrue(alias.label.contains("QA narrator"))
+        reveal(turnField, in: app)
+        turnField.tap()
+        turnField.typeText("QA exact turn\n")
+        reveal(turnSave, in: app)
+        XCTAssertTrue(turnSave.isEnabled)
+        turnSave.tap()
+        reveal(turnName, in: app, upward: false)
+        XCTAssertEqual(turnName.label, "Your turn label: QA exact turn")
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = "Real speech model guess with a local user label"
         shot.lifetime = .keepAlways
@@ -131,6 +142,22 @@ import XCTest
         XCTAssertTrue(alias.label.contains("QA narrator"))
         XCTAssertFalse(run.exists, "Reopening reads the saved result without starting analysis")
 
+        reveal(turnName, in: app)
+        XCTAssertEqual(turnName.label, "Your turn label: QA exact turn")
+        let removeTurn = app.buttons["clip-speaker-review-turn-remove-0"]
+        reveal(removeTurn, in: app)
+        removeTurn.tap()
+        XCTAssertFalse(turnName.exists, "The exact turn label is removable")
+        reveal(turnField, in: app, upward: false)
+        XCTAssertNotEqual(turnField.value as? String, "QA exact turn")
+        turnField.tap()
+        turnField.typeText("QA relabeled turn\n")
+        reveal(turnSave, in: app)
+        XCTAssertTrue(turnSave.isEnabled)
+        turnSave.tap()
+        reveal(turnName, in: app, upward: false)
+        XCTAssertEqual(turnName.label, "Your turn label: QA relabeled turn")
+
         app.navigationBars["Review speaker turns"].buttons.firstMatch.tap()
         XCTAssertTrue(app.navigationBars["Video Voice Studio"].waitForExistence(timeout: 15))
         reveal(app.textFields["retained-clip-seconds"], in: app, upward: false)
@@ -141,6 +168,19 @@ import XCTest
         XCTAssertFalse(run.isEnabled)
         XCTAssertFalse(alias.exists, "A label for one receipt and analysis is not a label for another clip")
         XCTAssertFalse(label.exists)
+        XCTAssertFalse(turnName.exists)
+        reveal(consent, in: app)
+        flip(consent)
+        reveal(run, in: app)
+        XCTAssertTrue(run.isEnabled)
+        run.tap()
+        let secondAnalyzed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label BEGINSWITH %@", "Local speaker guesses are ready"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [secondAnalyzed], timeout: 95), .completed)
+        reveal(turnField, in: app)
+        XCTAssertNotEqual(turnField.value as? String, "QA relabeled turn")
+        XCTAssertFalse(turnName.exists, "No exact-turn label carries over to a second actual analysis")
+        XCTAssertFalse(alias.exists, "The group alias must also remain clip-specific after analysis")
         app.terminate()
     }
 }

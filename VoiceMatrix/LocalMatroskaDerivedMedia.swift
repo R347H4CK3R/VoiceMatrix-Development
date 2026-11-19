@@ -472,7 +472,8 @@ enum LocalMatroskaDerivedMedia {
             storedReader.add(stored)
             guard storedReader.startReading() else { throw Failure.unsupported("stored video read start") }
             defer { if storedReader.status == .reading { storedReader.cancelReading() } }
-            try validateStoredVideoTiming(videoPTS: videoPTS, videoEnd: videoEnd, check: check) {
+            try validateStoredVideoTiming(videoPTS: videoPTS, videoEnd: videoEnd, check: check,
+                                          readerStatus: { String(storedReader.status.rawValue) }) {
                 guard let buffer = stored.copyNextSampleBuffer() else { return nil }
                 let bytes = CMSampleBufferGetDataBuffer(buffer).map { CMBlockBufferGetDataLength($0) } ?? 0
                 func attachment(_ key: CFString) -> String {
@@ -542,6 +543,7 @@ enum LocalMatroskaDerivedMedia {
     /// bounds before running this and requires the reader to complete.
     static func validateStoredVideoTiming(videoPTS: [Int64], videoEnd: Int64,
                                           check: () throws -> Void = {},
+                                          readerStatus: () -> String = { "unavailable" },
                                           nextSample: () -> StoredVideoSample?) throws {
         var index = 0, observations = 0
         while true {
@@ -554,8 +556,24 @@ enum LocalMatroskaDerivedMedia {
             }
             if index == videoPTS.count, sample.isTerminalNoMedia {
                 try check()
-                guard nextSample() == nil else {
-                    throw Failure.unsupported("stored video data after terminal no-media observation")
+                let terminalStatus = readerStatus()
+                if let following = nextSample() {
+                    func summarize(_ observation: StoredVideoSample, status: String) -> String {
+                        let timing = CMTimeRange(start: observation.pts, duration: observation.duration)
+                        return "sampleCount=\(observation.samples) payloadBytes=\(observation.bytes) hasImage=\(observation.hasImage) observedTiming=\(describe(timing)) observedDTS=\(describeTime(observation.dts)) emptyMedia=\(observation.emptyMedia) endsPreviousSampleDuration=\(observation.endsPreviousSampleDuration) status=\(status)"
+                    }
+                    var followingObservations = [summarize(following, status: readerStatus())]
+                    // Diagnostic-only, bounded lookahead; no later observation
+                    // can rescue this rejection.
+                    for _ in 1..<4 {
+                        try check()
+                        guard let extra = nextSample() else {
+                            followingObservations.append("nil status=\(readerStatus())")
+                            break
+                        }
+                        followingObservations.append(summarize(extra, status: readerStatus()))
+                    }
+                    throw Failure.unsupported("stored video data after terminal no-media observation: terminalStatus=\(terminalStatus) followingObservations=[\(followingObservations.joined(separator: "; "))]")
                 }
                 break
             }

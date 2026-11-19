@@ -22,9 +22,13 @@ final class LocalMatroskaReaderTests: XCTestCase {
             width: 0, height: 0, sampleRate: 48_000, channels: 2, seekPreRollNanoseconds: 21_333_333)
         let writer = try MatroskaWriter(url: url, maxBytes: 100_000,
             tracks: extraAudio ? [video, audio, audio] : [video, audio], duration: 3)
-        var samples: [Sample] = (0..<75).map { i in
-            Sample(track: 1, time: Int64(i * 40), duration: 40, key: i % 5 == 0,
-                   padding: 0, bytes: Data([0,0,0,2,i % 5 == 0 ? 0x65 : 0x41, UInt8(i)]))
+        var samples: [Sample] = []
+        for i in 0..<75 {
+            let isKeyFrame = i % 5 == 0
+            let nalType: UInt8 = isKeyFrame ? 0x65 : 0x41
+            let bytes = Data([UInt8(0), 0, 0, 2, nalType, UInt8(i)])
+            samples.append(Sample(track: 1, time: Int64(i * 40), duration: 40,
+                                  key: isKeyFrame, padding: 0, bytes: bytes))
         }
         for i in 0..<141 {
             let pts = Int64((Double(i * 1024) / 48).rounded()) + (gap && i == 50 ? 3 : 0)

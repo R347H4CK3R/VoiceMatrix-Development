@@ -180,9 +180,16 @@ stage=exact-dependency-notices
 # The generated resource group folder tracks contents; retain the verified graph and record exact disk capacity gate.
 disk_guard 6291456 disk-after-dependencies-before-compile
 stage=native-device-build
-"${offline[@]}" xcodebuild "${common_build[@]}" -configuration Release -sdk iphoneos \
+if "${offline[@]}" xcodebuild "${common_build[@]}" -configuration Release -sdk iphoneos \
   -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build \
-  > "$work/build.log" 2>&1
+  > "$work/build.log" 2>&1; then
+  :
+else
+  status=$?
+  printf 'audit_arm64_build_diagnostic_stage=native-device-build\n'
+  "${offline[@]}" python3 "$hosted/native_failure.py" "$status" "$work/build.log"
+  exit "$status"
+fi
 cmp "$graph" "$resolved" || fail_guard post-build-frozen-graph-byte-comparison
 stage=ephemeral-package-inspection
 mkdir "$work/Payload"

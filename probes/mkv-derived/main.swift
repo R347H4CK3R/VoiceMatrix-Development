@@ -23,14 +23,18 @@ import Foundation
             try await captureVideo(url(2), to: url(3))
         case "pcm":
             try await capturePCM(url(2), to: url(3))
-        case "derive", "cancel", "cancel-pump":
+        case "derive", "cancel", "cancel-decode", "cancel-pump":
             let cancelRead = args[1] == "cancel"
+            let cancelDecode = args[1] == "cancel-decode"
             let cancelPump = args[1] == "cancel-pump"
             let receipt = try await LocalMatroskaDerivedMedia.derive(
                 sourceMKV: url(2), expectedSHA256: args[3], destination: url(4),
                 maximumBytes: args.count > 5 ? Int64(args[5])! : 536_870_912,
                 packetProgress: { count in
                     if count == 9 && cancelRead { withUnsafeCurrentTask { $0?.cancel() } }
+                },
+                decodeProgress: { count in
+                    if count >= 9 && cancelDecode { withUnsafeCurrentTask { $0?.cancel() } }
                 },
                 appendProgress: { count in
                     if count == 9 && cancelPump { withUnsafeCurrentTask { $0?.cancel() } }

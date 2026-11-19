@@ -90,11 +90,16 @@ class DerivedSourcePolicy(unittest.TestCase):
         self.assertIn("appendProgress:", probe)
         self.assertIn('"cancel-pump"', probe)
 
-    def test_explicit_zero_start_trim_is_first_aac_packet_only(self):
+    def test_pcm_is_native_decoded_from_verified_access_units_before_writer(self):
         source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
-        self.assertIn("explicitZeroStartTrim: audioIndex == 0", source)
-        self.assertIn("kCMSampleBufferAttachmentKey_TrimDurationAtStart", source)
-        self.assertIn("CMTimeCopyAsDictionary(.zero", source)
+        for marker in ("AVAudioConverter(from:", "AVAudioCompressedBuffer(", ".endOfStream",
+                       "decoderProducedFrames == expectedDecoderFrames", "validAudioFrames",
+                       "audioPCMFormat.formatDescription", "decodeProgress"):
+            self.assertIn(marker, source)
+        self.assertLess(source.index("try reader.forEachPacket"), source.index("try stagePCM("))
+        self.assertLess(source.index("try stagePCM("), source.index("writer.startWriting()"))
+        self.assertNotIn("kCMSampleBufferAttachmentKey_TrimDurationAtStart", source)
+        self.assertNotIn("kCMSampleBufferAttachmentKey_TrimDurationAtEnd", source)
 
 
 # The reference used by both fixture rates is generated independently by
@@ -160,6 +165,10 @@ class DerivedNativeParity(unittest.TestCase):
         self.assertGreater(receipt["discardFrames"], 0)
         self.assertEqual(receipt["audioSampleRate"], rate)
         self.assertEqual(receipt["audioChannels"], 1)
+        derived_formats = json.loads(self.run_tool("ffprobe", "-v", "error", "-show_streams",
+                                                   "-of", "json", mov))
+        self.assertEqual({s["codec_type"]: s["codec_name"] for s in derived_formats["streams"]},
+                         {"video": "h264", "audio": "pcm_s16le"})
         self.assertEqual(receipt["audioFrames"], len(oracle) // 2)
         self.assertEqual(receipt["audioPackets"] * 1024 - receipt["discardFrames"], len(oracle) // 2)
         self.run_tool(probe, "pcm", mov, native_pcm)
@@ -184,6 +193,11 @@ class DerivedNativeParity(unittest.TestCase):
         status = subprocess.run([probe, "cancel", mkv, digest, canceled], capture_output=True, timeout=240)
         self.assertEqual(status.returncode, 2, status.stderr)
         self.assertFalse(canceled.exists())
+        decode_canceled = d / "decode-cancel.mov"
+        status = subprocess.run([probe, "cancel-decode", mkv, digest, decode_canceled],
+                                capture_output=True, timeout=240)
+        self.assertEqual(status.returncode, 2, status.stderr)
+        self.assertFalse(decode_canceled.exists())
         pump_canceled = d / "pump-cancel.mov"
         status = subprocess.run([probe, "cancel-pump", mkv, digest, pump_canceled],
                                 capture_output=True, timeout=240)

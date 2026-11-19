@@ -34,6 +34,13 @@ enum LocalMatroskaDerivedMedia {
         }
     }
 
+    private struct PCMStage {
+        let offset: UInt64
+        let validAudioFrames: Int64
+        let discardFrames: Int64
+        let format: AVAudioFormat
+    }
+
     private struct IndexedPacket {
         let offset: UInt64
         let size: Int
@@ -46,12 +53,14 @@ enum LocalMatroskaDerivedMedia {
     static func derive(sourceMKV: URL, expectedSHA256: String, destination: URL,
                        maximumBytes: Int64 = 536_870_912,
                        packetProgress: @Sendable (Int) -> Void = { _ in },
+                       decodeProgress: @Sendable (Int) -> Void = { _ in },
                        appendProgress: @Sendable (Int) -> Void = { _ in }) async throws -> Receipt {
         let deadline = ContinuousClock.now + .seconds(180)
         var phase = "source-validation"
         var track = "none"
         var count = 0
-        var audioPackets: Int64 = 0
+        var appendedAudioBuffers = 0
+        var appendedPCMFrames: Int64 = 0
         var videoPTS = [Int64]()
         var lastMKVPTS: Int64?
         var lastAudioPTS: Int64?
@@ -60,7 +69,7 @@ enum LocalMatroskaDerivedMedia {
         func check() throws {
             try Task.checkCancellation()
             guard ContinuousClock.now < deadline else {
-                let state = "phase=\(phase) track=\(track) packetCount=\(count) appendedAudio=\(audioPackets) appendedVideo=\(videoPTS.count)"
+                let state = "phase=\(phase) track=\(track) packetCount=\(count) appendedAudio=\(appendedAudioBuffers) appendedPCMFrames=\(appendedPCMFrames) appendedVideo=\(videoPTS.count)"
                 let timing = "lastMKVPTS=\(lastMKVPTS ?? -1) lastAppendedAudioPTS=\(lastAudioPTS ?? -1) lastAppendedVideoPTS=\(lastVideoPTS ?? -1) (milliseconds)"
                 throw Failure.deadline("\(state) \(timing) \(writerState())")
             }
@@ -115,16 +124,24 @@ enum LocalMatroskaDerivedMedia {
         try check() // Final cue and full source hash checks succeeded.
         guard let last = videoTape.last, !audioTape.isEmpty else { throw Failure.unsupported("empty track") }
 
+        phase = "decoding-verified-aac"
+        track = "audio"
+        let pcm = try stagePCM(tape: tape, offset: bytes, packets: audioTape, track: reader.audio,
+                               maximumBytes: UInt64(maximumBytes), check: check, decodeProgress: decodeProgress)
+        let audioPackets = Int64(audioTape.count)
+        let audioFrames = pcm.validAudioFrames
+        let audioPCMFormat = pcm.format
+        let audioFrameBytes = Int64(reader.audio.channels * 2)
+
         phase = "writer-startup"
         track = "none"
         let output = staging.appendingPathComponent("derived.mov")
         let writer = try AVAssetWriter(outputURL: output, fileType: .mov)
         writer.directoryForTemporaryFiles = staging
         let videoFormat = try makeVideoFormat(reader.video)
-        let audioFormat = try makeAudioFormat(reader.audio)
         let rate = Int32(reader.audio.sampleRate)
         let video = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: videoFormat)
-        let audio = AVAssetWriterInput(mediaType: .audio, outputSettings: nil, sourceFormatHint: audioFormat)
+        let audio = AVAssetWriterInput(mediaType: .audio, outputSettings: nil, sourceFormatHint: audioPCMFormat.formatDescription)
         writerState = {
             "writerStatus=\(writer.status.rawValue) audioReady=\(audio.isReadyForMoreMediaData) videoReady=\(video.isReadyForMoreMediaData)"
         }
@@ -138,13 +155,11 @@ enum LocalMatroskaDerivedMedia {
         defer { if writer.status == .writing { writer.cancelWriting() } }
         writer.startSession(atSourceTime: .zero)
 
-        var audioIndex = 0, videoIndex = 0
+        var videoIndex = 0
         var audioFinished = false, videoFinished = false
-        var removed: Int64 = 0
 
         func append(_ item: IndexedPacket, into input: AVAssetWriterInput,
-                    format: CMFormatDescription, pts: CMTime, duration: CMTime,
-                    trim: CMTime? = nil, explicitZeroStartTrim: Bool = false) throws {
+                    format: CMFormatDescription, pts: CMTime, duration: CMTime) throws {
             track = input === video ? "video" : "audio"
             phase = "appending-packet"
             try check()
@@ -152,14 +167,10 @@ enum LocalMatroskaDerivedMedia {
             guard let data = try tape.read(upToCount: item.size), data.count == item.size else {
                 throw Failure.unsupported("truncated staged packet")
             }
-            let packet = LocalMatroskaReader.Packet(trackNumber: input === video ? reader.video.number : reader.audio.number,
-                            presentationMilliseconds: item.pts, durationMilliseconds: item.duration,
-                            isKeyFrame: item.key, discardPaddingNanoseconds: item.discardNanoseconds, bytes: data)
-            let buffer = try sample(packet, format: format, pts: pts, duration: duration,
-                                    endTrim: trim, explicitZeroStartTrim: explicitZeroStartTrim)
-            guard input.append(buffer) else { throw Failure.unsupported("packet append failed (writerStatus=\(writer.status.rawValue))") }
-            if input === video { lastVideoPTS = item.pts }
-            else { lastAudioPTS = item.pts }
+            let buffer = try sample(data, format: format, pts: pts, duration: duration,
+                                    count: 1, bytesPerSample: data.count, isKeyFrame: item.key)
+            guard input.append(buffer) else { throw Failure.unsupported("video append failed (writerStatus=\(writer.status.rawValue))") }
+            lastVideoPTS = item.pts
         }
 
         while !audioFinished || !videoFinished {
@@ -169,21 +180,25 @@ enum LocalMatroskaDerivedMedia {
             guard writer.status == .writing else { throw Failure.unsupported("writer stopped (writerStatus=\(writer.status.rawValue))") }
             var progressed = false
             if !audioFinished, audio.isReadyForMoreMediaData {
-                let item = audioTape[audioIndex]
-                // AAC packets have a 1024-frame clock. Seek pre-roll does not
-                // imply a leading assembly edit. Zero is an explicit native
-                // trim experiment; the decoded oracle still gates publication.
-                removed = Int64((item.discardNanoseconds * UInt64(rate) + 500_000_000) / 1_000_000_000)
-                let trim = removed == 0 ? nil : CMTime(value: removed, timescale: rate)
-                try append(item, into: audio, format: audioFormat,
-                           pts: CMTime(value: Int64(audioIndex) * 1024, timescale: rate),
-                           duration: CMTime(value: 1024, timescale: rate), trim: trim,
-                           explicitZeroStartTrim: audioIndex == 0)
-                audioIndex += 1
-                audioPackets += 1
-                appendProgress(audioIndex + videoIndex)
+                track = "audio"
+                phase = "appending-pcm"
+                let frames = min(4096, audioFrames - appendedPCMFrames)
+                let size = Int(frames * audioFrameBytes)
+                try tape.seek(toOffset: pcm.offset + UInt64(appendedPCMFrames * audioFrameBytes))
+                guard let data = try tape.read(upToCount: size), data.count == size else {
+                    throw Failure.unsupported("truncated staged PCM")
+                }
+                let time = CMTime(value: appendedPCMFrames, timescale: rate)
+                let buffer = try sample(data, format: audioPCMFormat.formatDescription, pts: time,
+                                        duration: CMTime(value: 1, timescale: rate),
+                                        count: Int(frames), bytesPerSample: Int(audioFrameBytes), isKeyFrame: true)
+                guard audio.append(buffer) else { throw Failure.unsupported("PCM append failed (writerStatus=\(writer.status.rawValue))") }
+                lastAudioPTS = appendedPCMFrames * 1000 / Int64(rate)
+                appendedPCMFrames += frames
+                appendedAudioBuffers += 1
+                appendProgress(appendedAudioBuffers + videoIndex)
                 try check()
-                if audioIndex == audioTape.count {
+                if appendedPCMFrames == audioFrames {
                     audio.markAsFinished()
                     audioFinished = true
                 }
@@ -198,7 +213,7 @@ enum LocalMatroskaDerivedMedia {
                            duration: CMTime(value: duration, timescale: 1000))
                 videoIndex += 1
                 videoPTS.append(item.pts)
-                appendProgress(audioIndex + videoIndex)
+                appendProgress(appendedAudioBuffers + videoIndex)
                 try check()
                 if videoIndex == videoTape.count {
                     video.markAsFinished()
@@ -209,7 +224,6 @@ enum LocalMatroskaDerivedMedia {
             if !progressed { Darwin.usleep(2_000) }
         }
         let videoEnd = last.pts + Int64(last.duration)
-        let audioFrames = audioPackets * 1024 - removed
         phase = "finishing-writer"
         track = "none"
 
@@ -218,8 +232,8 @@ enum LocalMatroskaDerivedMedia {
         repeat { try check() } while finish.wait(timeout: .now() + .milliseconds(20)) == .timedOut
         guard writer.status == .completed else { throw Failure.unsupported("writer finalization: \(String(describing: writer.error))") }
 
-        // Track metadata is not enough: Apple must expose the exact PCM frames
-        // after trim, with no implicit leading priming removal or extra padding.
+        // Track metadata is not enough: Apple must expose exactly the selected
+        // PCM frames at the same rate, with no leading edit or padding.
         phase = "hashing-derived-output"
         let digest = try hash(output, maximumBytes: maximumBytes, check: check)
         phase = "verifying-native-output"
@@ -235,7 +249,7 @@ enum LocalMatroskaDerivedMedia {
         return Receipt(mkvSHA256: expectedSHA256.lowercased(), movSHA256: digest.0, movBytes: digest.1,
                        audioPackets: audioPackets, audioFrames: audioFrames, audioSampleRate: rate,
                        audioChannels: reader.audio.channels, videoFrames: videoPTS.count,
-                       videoEndMilliseconds: videoEnd, discardFrames: removed)
+                       videoEndMilliseconds: videoEnd, discardFrames: pcm.discardFrames)
     }
 
     private static func gcd(_ a: Int32, _ b: Int32) -> Int32 {
@@ -253,7 +267,7 @@ enum LocalMatroskaDerivedMedia {
         return description
     }
 
-    private static func makeAudioFormat(_ track: LocalMatroskaReader.Track) throws -> CMFormatDescription {
+    private static func makeAACFormat(_ track: LocalMatroskaReader.Track) throws -> CMFormatDescription {
         var asbd = AudioStreamBasicDescription(mSampleRate: track.sampleRate, mFormatID: kAudioFormatMPEG4AAC,
                        mFormatFlags: UInt32(MPEG4ObjectID.AAC_LC.rawValue), mBytesPerPacket: 0, mFramesPerPacket: 1024,
                        mBytesPerFrame: 0, mChannelsPerFrame: UInt32(track.channels), mBitsPerChannel: 0, mReserved: 0)
@@ -272,41 +286,127 @@ enum LocalMatroskaDerivedMedia {
         return description
     }
 
-    private static func sample(_ packet: LocalMatroskaReader.Packet, format: CMFormatDescription,
-                               pts: CMTime, duration: CMTime, endTrim: CMTime?,
-                               explicitZeroStartTrim: Bool) throws -> CMSampleBuffer {
+    /// Decode the exact access units with AudioToolbox's AVFAudio wrapper.
+    /// Container-level implicit QuickTime priming is never involved.
+    private static func stagePCM(tape: FileHandle, offset: UInt64, packets: [IndexedPacket],
+                                 track: LocalMatroskaReader.Track, maximumBytes: UInt64,
+                                 check: () throws -> Void,
+                                 decodeProgress: @Sendable (Int) -> Void) throws -> PCMStage {
+        let rate = UInt64(track.sampleRate)
+        guard let last = packets.last, let maximumPacketSize = packets.lazy.map({ $0.size }).max() else {
+            throw Failure.unsupported("no staged AAC")
+        }
+        let discardFrames = Int64((last.discardNanoseconds * rate + 500_000_000) / 1_000_000_000)
+        let expectedDecoderFrames = Int64(packets.count) * 1024
+        let validAudioFrames = expectedDecoderFrames - discardFrames
+        let frameBytes = Int64(track.channels * 2)
+        let decodedBytes = UInt64(validAudioFrames * frameBytes)
+        guard offset <= maximumBytes, decodedBytes <= maximumBytes - offset else { throw Failure.limit }
+        guard let encoded = AVAudioFormat(formatDescription: try makeAACFormat(track)),
+              let pcm = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: track.sampleRate,
+                                      channels: AVAudioChannelCount(track.channels), interleaved: true),
+              let converter = AVAudioConverter(from: encoded, to: pcm),
+              let output = AVAudioPCMBuffer(pcmFormat: pcm, frameCapacity: 4096) else {
+            throw Failure.unsupported("native AAC converter format")
+        }
+        let input = AVAudioCompressedBuffer(format: encoded, packetCapacity: 1, maximumPacketSize: maximumPacketSize)
+        guard let descriptions = input.packetDescriptions else { throw Failure.unsupported("AAC packet descriptions") }
+
+        var sent = 0
+        var decoderProducedFrames: Int64 = 0
+        var keptFrames: Int64 = 0
+        var eof = false
+        while !eof {
+            try check()
+            let sentBefore = sent
+            var inputError: Error?
+            var nativeError: NSError?
+            output.frameLength = 0
+            let status = converter.convert(to: output, error: &nativeError) { _, inputStatus in
+                do {
+                    try check()
+                    guard sent < packets.count else {
+                        inputStatus.pointee = .endOfStream
+                        return nil
+                    }
+                    let item = packets[sent]
+                    try tape.seek(toOffset: item.offset)
+                    guard let data = try tape.read(upToCount: item.size), data.count == item.size else {
+                        throw Failure.unsupported("truncated staged AAC")
+                    }
+                    _ = data.copyBytes(to: input.data.assumingMemoryBound(to: UInt8.self), count: item.size)
+                    input.packetCount = 1
+                    input.byteLength = UInt32(item.size)
+                    descriptions.pointee = AudioStreamPacketDescription(mStartOffset: 0, mVariableFramesInPacket: 0,
+                                                                        mDataByteSize: UInt32(item.size))
+                    sent += 1
+                    inputStatus.pointee = .haveData
+                    return input
+                } catch {
+                    inputError = error
+                    inputStatus.pointee = .endOfStream
+                    return nil
+                }
+            }
+            if let inputError { throw inputError }
+            if sent > sentBefore { decodeProgress(sent) }
+            try check()
+            let produced = Int64(output.frameLength)
+            guard produced <= expectedDecoderFrames - decoderProducedFrames else {
+                throw Failure.unsupported("native AAC decoder returned extra frames")
+            }
+            decoderProducedFrames += produced
+            let keep = min(produced, validAudioFrames - keptFrames)
+            if keep > 0 {
+                let audioBuffers = UnsafeMutableAudioBufferListPointer(output.mutableAudioBufferList)
+                guard audioBuffers.count == 1, let pcmBytes = audioBuffers[0].mData,
+                      Int64(audioBuffers[0].mDataByteSize) >= keep * frameBytes else {
+                    throw Failure.unsupported("native AAC PCM layout")
+                }
+                try tape.seek(toOffset: offset + UInt64(keptFrames * frameBytes))
+                try tape.write(contentsOf: Data(bytes: pcmBytes, count: Int(keep * frameBytes)))
+                keptFrames += keep
+            }
+            switch status {
+            case .endOfStream: eof = true
+            case .haveData, .inputRanDry:
+                guard produced > 0 || sent > sentBefore else { throw Failure.unsupported("native AAC decoder stalled") }
+            case .error: throw Failure.unsupported("native AAC decode (code=\(nativeError?.code ?? 0))")
+            @unknown default: throw Failure.unsupported("unknown native AAC decoder state")
+            }
+        }
+        guard sent == packets.count, decoderProducedFrames == expectedDecoderFrames,
+              keptFrames == validAudioFrames else {
+            throw Failure.unsupported("native AAC decoder frame count: actual=\(decoderProducedFrames) expected=\(expectedDecoderFrames) accessUnits=\(sent)/\(packets.count)")
+        }
+        return PCMStage(offset: offset, validAudioFrames: validAudioFrames, discardFrames: discardFrames, format: pcm)
+    }
+
+    private static func sample(_ data: Data, format: CMFormatDescription,
+                               pts: CMTime, duration: CMTime, count: Int, bytesPerSample: Int,
+                               isKeyFrame: Bool) throws -> CMSampleBuffer {
         var block: CMBlockBuffer?
-        let size = packet.bytes.count
+        let size = data.count
         guard CMBlockBufferCreateWithMemoryBlock(allocator: kCFAllocatorDefault, memoryBlock: nil,
                   blockLength: size, blockAllocator: kCFAllocatorDefault, customBlockSource: nil,
                   offsetToData: 0, dataLength: size, flags: kCMBlockBufferAssureMemoryNowFlag,
                   blockBufferOut: &block) == noErr, let block,
-              packet.bytes.withUnsafeBytes({ raw in
+              data.withUnsafeBytes({ raw in
                   CMBlockBufferReplaceDataBytes(with: raw.baseAddress!, blockBuffer: block, offsetIntoDestination: 0, dataLength: size)
               }) == noErr else { throw Failure.unsupported("packet buffer") }
         var timing = CMSampleTimingInfo(duration: duration, presentationTimeStamp: pts, decodeTimeStamp: pts)
-        var sampleSize = size
+        var sampleSize = bytesPerSample
         var output: CMSampleBuffer?
         guard CMSampleBufferCreateReady(allocator: kCFAllocatorDefault, dataBuffer: block, formatDescription: format,
-                   sampleCount: 1, sampleTimingEntryCount: 1, sampleTimingArray: &timing,
+                   sampleCount: count, sampleTimingEntryCount: 1, sampleTimingArray: &timing,
                    sampleSizeEntryCount: 1, sampleSizeArray: &sampleSize, sampleBufferOut: &output) == noErr,
               let output else { throw Failure.unsupported("sample buffer") }
-        if !packet.isKeyFrame {
+        if !isKeyFrame {
             guard let array = CMSampleBufferGetSampleAttachmentsArray(output, createIfNecessary: true),
                   let entry = CFArrayGetValueAtIndex(array, 0) else { throw Failure.unsupported("sync attachment") }
             let dictionary = unsafeBitCast(entry, to: CFMutableDictionary.self)
             CFDictionarySetValue(dictionary, Unmanaged.passUnretained(kCMSampleAttachmentKey_NotSync).toOpaque(),
                                  Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
-        }
-        if explicitZeroStartTrim {
-            CMSetAttachment(output, key: kCMSampleBufferAttachmentKey_TrimDurationAtStart,
-                            value: CMTimeCopyAsDictionary(.zero, allocator: kCFAllocatorDefault),
-                            attachmentMode: kCMAttachmentMode_ShouldPropagate)
-        }
-        if let endTrim {
-            CMSetAttachment(output, key: kCMSampleBufferAttachmentKey_TrimDurationAtEnd,
-                            value: CMTimeCopyAsDictionary(endTrim, allocator: kCFAllocatorDefault),
-                            attachmentMode: kCMAttachmentMode_ShouldPropagate)
         }
         return output
     }
@@ -324,7 +424,7 @@ enum LocalMatroskaDerivedMedia {
         try check()
         let expectedVideo = CMTimeRange(start: .zero, duration: CMTime(value: videoEnd, timescale: 1000))
         let expectedAudio = CMTimeRange(start: .zero, duration: CMTime(value: audioFrames, timescale: rate))
-        guard !audioSegments.isEmpty, audioSegments.allSatisfy({ !$0.isEmpty }),
+        guard !audioSegments.isEmpty, audioSegments.allSatisfy({ !$0.isEmpty && $0.timeMapping.source == $0.timeMapping.target }),
               videoRange.start == expectedVideo.start, audioRange.start == expectedAudio.start,
               videoRange.duration == expectedVideo.duration,
               audioRange.duration == expectedAudio.duration else {

@@ -1,8 +1,0 @@
-{
-  "existingProfiles": 101,
-  "newProfiles": 437,
-  "maximumCrossLibraryOutputCosine": 0.7617582877791907,
-  "threshold": 0.995,
-  "excluded": [],
-  "scope": "Numerical speaker-vector screen only, not human perceptual verification"
-}

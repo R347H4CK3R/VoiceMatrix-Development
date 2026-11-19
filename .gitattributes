@@ -1,2 +1,0 @@
-# Exact bytes are pinned by the bundled on-device integrity verifier.
-tools/asr-resource-lock.json text eol=lf

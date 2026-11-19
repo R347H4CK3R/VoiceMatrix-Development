@@ -1,7 +1,0 @@
-{
-  "version": "0.4.11",
-  "buildVersion": "14",
-  "state": "unreleased-integration-candidate",
-  "notes": "On-device yt-dlp media resolution for supported public YouTube sources, native download and merge, and cooperative cancellation. Existing voices and saved media preserved. No laptop or paid service required. Sign-in, age-restricted, protected, SABR-only and otherwise unsupported sources may remain unavailable; Files import remains available.",
-  "publicationGate": "Do not add a source-catalog download entry until the actual built IPA version, size, SHA256 and download URL are verified. Native runtime synthetic tests passed; full app and real source tests still pending."
-}

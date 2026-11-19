@@ -302,8 +302,8 @@ enum LocalMatroskaDerivedMedia {
         let frameBytes = Int64(track.channels * 2)
         let decodedBytes = UInt64(validAudioFrames * frameBytes)
         guard offset <= maximumBytes, decodedBytes <= maximumBytes - offset else { throw Failure.limit }
-        guard let encoded = AVAudioFormat(formatDescription: try makeAACFormat(track)),
-              let pcm = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: track.sampleRate,
+        let encoded = AVAudioFormat(cmAudioFormatDescription: try makeAACFormat(track))
+        guard let pcm = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: track.sampleRate,
                                       channels: AVAudioChannelCount(track.channels), interleaved: true),
               let converter = AVAudioConverter(from: encoded, to: pcm),
               let output = AVAudioPCMBuffer(pcmFormat: pcm, frameCapacity: 4096) else {
@@ -322,7 +322,7 @@ enum LocalMatroskaDerivedMedia {
             var inputError: Error?
             var nativeError: NSError?
             output.frameLength = 0
-            let status = converter.convert(to: output, error: &nativeError) { _, inputStatus in
+            let status = converter.convert(to: output, error: &nativeError) { (_: AVAudioPacketCount, inputStatus: UnsafeMutablePointer<AVAudioConverterInputStatus>) -> AVAudioBuffer? in
                 do {
                     try check()
                     guard sent < packets.count else {

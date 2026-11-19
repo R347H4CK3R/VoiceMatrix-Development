@@ -9,6 +9,10 @@ struct CharacterReference: Codable, Identifiable, Equatable, Sendable {
     let categories: [String]
     let referenceBytes: Int
     let seconds: Double
+    var matroskaReference: MatroskaReferenceLineage? = nil
+    var validMatroskaReference: Bool {
+        matroskaReference?.valid(seconds: seconds, sha256: referenceSHA256) ?? true
+    }
 }
 
 enum CharacterImportError: LocalizedError {
@@ -87,7 +91,7 @@ actor CharacterFolderStore {
         let manifest = try regular(folder.appendingPathComponent("manifest.json"), limit: 65536)
         let voice = try JSONDecoder().decode(CharacterReference.self, from: manifest)
         guard Self.safeID(voice.id), voice.schemaVersion == 1, voice.kind == "f5-reference",
-              voice.engine == "F5TTS_v1_Base", !voice.trainedModel, voice.referenceFile == "reference.wav",
+              voice.engine == "F5TTS_v1_Base", voice.validMatroskaReference, !voice.trainedModel, voice.referenceFile == "reference.wav",
               [voice.name, voice.source, voice.permission, voice.referenceText].allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
               !voice.categories.isEmpty, voice.categories.count <= 50,
               voice.categories.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),

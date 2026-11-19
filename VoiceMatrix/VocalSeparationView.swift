@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
     @Published private(set) var results:[SeparationStore.Result]=[]
     private var input:URL?
     private var inputSHA=""
+    private var acceptedClip: SeparationClipHandoff.Input?
     private var work:Task<Void,Never>?
     private var active=true
     private let store=SeparationStore.standard
@@ -51,6 +52,7 @@ import UniformTypeIdentifiers
                 }
                 let copied=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
                 try Task.checkCancellation();input=copied.0;inputSHA=copied.1;inputName=name
+                acceptedClip = nil; acceptedClipID = nil
                 message="Complete clip imported. Tap Separate to create two stems on this iPhone."
             } catch is CancellationError {message="Stopped. Original audio and earlier results were kept."}
             catch {message="Could not import this clip. Use a complete audio file up to 10 seconds and 64 MiB, mono or stereo. No original was changed."}
@@ -71,7 +73,7 @@ import UniformTypeIdentifiers
                 }
                 try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
                 try Task.checkCancellation();guard active else{return}
-                input=clip.url;inputSHA=clip.sha256;acceptedClipID=clip.id
+                input=clip.url;inputSHA=clip.sha256;acceptedClip=clip;acceptedClipID=clip.id
                 inputName=String(format:"Retained clip %.3f–%.3f s",clip.start,clip.start+Double(clip.frames)/44100)
                 message="Selected short clip ready. Tap Separate to run experimental separation. The entire source is not being processed."
             } catch {message="Selected clip could not be verified. No separation started; original files were kept."}
@@ -81,12 +83,17 @@ import UniformTypeIdentifiers
     func run(audio:AudioStore) {
         guard !busy,active,let source=input,let models,modelsPresent,let lease=audio.claimProcessing() else{return}
         busy=true;cancelling=false;audio.stop();message="Separating vocals and accompaniment on this iPhone…"
-        let store=self.store,name=inputName,sha=inputSHA
+        let store=self.store,name=inputName,sha=inputSHA,clip=acceptedClip
         work=Task {
             defer {audio.releaseProcessing(lease);busy=false;cancelling=false;work=nil}
             do {
                 let worker=Task.detached {() async throws -> SeparationStore.Result in
                     guard try SeparationStore.digest(source,maximum:64*1024*1024)==sha else {throw SeparationStore.Failure.unsafe}
+                    let lineage: MatroskaClipLineage?
+                    if let clip {
+                        guard clip.url == source, clip.sha256 == sha else { throw SeparationStore.Failure.unsafe }
+                        lineage = try SeparationClipHandoff.verifiedLineage(clip, store: store)
+                    } else { lineage = nil }
                     let decoded=try SeparationAudioImport.decode(source)
                     guard try SeparationStore.digest(source,maximum:64*1024*1024)==sha else {throw SeparationStore.Failure.unsafe}
                     let cache=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask)[0].appendingPathComponent("VocalSeparation",isDirectory:true)
@@ -105,7 +112,12 @@ import UniformTypeIdentifiers
                             vocals.append(stems.vocalsLeft[i]);vocals.append(stems.vocalsRight[i])
                             backing.append(stems.accompanimentLeft[i]);backing.append(stems.accompanimentRight[i])
                         }
-                        return try store.publish(vocals:vocals,accompaniment:backing,inputName:name,inputSHA256:sha)
+                        if let clip {
+                            guard try SeparationClipHandoff.verifiedLineage(clip, store: store) == lineage else {
+                                throw SeparationStore.Failure.unsafe
+                            }
+                        }
+                        return try store.publish(vocals:vocals,accompaniment:backing,inputName:name,inputSHA256:sha,clipLineage: lineage)
                     } catch {await engine.close();throw error}
                 }
                 let result=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})

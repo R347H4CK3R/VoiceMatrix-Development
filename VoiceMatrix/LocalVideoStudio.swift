@@ -19,6 +19,13 @@ import CryptoKit
         let previewFile: String
         let previewSHA256: String
     }
+    struct StrictMatroska: Codable {
+        let schemaVersion: Int
+        let attemptID: UUID
+        var original: LocalMediaAcquisition.Result?
+        var mkv: LocalMediaAcquisition.Result?
+        var derived: LocalMediaAcquisition.Result?
+    }
     struct Job: Codable, Identifiable {
         let id: UUID
         let created: Date
@@ -27,6 +34,14 @@ import CryptoKit
         var message: String
         var originalAcquisitionURL: URL?
         var acquisitionURL: URL?
+        var strictMatroska: StrictMatroska?
+        var separatedMatroska: MatroskaSeparatedLineage?
+        var validSeparatedMatroska: Bool {
+            guard let separatedMatroska else { return true }
+            guard strictMatroska == nil, acquisitionURL == nil, originalAcquisitionURL == nil,
+                  sourceFile == "source.wav", let sourceSHA256 else { return false }
+            return separatedMatroska.valid(sourceSHA256: sourceSHA256)
+        }
         var sourceFile: String?
         var sourceSHA256: String?
         var analysisFile: String?
@@ -42,6 +57,40 @@ import CryptoKit
         var qualityPolicyVersions: [String:Int]?
         var completed = false
         var events: [Event] = []
+
+        var strictSourceLineage: MatroskaSourceLineage? {
+            guard validStrictMatroska, let state = strictMatroska,
+                  let original = state.original, let mkv = state.mkv, let derived = state.derived else { return nil }
+            return MatroskaSourceLineage(schemaVersion: 1, jobID: id, attemptID: state.attemptID,
+                                         acquisitionSHA256: original.sha256, mkvSHA256: mkv.sha256,
+                                         derivedSHA256: derived.sha256)
+        }
+
+        var validStrictMatroska: Bool {
+            guard let state = strictMatroska else { return true }
+            func matches(_ media: LocalMediaAcquisition.Result, filename: String) -> Bool {
+                media.file.range(of: filename, options: .regularExpression) != nil &&
+                media.sha256.utf8.count == 64 &&
+                media.sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil &&
+                (1...LocalMediaURLPolicy.maximumBytes).contains(media.bytes)
+            }
+            guard state.schemaVersion == 1, let acquisitionURL,
+                  (try? LocalMediaURLPolicy.input(acquisitionURL.absoluteString)) == acquisitionURL else { return false }
+            if let original = state.original,
+               !matches(original, filename: "^[A-Za-z0-9_-]{1,128}[.]mp4$") { return false }
+            if state.mkv == nil && state.derived == nil {
+                return sourceFile == nil && sourceSHA256 == nil && !completed && analysisFile == nil &&
+                    analysisSHA256 == nil && visualEvidence == nil && similarity == nil &&
+                    referenceFile == nil && previewFile == nil && voiceID == nil &&
+                    speakerVoiceIDs == nil && speakerAssets == nil && speakerOutcomes == nil &&
+                    qualityPolicyVersions == nil
+            }
+            guard let original = state.original, let mkv = state.mkv, let derived = state.derived,
+                  matches(mkv, filename: "^strict-[a-f0-9-]{36}[.]mkv$"),
+                  matches(derived, filename: "^strict-[a-f0-9-]{36}[.]mov$"),
+                  Set([original.sha256, mkv.sha256, derived.sha256]).count == 3 else { return false }
+            return sourceFile == derived.file && sourceSHA256 == derived.sha256
+        }
 
         // Do not compare a new speaker/reference against an earlier attempt's audio.
         var matchingPreviewFile: String? {
@@ -113,6 +162,7 @@ import CryptoKit
             func safe(_ value: String?) -> Bool { value == nil || (value!.range(of: "^[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]+)*$", options: .regularExpression) != nil) }
             guard safe(job.sourceFile), safe(job.analysisFile), safe(job.referenceFile), safe(job.previewFile) else { return unreadable() }
             if let input = job.acquisitionURL, (try? LocalMediaURLPolicy.input(input.absoluteString)) == nil { return unreadable() }
+            guard job.validStrictMatroska, job.validSeparatedMatroska else { return unreadable() }
             return job
         }.sorted { $0.created > $1.created }
         historyReadFailures = rejected
@@ -133,16 +183,46 @@ import CryptoKit
     func verifiedMKVExport() async -> URL? {
         guard !busy, let job = current, let digest = job.sourceSHA256 else { return nil }
         let directory = root.appendingPathComponent(job.id.uuidString.lowercased(), isDirectory: true)
-        let export = try? await LocalMediaAcquisition.verifiedMatroska(folder: directory, sourceSHA256: digest)
-        guard !Task.isCancelled, current?.id == job.id, !busy else { return nil }
+        let export: URL?
+        if let strict = job.strictMatroska {
+            #if os(iOS)
+            guard job.validStrictMatroska, let original = strict.original,
+                  let mkv = strict.mkv, let derived = strict.derived else { return nil }
+            do {
+                try await LocalMatroskaWorkflow.validatePublished(jobDirectory: directory, jobID: job.id,
+                                                                  attemptID: strict.attemptID, acquisition: original,
+                                                                  mkv: mkv, derived: derived)
+                export = directory.appendingPathComponent(mkv.file)
+            } catch { return nil }
+            #else
+            return nil
+            #endif
+        } else {
+            export = try? await LocalMediaAcquisition.verifiedMatroska(folder: directory, sourceSHA256: digest)
+        }
+        guard !Task.isCancelled, current?.id == job.id, current?.sourceSHA256 == digest, !busy else { return nil }
         return export
     }
     var retainedSeparationSource: SeparationClipHandoff.Source? {
-        guard !busy, let job=current, let name=job.sourceFile, let sha=job.sourceSHA256,
+        guard !busy, let job=current, job.validStrictMatroska, let name=job.sourceFile, let sha=job.sourceSHA256,
               name.range(of:"^[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]+)*$",options:.regularExpression) != nil,
               sha.range(of:"^[0-9a-f]{64}$",options:.regularExpression) != nil else {return nil}
-        return SeparationClipHandoff.Source(jobID:job.id,url:folder.appendingPathComponent(name),sha256:sha)
+        return SeparationClipHandoff.Source(jobID:job.id,url:folder.appendingPathComponent(name),sha256:sha,matroskaLineage:job.strictSourceLineage)
     }
+    #if os(iOS)
+    func verifyRetainedClipSource(_ source: SeparationClipHandoff.Source) async throws {
+        guard retainedSeparationSource == source, let job = current else { throw LocalError.source }
+        if let strict = job.strictMatroska {
+            guard let original = strict.original, let mkv = strict.mkv, let derived = strict.derived,
+                  let lineage = job.strictSourceLineage, source.matroskaLineage == lineage else { throw LocalError.source }
+            try await LocalMatroskaWorkflow.validatePublished(jobDirectory: folder, jobID: job.id,
+                                                              attemptID: strict.attemptID, acquisition: original,
+                                                              mkv: mkv, derived: derived)
+        }
+        try Task.checkCancellation()
+        guard retainedSeparationSource == source else { throw LocalError.source }
+    }
+    #endif
     func journalPage(offset: Int = 0) throws -> LocalStudioJournal.Page {
         guard offset>=0,let current else { throw LocalStudioJournal.Failure.unsafe }
         let file=folder.appendingPathComponent(LocalStudioJournal.filename)
@@ -252,7 +332,7 @@ import CryptoKit
         }
         catch { notice = LocalMediaURLPolicy.Failure.url.errorDescription! }
     }
-    func start(_ source: URL, authorized: Bool, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio, referenceInput: SeparationStore.ReferenceInput? = nil) {
+    func start(_ source: URL, authorized: Bool, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio, referenceInput: SeparationStore.ReferenceInput? = nil, strictForNewLink: Bool = true) {
         guard referenceInput == nil || (source.isFileURL && referenceInput?.url == source) else { return }
         guard authorized, !busy, active else { return }
         guard !audio.processingInUse, !audio.microphoneInUse else { notice = "Stop the other recording or speech job first."; return }
@@ -263,7 +343,13 @@ import CryptoKit
             guard free >= 800_000_000, retained < 2_000_000_000 else { throw LocalError.storage }
             let now = Date()
             current = Job(id: UUID(), created: now, updated: now, stage: "Received", message: "Source selected; preparing retained acquisition.")
-            if !source.isFileURL { current?.acquisitionURL = try LocalMediaURLPolicy.input(source.absoluteString); current?.originalAcquisitionURL = source }
+            if !source.isFileURL {
+                current?.acquisitionURL = try LocalMediaURLPolicy.input(source.absoluteString)
+                current?.originalAcquisitionURL = source
+                #if os(iOS)
+                if strictForNewLink { current?.strictMatroska = StrictMatroska(schemaVersion: 1, attemptID: UUID()) }
+                #endif
+            }
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
             try update("Received", source.isFileURL ? "App received the selected local media. Nothing is uploaded." : "App received the URL. Downloading directly from its website; no laptop or conversion service. The private URL is not shown in this log.")
             run(source: source.isFileURL ? source : nil, library: library, audio: audio, speech: speech, referenceInput: referenceInput)
@@ -278,10 +364,11 @@ import CryptoKit
     /// start creates a distinct UUID folder and repeats normal storage, source and processing gates.
     func retryAcquisition(jobID: UUID, authorized: Bool, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio) {
         guard authorized, !busy, active, current?.id == jobID, let source = freshAcquisitionURL else { return }
-        start(source, authorized: true, library: library, audio: audio, speech: speech)
+        start(source, authorized: true, library: library, audio: audio, speech: speech,
+              strictForNewLink: current?.strictMatroska != nil)
     }
     func resume(library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio) {
-        guard !busy, active, let job = current, !job.completed, job.sourceFile != nil || job.acquisitionURL != nil else { return }
+        guard !busy, active, let job = current, job.validStrictMatroska, !job.completed, job.sourceFile != nil || job.acquisitionURL != nil else { return }
         run(source: nil, library: library, audio: audio, speech: speech)
     }
     private enum LocalError: LocalizedError {
@@ -301,6 +388,67 @@ import CryptoKit
         try Task.checkCancellation()
         if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical { throw LocalError.thermal }
     }
+    #if os(iOS)
+    private func prepareStrictMatroska(jobFolder: URL, token: UUID) async throws {
+        guard let job = current, job.validStrictMatroska, var strict = job.strictMatroska,
+              let input = job.acquisitionURL else { throw LocalError.source }
+        func check() throws {
+            try Task.checkCancellation()
+            guard runToken == token, busy, current?.id == job.id,
+                  current?.strictMatroska?.attemptID == strict.attemptID else { throw LocalError.source }
+        }
+        try check()
+        // A previously published source is never reconstructed implicitly. Its saved
+        // pair is reverified read-only, including on an analysis resume.
+        if let mkv = strict.mkv, let derived = strict.derived {
+            guard let original = strict.original else { throw LocalError.source }
+            try await LocalMatroskaWorkflow.validatePublished(jobDirectory: jobFolder, jobID: job.id,
+                                                              attemptID: strict.attemptID, acquisition: original,
+                                                              mkv: mkv, derived: derived)
+            try check()
+            return
+        }
+        if strict.original == nil {
+            try update("Acquiring source", "Downloading the original into the retained job. Existing files are kept.")
+            let result = try await LocalMediaAcquisition.acquire(input: input, folder: jobFolder, prepareMatroska: false) { [weak self] message in
+                Task { @MainActor in
+                    guard let self, self.runToken == token, self.busy, self.current?.stage == "Acquiring source" else { return }
+                    try? self.update("Acquiring source", message, log: (!message.hasPrefix("Received ") || message.hasPrefix("Received the ")) && !message.hasPrefix("Merging tracks:"))
+                }
+            }
+            try check()
+            let previous = current
+            strict.original = result
+            current?.strictMatroska = strict
+            do {
+                guard current?.validStrictMatroska == true else { throw LocalError.source }
+                try update("Original retained", "Verified the original acquisition. Analysis will use media derived from the MKV.")
+            } catch { current = previous; throw error }
+        }
+        guard let original = strict.original else { throw LocalError.source }
+        let retained = try LocalMediaAcquisition.retainedBytes(root: root)
+        let own = try LocalMediaAcquisition.retainedBytes(root: jobFolder)
+        guard retained >= own, retained - own < 2_000_000_000 else { throw LocalError.storage }
+        try update("Preparing Matroska", "Preparing and verifying the strict Matroska workflow on this iPhone.")
+        let output = try await LocalMatroskaWorkflow.run(jobDirectory: jobFolder, jobID: job.id, attemptID: strict.attemptID,
+                                                        acquisition: original, maximumRetainedBytes: 2_000_000_000 - (retained - own))
+        try await LocalMatroskaWorkflow.validatePublished(jobDirectory: jobFolder, jobID: job.id,
+                                                          attemptID: strict.attemptID, acquisition: original,
+                                                          mkv: output.mkv, derived: output.derived)
+        try check()
+        let previous = current
+        strict.mkv = output.mkv
+        strict.derived = output.derived
+        current?.strictMatroska = strict
+        current?.sourceFile = output.derived.file
+        current?.sourceSHA256 = output.derived.sha256
+        do {
+            guard current?.validStrictMatroska == true else { throw LocalError.source }
+            try update("Source retained", "Verified MKV-derived media is now the source for analysis and clips. Original files remain retained.")
+        } catch { current = previous; throw error }
+    }
+    #endif
+
     private func run(source: URL?, library: CharacterLibrary, audio: AudioStore, speech: SpeechStudio, referenceInput: SeparationStore.ReferenceInput? = nil) {
         guard let lease = audio.claimProcessing() else { notice = "Stop the other recording or speech job first."; return }
         busy = true
@@ -314,7 +462,14 @@ import CryptoKit
                 // Do not acquire or analyze private media when this build cannot synthesize a preview.
                 guard let bundle = f5Bundle else { throw LocalError.engine }
                 libraryOwner = try await library.beginLocalGeneration()
-                if current?.sourceFile == nil, let input = current?.acquisitionURL {
+                if current?.strictMatroska != nil {
+                    #if os(iOS)
+                    try await prepareStrictMatroska(jobFolder: jobFolder, token: run)
+                    try check()
+                    #else
+                    throw LocalError.source
+                    #endif
+                } else if current?.sourceFile == nil, let input = current?.acquisitionURL {
                     try update("Acquiring source", "Preparing a bounded direct website download. Partial files and completed tracks remain retained.")
                     let result = try await LocalMediaAcquisition.acquire(input: input, folder: jobFolder) { [weak self] message in
                         Task { @MainActor in
@@ -364,7 +519,13 @@ import CryptoKit
                         try referenceInput.validateCopied(digest: digest, bytes: copiedBytes)
                     }
                     try check()
+                    if let clip = referenceInput?.clipLineage {
+                        let lineage = MatroskaSeparatedLineage(clip: clip, vocalsSHA256: digest)
+                        guard lineage.valid(sourceSHA256: digest) else { throw LocalError.source }
+                        current?.separatedMatroska = referenceInput.map { _ in lineage }
+                    }
                     current?.sourceFile = destination.lastPathComponent; current?.sourceSHA256 = digest
+                    guard current?.validSeparatedMatroska == true else { throw LocalError.source }
                     try update("Source retained", "Private source copy committed. It will not be deleted automatically.")
                 }
                 guard let name = current?.sourceFile, let expectedHash = current?.sourceSHA256 else { throw LocalError.source }
@@ -461,10 +622,20 @@ import CryptoKit
                 if current?.speakerVoiceIDs == nil { current?.speakerVoiceIDs = [:] }
                 if current?.speakerOutcomes == nil { current?.speakerOutcomes = [:] }
                 if current?.qualityPolicyVersions == nil { current?.qualityPolicyVersions = [:] }
+                let strictSourceLineage = current?.strictSourceLineage
+                let separatedLineage = current?.separatedMatroska
+                guard current?.validSeparatedMatroska == true else { throw LocalError.source }
+                let referenceSourceLineage = strictSourceLineage ?? separatedLineage?.clip.source
+                if current?.strictMatroska != nil {
+                    guard strictSourceLineage?.derivedSHA256 == expectedHash else { throw LocalError.source }
+                }
                 var saved = 0, unresolved = 0
                 for speaker in groups {
                     try check()
                     if current?.qualityPolicyVersions?[speaker.speaker] == LocalSoundQualityPolicy.version, let id = current?.speakerVoiceIDs?[speaker.speaker], let existing = library.profiles.first(where: { $0.id == id }),
+                       existing.matroskaReference?.source == referenceSourceLineage,
+                       existing.matroskaReference?.separatedClip == separatedLineage?.clip,
+                       existing.matroskaReference?.vocalsSHA256 == separatedLineage?.vocalsSHA256,
                        current?.speakerAssets?[speaker.speaker]?.referenceSHA256 == existing.referenceSHA256,
                        validatedSpeakerAssetURL(speaker.speaker, preview: true) != nil {
                         saved += 1
@@ -486,6 +657,16 @@ import CryptoKit
                             continue
                         }
                         let referenceDigest=Self.hash(clip.wave)
+                        let selectedReferenceStart = (separatedLineage?.clip.actualStart ?? 0) + window.start
+                        let matroskaReference = referenceSourceLineage.map {
+                            MatroskaReferenceLineage(source: $0, requestedStartSeconds: selectedReferenceStart,
+                                                    requestedDurationSeconds: window.seconds,
+                                                    retainedFrames: Int((clip.seconds * 24_000).rounded()),
+                                                    sampleRate: 24_000, referenceSHA256: referenceDigest,
+                                                    separatedClip: separatedLineage?.clip, vocalsSHA256: separatedLineage?.vocalsSHA256)
+                        }
+                        if let matroskaReference,
+                           !matroskaReference.valid(seconds: clip.seconds, sha256: referenceDigest) { throw LocalError.source }
                         try candidate.record(.extracted,reason:"Bounded reference audio extracted",referenceSHA256:referenceDigest,directory:jobFolder)
                         let reference = jobFolder.appendingPathComponent("reference-" + attempt + ".wav")
                         try clip.wave.write(to: reference, options: .atomic)
@@ -605,7 +786,7 @@ import CryptoKit
                             }
                             try update("Similarity unavailable", reason + " The word-checked reference remains usable; identity and likeness remain unverified.")
                         }
-                        if let existing = library.profiles.first(where: { $0.referenceSHA256 == Self.hash(clip.wave) && $0.referenceText == transcript }) {
+                        if let existing = library.profiles.first(where: { $0.referenceSHA256 == Self.hash(clip.wave) && $0.referenceText == transcript && $0.matroskaReference == matroskaReference }) {
                             library.selectedID = existing.id
                             current?.voiceID = existing.id
                             current?.speakerVoiceIDs?[speaker.speaker] = existing.id
@@ -621,7 +802,10 @@ import CryptoKit
                         let collection = jobFolder.appendingPathComponent("collection-" + attempt, isDirectory: true)
                         let voiceFolder = collection.appendingPathComponent(id, isDirectory: true)
                         try FileManager.default.createDirectory(at: voiceFolder, withIntermediateDirectories: true)
-                        let metadata: [String: Any] = ["id": id, "name": "Unidentified speaker " + speaker.speaker + " " + String(current!.id.uuidString.prefix(6)), "source": "User-authorized local media SHA256 " + expectedHash, "permission": "User affirmed source-use authorization in the local studio", "referenceText": transcript, "schemaVersion": 1, "kind": "f5-reference", "engine": "F5TTS_v1_Base", "referenceFile": "reference.wav", "referenceSHA256": Self.hash(clip.wave), "trainedModel": false, "categories": ["Local", "Unidentified", "Preview-only"], "referenceBytes": clip.wave.count, "seconds": clip.seconds]
+                        var metadata: [String: Any] = ["id": id, "name": "Unidentified speaker " + speaker.speaker + " " + String(current!.id.uuidString.prefix(6)), "source": "User-authorized local media SHA256 " + expectedHash, "permission": "User affirmed source-use authorization in the local studio", "referenceText": transcript, "schemaVersion": 1, "kind": "f5-reference", "engine": "F5TTS_v1_Base", "referenceFile": "reference.wav", "referenceSHA256": Self.hash(clip.wave), "trainedModel": false, "categories": ["Local", "Unidentified", "Preview-only"], "referenceBytes": clip.wave.count, "seconds": clip.seconds]
+                        if let matroskaReference {
+                            metadata["matroskaReference"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(matroskaReference))
+                        }
                         try JSONSerialization.data(withJSONObject: metadata, options: [.sortedKeys]).write(to: voiceFolder.appendingPathComponent("manifest.json"), options: .atomic)
                         try clip.wave.write(to: voiceFolder.appendingPathComponent("reference.wav"), options: .atomic)
                         try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "voices": [["id": id, "folder": id]]]).write(to: collection.appendingPathComponent("collection.json"), options: .atomic)

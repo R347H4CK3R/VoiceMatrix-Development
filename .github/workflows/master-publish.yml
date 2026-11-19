@@ -31,5 +31,5 @@ jobs:
       - run: python -m tests.prepare_master_publish master-fixture
       - name: Import actual published folders through production Swift store
         run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift tests/native/MasterPublishChecks.swift -o master-publish-checks
+          xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift VoiceMatrix/MatroskaSourceLineage.swift tests/native/MasterPublishChecks.swift -o master-publish-checks
           ./master-publish-checks master-fixture

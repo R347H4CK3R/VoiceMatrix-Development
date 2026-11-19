@@ -5,7 +5,7 @@ class SeparationStoreTests(unittest.TestCase):
     def test_pair_validation_and_corruption(self):
         with tempfile.TemporaryDirectory() as td:
             binary=str(pathlib.Path(td)/'probe')
-            subprocess.run(['swiftc',str(ROOT/'VoiceMatrix/RetainedMediaReader.swift'),str(ROOT/'VoiceMatrix/VocalSeparationAssets.swift'),str(ROOT/'VoiceMatrix/SeparationStore.swift'),str(ROOT/'probes/separation-store/main.swift'),'-o',binary],check=True)
+            subprocess.run(['swiftc',str(ROOT/'VoiceMatrix/RetainedMediaReader.swift'),str(ROOT/'VoiceMatrix/VocalSeparationAssets.swift'),str(ROOT/'VoiceMatrix/SeparationStore.swift'),str(ROOT/'VoiceMatrix/MatroskaSourceLineage.swift'),str(ROOT/'probes/separation-store/main.swift'),'-o',binary],check=True)
             subprocess.run([binary,str(pathlib.Path(td)/'store')],check=True,timeout=30)
 
 class SeparationSurfaceTests(unittest.TestCase):
@@ -37,7 +37,7 @@ class SeparationImportTests(unittest.TestCase):
     def test_native_audio_import(self):
         with tempfile.TemporaryDirectory() as td:
             binary=str(pathlib.Path(td)/'probe')
-            subprocess.run(['swiftc',str(ROOT/'VoiceMatrix/RetainedMediaReader.swift'),str(ROOT/'VoiceMatrix/VocalSeparationAssets.swift'),str(ROOT/'VoiceMatrix/SeparationStore.swift'),str(ROOT/'VoiceMatrix/SeparationAudioImport.swift'),str(ROOT/'probes/separation-import/main.swift'),'-o',binary],check=True)
+            subprocess.run(['swiftc',str(ROOT/'VoiceMatrix/RetainedMediaReader.swift'),str(ROOT/'VoiceMatrix/VocalSeparationAssets.swift'),str(ROOT/'VoiceMatrix/SeparationStore.swift'),str(ROOT/'VoiceMatrix/MatroskaSourceLineage.swift'),str(ROOT/'VoiceMatrix/SeparationAudioImport.swift'),str(ROOT/'probes/separation-import/main.swift'),'-o',binary],check=True)
             subprocess.run([binary,str(pathlib.Path(td)/'audio')],check=True,timeout=60)
 
 class SeparationWorkflowTests(unittest.TestCase):

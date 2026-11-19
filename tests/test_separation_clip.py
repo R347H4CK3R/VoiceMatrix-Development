@@ -22,7 +22,7 @@ class NativeClipTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp=tempfile.TemporaryDirectory();cls.addClassCleanup(cls.temp.cleanup)
         cls.root=Path(cls.temp.name);cls.exe=cls.root/'clip'
-        subprocess.run(['swiftc','-O','-parse-as-library',*[str(ROOT/'VoiceMatrix'/name) for name in ['RetainedMediaReader.swift','VocalSeparationAssets.swift','SeparationStore.swift','SeparationAudioImport.swift','SeparationClipExtractor.swift','SeparationClipHandoff.swift']],str(ROOT/'probes/separation-clip/main.swift'),'-o',str(cls.exe)],check=True,timeout=120)
+        subprocess.run(['swiftc','-O','-parse-as-library',*[str(ROOT/'VoiceMatrix'/name) for name in ['RetainedMediaReader.swift','VocalSeparationAssets.swift','SeparationStore.swift','SeparationAudioImport.swift','SeparationClipExtractor.swift','SeparationClipHandoff.swift','MatroskaSourceLineage.swift']],str(ROOT/'probes/separation-clip/main.swift'),'-o',str(cls.exe)],check=True,timeout=120)
         if not shutil.which('ffmpeg'):raise RuntimeError('ffmpeg fixture tool required')
         cls.wav=cls.root/'stereo.wav'
         with wave.open(str(cls.wav),'wb') as w:

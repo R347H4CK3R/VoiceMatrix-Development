@@ -141,6 +141,7 @@ struct ClipSpeakerReviewStore: Sendable {
                 let receipt = try JSONDecoder().decode(SeparationClipHandoff.Receipt.self, from: data)
                 guard directory.lastPathComponent == "Clip-" + receipt.id.uuidString,
                       receipt.sourceJobID == source.jobID, receipt.sourceSHA256 == source.sha256,
+                      receipt.validMatroskaLineage, receipt.matroskaLineage == source.matroskaLineage,
                       receipt.clipSHA256.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
                       receipt.actualStart.isFinite, receipt.actualStart >= 0,
                       receipt.actualStart + Double(receipt.frames) / 44_100 <= 1800 else { continue }

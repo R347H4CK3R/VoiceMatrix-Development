@@ -153,6 +153,7 @@ targets:
     - path: probes/native-f5/Calibration.swift
     - path: VoiceMatrix/F5ReferenceEngine.swift
     - path: VoiceMatrix/F5SpeechChunks.swift
+    - path: VoiceMatrix/MatroskaSourceLineage.swift
     - path: VoiceMatrix/CharacterFolderStore.swift
     dependencies:
     - package: SpeechSwift
@@ -165,6 +166,7 @@ targets:
     platform: iOS
     sources:
     - path: probes/native-conversion/RuntimeHost.swift
+    - path: VoiceMatrix/MatroskaSourceLineage.swift
     - path: VoiceMatrix/CharacterFolderStore.swift
     - path: VoiceMatrix/Catalog.swift
     - path: VoiceMatrix/ConversionAudio.swift
@@ -198,6 +200,7 @@ targets:
     - path: VoiceMatrix/LocalReferenceAttempt.swift
     - path: VoiceMatrix/LocalVoiceProfilePackage.swift
     - path: VoiceMatrix/LocalVideoStudio.swift
+    - path: VoiceMatrix/MatroskaSourceLineage.swift
     - path: VoiceMatrix/SeparationClipHandoff.swift
     - path: VoiceMatrix/ClipSpeakerReviewStore.swift
     - path: VoiceMatrix/ClipSpeakerReviewCoordinator.swift

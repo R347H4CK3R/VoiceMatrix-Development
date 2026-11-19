@@ -19,5 +19,5 @@ jobs:
       - run: python -m tests.prepare_pack_parity parity-fixtures
       - name: Test identical corpus with the production native importer
         run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift tests/native/PackParityChecks.swift -o pack-parity-checks
+          xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift VoiceMatrix/MatroskaSourceLineage.swift tests/native/PackParityChecks.swift -o pack-parity-checks
           ./pack-parity-checks parity-fixtures

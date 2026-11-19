@@ -12,7 +12,7 @@ targets:
   SpeechLatencyBenchmark:
     type: tool
     platform: macOS
-    sources: [../../VoiceMatrix/F5ReferenceEngine.swift, ../../VoiceMatrix/F5SpeechChunks.swift, ../../VoiceMatrix/CharacterFolderStore.swift, LatencyBenchmark.swift]
+    sources: [../../VoiceMatrix/F5ReferenceEngine.swift, ../../VoiceMatrix/F5SpeechChunks.swift, ../../VoiceMatrix/CharacterFolderStore.swift, ../../VoiceMatrix/MatroskaSourceLineage.swift, LatencyBenchmark.swift]
     dependencies:
       - package: SpeechSwift
         product: F5TTS

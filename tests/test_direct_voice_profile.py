@@ -42,7 +42,7 @@ class DirectVoiceProfileTests(unittest.TestCase):
     env['LD_LIBRARY_PATH']=str(root)
    binary=root/'library-checks'
    subprocess.run(['swiftc',*link,
-    str(ROOT/'VoiceMatrix/F5SpeechChunks.swift'),str(ROOT/'VoiceMatrix/LocalVoiceProfilePackage.swift'),str(ROOT/'VoiceMatrix/CharacterFolderStore.swift'),
+    str(ROOT/'VoiceMatrix/F5SpeechChunks.swift'),str(ROOT/'VoiceMatrix/LocalVoiceProfilePackage.swift'),str(ROOT/'VoiceMatrix/CharacterFolderStore.swift'),str(ROOT/'VoiceMatrix/MatroskaSourceLineage.swift'),
     str(ROOT/'tests/native/LocalVoiceLibraryChecks.swift'),'-o',str(binary)],check=True,timeout=60)
    subprocess.run([str(binary),str(root)],env=env,check=True,timeout=60)
    index=json.loads((root/'library/index.json').read_text())

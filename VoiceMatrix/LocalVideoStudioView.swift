@@ -370,6 +370,7 @@ struct LocalVideoStudioView: View {
         clipWork=Task {
             defer {audio.releaseProcessing(lease);clipPreparing=false;clipWork=nil}
             do {
+                try await local.verifyRetainedClipSource(source)
                 let worker=Task.detached {try await SeparationClipHandoff.prepare(source:source,start:start,seconds:seconds)}
                 let input=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
                 try Task.checkCancellation()

@@ -27,7 +27,7 @@ jobs:
       - name: Compile production retained clip pipeline and run actual Core ML
         run: |
           set -o pipefail
-          for file in LocalSpeakerDiarization LocalSpeakerPolicy LocalOverlapPolicy ClipSpeakerReviewStore ClipSpeakerReviewCoordinator SeparationClipHandoff SeparationClipExtractor SeparationStore RetainedMediaReader VocalSeparationAssets; do
+          for file in LocalSpeakerDiarization LocalSpeakerPolicy LocalOverlapPolicy ClipSpeakerReviewStore ClipSpeakerReviewCoordinator SeparationClipHandoff SeparationClipExtractor SeparationStore RetainedMediaReader VocalSeparationAssets MatroskaSourceLineage; do
             cp "VoiceMatrix/$file.swift" probes/clip-speaker-review/Sources/Probe/
           done
           swift build --package-path probes/clip-speaker-review -c release

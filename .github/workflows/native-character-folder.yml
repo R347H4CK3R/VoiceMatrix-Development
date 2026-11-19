@@ -35,7 +35,7 @@ jobs:
           PY
       - name: Compile and execute native private-import checks
         run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift tests/native/CharacterFolderChecks.swift -o character-folder-checks
+          xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift VoiceMatrix/MatroskaSourceLineage.swift tests/native/CharacterFolderChecks.swift -o character-folder-checks
           ./character-folder-checks folder-check-fixture/Voices
 
       - name: Check shared audio-work ownership
@@ -70,5 +70,5 @@ jobs:
 
       - name: Check bounded private transfer and native folder staging
         run: |
-          xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift VoiceMatrix/VoiceFolderSync.swift VoiceMatrix/VoiceSyncLog.swift tests/native/VoiceFolderSyncChecks.swift -o private-transfer-checks
+          xcrun swiftc -parse-as-library VoiceMatrix/CharacterFolderStore.swift VoiceMatrix/MatroskaSourceLineage.swift VoiceMatrix/VoiceFolderSync.swift VoiceMatrix/VoiceSyncLog.swift tests/native/VoiceFolderSyncChecks.swift -o private-transfer-checks
           ./private-transfer-checks folder-check-fixture/Voices

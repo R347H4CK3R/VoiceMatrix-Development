@@ -19,6 +19,7 @@ struct SeparationStore {
         let gain: Float
         let vocalsSHA256: String
         let accompanimentSHA256: String
+        var clipLineage: MatroskaClipLineage? = nil
     }
     struct Result: Identifiable {
         let receipt: Receipt
@@ -35,6 +36,7 @@ struct SeparationStore {
         let sha256: String
         let bytes: Int
         let resultID: UUID
+        var clipLineage: MatroskaClipLineage? = nil
         /// Exclusive downstream job copy; fail before a caller commits sourceFile.
         func copyVerified(to destination: URL) throws -> String {
             try Data().write(to:destination,options:.withoutOverwriting)
@@ -80,7 +82,7 @@ struct SeparationStore {
         let expected = 44 + current.frames * 8
         let snapshot = root.appendingPathComponent("Reference-"+current.id.uuidString+"-"+current.receipt.vocalsSHA256+".wav")
         let reference = ReferenceInput(url:snapshot,sha256:current.receipt.vocalsSHA256,
-                                       bytes:expected,resultID:current.id)
+                                       bytes:expected,resultID:current.id,clipLineage:current.receipt.clipLineage)
         var info=stat()
         if lstat(snapshot.path,&info)==0 {
             guard try Self.validWAV(snapshot,frames:current.frames,sha:reference.sha256) else {throw Failure.unsafe}
@@ -142,10 +144,11 @@ struct SeparationStore {
         complete=true
         return (target,hash.finalize().map{String(format:"%02x",$0)}.joined())
     }
-    func publish(vocals:[Float],accompaniment:[Float],inputName:String,inputSHA256:String) throws -> Result {
+    func publish(vocals:[Float],accompaniment:[Float],inputName:String,inputSHA256:String,clipLineage:MatroskaClipLineage? = nil) throws -> Result {
         guard !vocals.isEmpty,vocals.count%2==0,vocals.count<=882000,
               vocals.count==accompaniment.count,vocals.allSatisfy(\.isFinite),accompaniment.allSatisfy(\.isFinite),
-              inputSHA256.count==64,inputSHA256.allSatisfy({$0.isHexDigit}) else {throw Failure.invalid}
+              inputSHA256.count==64,inputSHA256.allSatisfy({$0.isHexDigit}),
+              clipLineage?.valid(inputSHA256: inputSHA256, frames: vocals.count / 2) ?? true else {throw Failure.invalid}
         try admit();try Task.checkCancellation()
         let id=UUID(), staging=root.appendingPathComponent(".staging-"+UUID().uuidString,isDirectory:true)
         let destination=root.appendingPathComponent("Result-"+id.uuidString,isDirectory:true)
@@ -160,7 +163,7 @@ struct SeparationStore {
         let receipt=Receipt(id:id,date:Date(),inputName:String(inputName.prefix(120)),inputSHA256:inputSHA256,
                             modelSHA256:VocalSeparationAssets.models.mapValues{$0.sha256},frames:vocals.count/2,gain:gain,
                             vocalsSHA256:try Self.digest(vocal,maximum:4_000_000),
-                            accompanimentSHA256:try Self.digest(backing,maximum:4_000_000))
+                            accompanimentSHA256:try Self.digest(backing,maximum:4_000_000), clipLineage:clipLineage)
         let metadata=staging.appendingPathComponent("receipt.json")
         try JSONEncoder().encode(receipt).write(to:metadata,options:.withoutOverwriting)
         let h=try FileHandle(forWritingTo:metadata);try h.synchronize();try h.close()
@@ -218,7 +221,8 @@ struct SeparationStore {
                 var data=Data()
                 try RetainedMediaReader.read(directory.appendingPathComponent("receipt.json"),maximumBytes:4096){data.append($0)}
                 let r=try JSONDecoder().decode(Receipt.self,from:data)
-                guard directory.lastPathComponent=="Result-"+r.id.uuidString,(1...441000).contains(r.frames),r.gain.isFinite,r.gain>0,r.gain<=1 else {continue}
+                guard directory.lastPathComponent=="Result-"+r.id.uuidString,(1...441000).contains(r.frames),r.gain.isFinite,r.gain>0,r.gain<=1,
+                      r.clipLineage?.valid(inputSHA256: r.inputSHA256, frames: r.frames) ?? true else {continue}
                 let result=Result(receipt:r,directory:directory)
                 guard try Self.validWAV(result.vocals,frames:r.frames,sha:r.vocalsSHA256),
                       try Self.validWAV(result.accompaniment,frames:r.frames,sha:r.accompanimentSHA256) else {continue}

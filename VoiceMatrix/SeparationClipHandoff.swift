@@ -12,6 +12,7 @@ enum SeparationClipHandoff {
         let jobID: UUID
         let url: URL
         let sha256: String
+        var matroskaLineage: MatroskaSourceLineage? = nil
     }
     struct Receipt: Codable, Equatable {
         let id: UUID
@@ -22,6 +23,18 @@ enum SeparationClipHandoff {
         let actualStart: Double
         let frames: Int
         let clipSHA256: String
+        var matroskaLineage: MatroskaSourceLineage? = nil
+
+        var validMatroskaLineage: Bool {
+            guard let lineage = matroskaLineage else { return true }
+            return lineage.isValid && lineage.jobID == sourceJobID && lineage.derivedSHA256 == sourceSHA256 &&
+                requestedStart.isFinite && requestedStart >= 0 && requestedSeconds.isFinite &&
+                (0.5...10).contains(requestedSeconds) && requestedStart + requestedSeconds <= 1800 &&
+                actualStart.isFinite && actualStart >= 0 &&
+                abs(actualStart - requestedStart) <= 1.0 / 44_100.0 + 1e-9 &&
+                (1...441_000).contains(frames) && actualStart + Double(frames) / 44_100.0 <= 1800 &&
+                abs(Double(frames) - requestedSeconds * 44_100.0) <= 1.5
+        }
     }
     struct Input: Identifiable, Hashable {
         let id: UUID
@@ -74,6 +87,11 @@ enum SeparationClipHandoff {
             guard hash.finalize().map({String(format:"%02x",$0)}).joined()==source.sha256 else {throw SeparationStore.Failure.unsafe}
         } catch {try? writer.close();throw error}
         try Task.checkCancellation()
+        if let lineage = source.matroskaLineage {
+            guard lineage.isValid, lineage.jobID == source.jobID, lineage.derivedSHA256 == source.sha256 else {
+                throw SeparationStore.Failure.unsafe
+            }
+        }
         let clip=try await SeparationClipExtractor.extract(source:snapshot,start:start,seconds:seconds)
         guard try SeparationStore.digest(snapshot,maximum:536_870_912)==source.sha256 else {throw SeparationStore.Failure.unsafe}
         let wave=staging.appendingPathComponent("clip.wav")
@@ -81,7 +99,9 @@ enum SeparationClipHandoff {
         let sha=try SeparationStore.digest(wave,maximum:4_000_000)
         guard try SeparationStore.validWAV(wave,frames:clip.frames,sha:sha) else {throw SeparationStore.Failure.invalid}
         let receipt=Receipt(id:id,sourceJobID:source.jobID,sourceSHA256:source.sha256,
-                            requestedStart:start,requestedSeconds:seconds,actualStart:clip.start,frames:clip.frames,clipSHA256:sha)
+                            requestedStart:start,requestedSeconds:seconds,actualStart:clip.start,frames:clip.frames,clipSHA256:sha,
+                            matroskaLineage:source.matroskaLineage)
+        guard receipt.validMatroskaLineage else { throw SeparationStore.Failure.unsafe }
         let receiptData=try JSONEncoder().encode(receipt)
         let metadata=staging.appendingPathComponent("receipt.json")
         try receiptData.write(to:metadata,options:.withoutOverwriting)
@@ -95,6 +115,18 @@ enum SeparationClipHandoff {
     }
     /// Recheck the canonical owned clip and bounded provenance on destination entry.
     static func validate(_ input:Input, store:SeparationStore = .standard) throws {
+        _ = try verifiedReceipt(input, store: store)
+    }
+    static func verifiedLineage(_ input: Input, store: SeparationStore = .standard) throws -> MatroskaClipLineage? {
+        let receipt = try verifiedReceipt(input, store: store)
+        guard let source = receipt.matroskaLineage else { return nil }
+        let lineage = MatroskaClipLineage(source: source, clipID: receipt.id, clipReceiptSHA256: input.receiptSHA256,
+                                        clipSHA256: receipt.clipSHA256, requestedStart: receipt.requestedStart,
+                                        requestedSeconds: receipt.requestedSeconds, actualStart: receipt.actualStart, frames: receipt.frames)
+        guard lineage.valid(inputSHA256: input.sha256, frames: input.frames) else { throw SeparationStore.Failure.unsafe }
+        return lineage
+    }
+    private static func verifiedReceipt(_ input:Input, store:SeparationStore) throws -> Receipt {
         try Task.checkCancellation();try store.prepare()
         let directory=store.root.appendingPathComponent("Clip-"+input.id.uuidString,isDirectory:true)
         guard input.url.lastPathComponent=="clip.wav",
@@ -105,9 +137,10 @@ enum SeparationClipHandoff {
         try RetainedMediaReader.read(directory.appendingPathComponent("receipt.json"),maximumBytes:4096){data.append($0)}
         guard SHA256.hash(data:data).map({String(format:"%02x",$0)}).joined()==input.receiptSHA256 else {throw SeparationStore.Failure.unsafe}
         let receipt=try JSONDecoder().decode(Receipt.self,from:data)
-        guard receipt.id==input.id,receipt.clipSHA256==input.sha256,receipt.frames==input.frames,
+        guard receipt.validMatroskaLineage, receipt.id==input.id,receipt.clipSHA256==input.sha256,receipt.frames==input.frames,
               (1...441000).contains(input.frames),receipt.actualStart==input.start,
               try SeparationStore.validWAV(directory.appendingPathComponent("clip.wav"),frames:input.frames,sha:input.sha256) else {throw SeparationStore.Failure.unsafe}
+        return receipt
     }
 }
 #endif

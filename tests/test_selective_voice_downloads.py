@@ -40,7 +40,7 @@ class SelectiveCatalogTests(unittest.TestCase):
    with self.assertRaises(TransferError) as caught:self.source.catalog()
   self.assertEqual(caught.exception.status,413)
  def test_native_selective_download_contract(self):
-  sources=[ROOT/'VoiceMatrix/CharacterFolderStore.swift',ROOT/'VoiceMatrix/VoiceSyncLog.swift',ROOT/'VoiceMatrix/VoiceFolderSync.swift',ROOT/'VoiceMatrix/RemoteVoiceCatalog.swift',ROOT/'tests/native/SelectiveVoiceDownloadChecks.swift']
+  sources=[ROOT/'VoiceMatrix/CharacterFolderStore.swift',ROOT/'VoiceMatrix/MatroskaSourceLineage.swift',ROOT/'VoiceMatrix/VoiceSyncLog.swift',ROOT/'VoiceMatrix/VoiceFolderSync.swift',ROOT/'VoiceMatrix/RemoteVoiceCatalog.swift',ROOT/'tests/native/SelectiveVoiceDownloadChecks.swift']
   for path in sources:self.assertTrue(path.is_file(),f'Missing selective-download implementation: {path.name}')
   if sys.platform != 'darwin' or not shutil.which('swiftc'):self.skipTest('Apple Swift/CryptoKit unavailable; native checks require Apple CI')
   fixture=self.root/'catalog.json';fixture.write_text(json.dumps(self.source.catalog()))

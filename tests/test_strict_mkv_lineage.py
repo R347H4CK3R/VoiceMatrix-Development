@@ -84,3 +84,38 @@ class StrictMKVLineageTests(unittest.TestCase):
         gate = (ROOT.parent / ".github/workflows/strict-mkv-workflow.yml").read_text()
         self.assertIn("command -v swiftc", gate)
         self.assertIn("tests.test_local_snapshot_recovery", gate)
+
+    def test_fixture_injection_targets_only_the_native_test_bundle(self):
+        import subprocess
+        import sys
+        import tempfile
+        import yaml
+
+        root = ROOT.parent
+        workflow = yaml.safe_load((root / ".github/workflows/strict-mkv-workflow.yml").read_text())
+        step = next(step for step in workflow["jobs"]["app-integration"]["steps"]
+                    if step.get("name") == "Prepare verified tooling and source-only resources")
+        script = step["run"].split("<<'PY_RESOURCE'\n", 1)[1].split("\nPY_RESOURCE", 1)[0]
+        source = (root / "project.yml").read_text()
+        self.assertIn("    - VoiceMatrixTests\n", source)
+        self.assertIn("      - VoiceMatrixTests\n", source)
+        before = yaml.safe_load(source)
+        resources = [{"path": f".strict-mkv-fixture/{name}", "buildPhase": "resources"}
+                     for name in ("strict-mkv-licensed.mp4", "strict-mkv-fixture.json")]
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project.yml"
+            project.write_text(source)
+            run = subprocess.run([sys.executable, "-c", script], cwd=directory, capture_output=True)
+            self.assertEqual(run.returncode, 0, run.stderr.decode())
+            after = yaml.safe_load(project.read_text())
+            original_sources = before["targets"]["VoiceMatrixTests"]["sources"]
+            self.assertEqual(after["targets"]["VoiceMatrixTests"]["sources"],
+                             [original_sources[0], *resources, *original_sources[1:]])
+            after["targets"]["VoiceMatrixTests"]["sources"] = original_sources
+            self.assertEqual(after, before)
+            broken = source.replace("    sources:\n    - VoiceMatrixTests\n",
+                                    "    sources:\n    - UnrelatedTests\n", 1)
+            project.write_text(broken)
+            rejected = subprocess.run([sys.executable, "-c", script], cwd=directory, capture_output=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertEqual(project.read_text(), broken)

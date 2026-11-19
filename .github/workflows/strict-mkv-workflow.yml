@@ -35,7 +35,8 @@ jobs:
           from pathlib import Path
           p = Path("project.yml")
           source = p.read_text()
-          anchor = "    - VoiceMatrixTests\n"
+          anchor = ("\n  VoiceMatrixTests:\n    type: bundle.unit-test\n"
+                    "    platform: iOS\n    sources:\n    - VoiceMatrixTests\n")
           assert source.count(anchor) == 1
           entries = "".join(f"    - path: .strict-mkv-fixture/{name}\n      buildPhase: resources\n" for name in
                             ("strict-mkv-licensed.mp4", "strict-mkv-fixture.json"))
@@ -52,6 +53,7 @@ jobs:
           test "$(cat native-mkv-stage-source.txt)" = "$GITHUB_SHA"
           git rev-parse HEAD^{tree} | tee native-mkv-stage-tree.txt
           command -v swiftc
+          python3 -m pip install PyYAML==6.0.3
           python3 -m unittest tests.test_mkv_stage_policy tests.test_mkv_python_bridge_contract tests.test_local_matroska_workflow_contract tests.test_strict_mkv_product_route tests.test_strict_mkv_lineage tests.test_separated_vocals_reference tests.test_local_snapshot_recovery -v
       - name: Compile full production ARM64 app
         run: |

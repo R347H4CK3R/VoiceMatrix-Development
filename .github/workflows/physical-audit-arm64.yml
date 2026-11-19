@@ -22,21 +22,22 @@ jobs:
           python-version: '3.12'
       - name: Require exact public source and externally approved hosted scope
         env:
-          ALLOWED_CODE_PARENT: f04ef41de2dde27041f7664d85fb0338688b584e
-          APPROVAL_SHA256: 88a939d267da192d7045ecc3303a59ca75c09adcf911871c32bf59f54c4e29e4
-          APPROVAL_JSON: '{"approvalDateUTC":"2026-11-19","approvedBy":"Coordinating maintainer","baselineIPA":{"sha256":"04d199d356a5fde59101d3909a35abf05e8dd1129141e0add66e1e45006c5d11","size":1330407101},"graphSHA256":"ff9369012927524e241f0cf3bcca1a72177947e02ef7933beef716377c87de72","iphoneOSSDK":"26.5","modelLocks":{"Diarization":"137ad0aba1483d0ba3c74cb5380ab05f5cd76a5eb47aa69b9de41c353315e7e0","F5TTS":"e51680c87462bb26433613fe61f7da735c59ab770020f5705a6159cda78bdb70","ParakeetASR":"f58c59e24e41e17f701d7b2b7fc4aa45343c232a2119fb6540357f676a6416ce"},"noFurtherDistribution":true,"noPersonalRecordings":true,"runtimeRevision":"42da8f3ed18ca1c0f1462032db5dc05ce77362a1","schemaVersion":1,"scope":"private-noncommercial-hardware-audit-only","xcodeVersion":"Xcode 26.6","xcodegenSHA256":"a450f63bdd650c280cfce0fef6c94dbb19c5bf8dc32811361fd5d2e912718503"}'
+          ALLOWED_CODE_PARENT: 9512542824614febf04ea20b85f9e64dcc4cbaec
+          APPROVAL_SHA256: e0240b01eb83897db82ae2268a2bf79220758aaecba21302122483d6916386b5
+          APPROVAL_JSON: '{"approvalDateUTC":"2026-11-19","approvedBy":"Coordinating maintainer (one official FFmpeg preflight retry)","baselineIPA":{"sha256":"04d199d356a5fde59101d3909a35abf05e8dd1129141e0add66e1e45006c5d11","size":1330407101},"graphSHA256":"ff9369012927524e241f0cf3bcca1a72177947e02ef7933beef716377c87de72","iphoneOSSDK":"26.5","modelLocks":{"Diarization":"137ad0aba1483d0ba3c74cb5380ab05f5cd76a5eb47aa69b9de41c353315e7e0","F5TTS":"e51680c87462bb26433613fe61f7da735c59ab770020f5705a6159cda78bdb70","ParakeetASR":"f58c59e24e41e17f701d7b2b7fc4aa45343c232a2119fb6540357f676a6416ce"},"noFurtherDistribution":true,"noPersonalRecordings":true,"runtimeRevision":"42da8f3ed18ca1c0f1462032db5dc05ce77362a1","schemaVersion":1,"scope":"private-noncommercial-hardware-audit-only","xcodeVersion":"Xcode 26.6","xcodegenSHA256":"a450f63bdd650c280cfce0fef6c94dbb19c5bf8dc32811361fd5d2e912718503"}'
         run: |
           set -euo pipefail
-          [[ "$ALLOWED_CODE_PARENT" =~ ^[a-f0-9]{40}$ ]]
-          [[ "$APPROVAL_SHA256" =~ ^[a-f0-9]{64}$ ]]
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          activation_guard() { printf 'audit_activation_failed_guard=%s\n' "$1" >&2; exit 1; }
+          [[ "$ALLOWED_CODE_PARENT" =~ ^[a-f0-9]{40}$ ]] || activation_guard parent-format
+          [[ "$APPROVAL_SHA256" =~ ^[a-f0-9]{64}$ ]] || activation_guard receipt-format
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || activation_guard checkout-sha
           # Public read-only exact refs, fetch no full history and no authenticated remote writes.
-          git fetch --no-tags --depth=1 origin "$ALLOWED_CODE_PARENT" 42da8f3ed18ca1c0f1462032db5dc05ce77362a1 4ed344a8bb859e841c35041f3f07b9510a930492
-          git diff --quiet "$ALLOWED_CODE_PARENT" HEAD -- . ':(exclude).github/workflows/physical-audit-arm64.yml'
-          test "$(git cat-file -p HEAD | sed -n 's/^parent //p')" = "$ALLOWED_CODE_PARENT"
+          git fetch --no-tags --depth=1 origin "$ALLOWED_CODE_PARENT" 42da8f3ed18ca1c0f1462032db5dc05ce77362a1 4ed344a8bb859e841c35041f3f07b9510a930492 || activation_guard reviewed-refs-read
+          git diff --quiet "$ALLOWED_CODE_PARENT" HEAD -- . ':(exclude).github/workflows/physical-audit-arm64.yml' || activation_guard direct-parent-source-bytes
+          test "$(git cat-file -p HEAD | sed -n 's/^parent //p')" = "$ALLOWED_CODE_PARENT" || activation_guard direct-parent
           umask 077
-          receipt=$(mktemp "$RUNNER_TEMP/noncommercial-audit-approval.XXXXXX")
+          receipt=$(mktemp "$RUNNER_TEMP/noncommercial-audit-approval.XXXXXX") || activation_guard receipt-file
           printf '%s' "$APPROVAL_JSON" > "$receipt"
-          test "$(shasum -a 256 "$receipt" | awk '{print $1}')" = "$APPROVAL_SHA256"
+          test "$(shasum -a 256 "$receipt" | awk '{print $1}')" = "$APPROVAL_SHA256" || activation_guard receipt-sha
           unset APPROVAL_JSON
           bash probes/physical-audit/hosted/run_metadata.sh "$GITHUB_SHA" "$(git rev-parse HEAD^{tree})" "$receipt" "$APPROVAL_SHA256"

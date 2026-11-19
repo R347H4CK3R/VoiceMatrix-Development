@@ -28,7 +28,7 @@ F5_NOTICES = ("F5-CC-BY-NC-4.0.txt", "speech-swift-APACHE-2.0.txt", "ATTRIBUTION
               "pypinyin-MIT.txt", "jieba-MIT.txt", "vocos-MIT.txt")
 SDK = "Python-3.13-iOS-support.b18.tar.gz"
 SDK_SHA = "d06acf2a9c7964a8689566353a0e707402eff822037de5e29ba0e16040f7047d"
-GRAPH_SHA = "ff9369012927524e241f0cf3bcca1a72177947e02ef7933beef716377c87de72"
+GRAPH_SHA = "2d2f397374be883181f421002ba25ef80231dab94ed331d7651bb4ebe68ee5f6"
 PYTHON_INSPECTOR_SHA = "f947b8689270aadb58d38a207396b3f97db7ec1c348747b7f48495219629e49f"
 PREFIX = "Payload/VoiceMatrixPhysicalAudit.app/"
 

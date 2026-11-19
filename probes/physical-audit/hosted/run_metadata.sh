@@ -51,9 +51,13 @@ cleanup() {
 trap cleanup EXIT
 gate=probes/physical-audit/packaging_gate.py
 hosted=probes/physical-audit/hosted
-graph="$root/tests/fixtures/build17-original-Package.resolved"
-graphsha=ff9369012927524e241f0cf3bcca1a72177947e02ef7933beef716377c87de72
+graph="$work/frozen/Package.resolved"
+graphsha=2d2f397374be883181f421002ba25ef80231dab94ed331d7651bb4ebe68ee5f6
+mkdir "$work/frozen"
+stage=derive-canonical-vendored-graph
+python3 "$hosted/verify_graph.py" seed "$graph" > "$work/graph-derive.log" 2>&1 || fail_guard derive-canonical-vendored-graph
 [[ $(shasum -a 256 "$graph" | awk '{print $1}') == "$graphsha" ]] || fail_guard frozen-package-graph
+stage=verified-receipt
 python3 - "$gate" "$receipt" "$receipt_sha" <<'PY_RECEIPT'
 import importlib.util, json, sys
 from pathlib import Path
@@ -94,6 +98,7 @@ stage=source-tooling
 # Verify clean exact runtime before the local ephemeral build mutates ignored directories.
 "${offline[@]}" python3 probes/physical-audit/prepare.py .physical-audit-src > "$work/source.log" 2>&1
 "${offline[@]}" python3 tools/vendored_fluid.py >> "$work/source.log" 2>&1
+"${offline[@]}" python3 tools/vendored_onnx.py >> "$work/source.log" 2>&1
 stage=pinned-xcodegen
 curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 --max-filesize 30000000 \
   https://github.com/yonaskolb/XcodeGen/releases/download/2.44.1/xcodegen.zip -o "$work/xcodegen.zip"
@@ -109,6 +114,32 @@ approval, binary = map(Path, sys.argv[1:])
 if hashlib.sha256(binary.read_bytes()).hexdigest() != json.loads(approval.read_bytes())["xcodegenSHA256"]:
     sys.exit("Tool binary differs from approved receipt")
 PY_TOOL
+
+stage=early-graph-project-projection
+"${offline[@]}" python3 "$hosted/verify_graph.py" projection .physical-audit-src/project.yml \
+  .physical-audit-graph-only.yml > "$work/graph-project.log" 2>&1 || fail_guard graph-project-projection
+printf 'enum GraphProbe {}\n' > .physical-audit-src/GraphProbe.swift
+"${offline[@]}" "$XCODEGEN" generate --spec .physical-audit-graph-only.yml \
+  >> "$work/graph-project.log" 2>&1 || fail_guard graph-project-generation
+project=VoiceMatrixPhysicalAudit.xcodeproj
+resolved="$project/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+mkdir -p "$(dirname "$resolved")"
+cp "$graph" "$resolved"
+cmp "$graph" "$resolved" || fail_guard early-graph-seed-bytes
+common_build=(-project "$project" -scheme VoiceMatrixPhysicalAudit -disableAutomaticPackageResolution
+  -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation -clonedSourcePackagesDirPath "$work/SourcePackages"
+  -derivedDataPath "$work/build")
+stage=early-xcode-resolve
+# Exact package declarations, no app model/resources. Check the real resolver before any donor or ASR payload.
+if ! xcodebuild "${common_build[@]}" -resolvePackageDependencies > "$work/dependencies.log" 2>&1; then
+  "${offline[@]}" python3 "$hosted/verify_graph.py" report "$resolved" || true
+  fail_guard early-xcode-resolve
+fi
+stage=early-frozen-graph-byte-comparison
+"${offline[@]}" python3 "$hosted/verify_graph.py" report "$resolved" || fail_guard early-frozen-graph-byte-comparison
+cmp "$graph" "$resolved" || fail_guard early-frozen-graph-byte-comparison
+mv "$project" "$work/graph-only.xcodeproj"
+disk_guard 8388608 disk-after-early-dependencies-before-model-fetch
 
 stage=single-immutable-baseline-acquisition
 baseline="$work/original.ipa"
@@ -138,17 +169,12 @@ rm -rf -- "$work/models" "$work/sdk"
 cp .physical-audit-src/project.yml physical-audit-project.yml
 "${offline[@]}" "$XCODEGEN" generate --spec physical-audit-project.yml > "$work/project.log" 2>&1
 
-stage=exact-dependency-graph
-project=VoiceMatrixPhysicalAudit.xcodeproj
-resolved="$project/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+stage=full-project-frozen-graph-restore
 mkdir -p "$(dirname "$resolved")"
 cp "$graph" "$resolved"
-common_build=(-project "$project" -scheme VoiceMatrixPhysicalAudit -disableAutomaticPackageResolution
-  -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation -clonedSourcePackagesDirPath "$work/SourcePackages"
-  -derivedDataPath "$work/build")
-# Resolve the frozen source-only pins before compilation; no resolution during the offline compile.
-xcodebuild "${common_build[@]}" -resolvePackageDependencies > "$work/dependencies.log" 2>&1
-cmp "$graph" "$resolved"
+"${offline[@]}" python3 "$hosted/verify_graph.py" report "$resolved" || fail_guard full-project-frozen-graph-restore
+cmp "$graph" "$resolved" || fail_guard full-project-frozen-graph-restore
+stage=exact-dependency-notices
 "${offline[@]}" python3 tools/character_package.py notices --checkouts "$work/SourcePackages/checkouts" \
   --resolved "$graph" --resources .physical-audit-assets > "$work/notices.log" 2>&1
 # The generated resource group folder tracks contents; retain the verified graph and record exact disk capacity gate.
@@ -157,7 +183,7 @@ stage=native-device-build
 "${offline[@]}" xcodebuild "${common_build[@]}" -configuration Release -sdk iphoneos \
   -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build \
   > "$work/build.log" 2>&1
-cmp "$graph" "$resolved"
+cmp "$graph" "$resolved" || fail_guard post-build-frozen-graph-byte-comparison
 stage=ephemeral-package-inspection
 mkdir "$work/Payload"
 # Same volume atomic move: no second full-sized app.

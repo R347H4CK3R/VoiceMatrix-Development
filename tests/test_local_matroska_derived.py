@@ -66,6 +66,17 @@ class DerivedSourcePolicy(unittest.TestCase):
         self.assertIn("LocalMatroskaReader(url: sourceMKV, expectedSHA256: expectedSHA256", source)
 
 
+    def test_native_rejection_reports_only_timeline_and_writer_state(self):
+        source = (ROOT / "VoiceMatrix/LocalMatroskaDerivedMedia.swift").read_text()
+        markers = ("phase=", "packetCount=", "appendedAudio=", "appendedVideo=",
+                   "lastMKVPTS=", "writerStatus=", "audioReady=", "videoReady=",
+                   "actualVideo=", "expectedVideo=", "actualAudio=", "expectedAudio=",
+                   "audioSegmentMappings=")
+        for marker in markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, source)
+
+
 # The reference used by both fixture rates is generated independently by
 # ffmpeg from the exact verified MKV, after the sole original has been removed.
 @unittest.skipUnless(platform.system() == "Darwin" and all(shutil.which(p) for p in ("swiftc", "ffmpeg", "ffprobe")),

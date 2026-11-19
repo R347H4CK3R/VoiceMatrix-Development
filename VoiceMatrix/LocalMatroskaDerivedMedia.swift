@@ -23,11 +23,12 @@ enum LocalMatroskaDerivedMedia {
     }
 
     enum Failure: LocalizedError {
-        case unsupported(String), destination, limit
+        case unsupported(String), destination, limit, deadline(String)
         var errorDescription: String? {
             switch self {
             case .unsupported(let reason): return "Native MKV derivation unsupported: \(reason)"
             case .destination: return "Derived MOV destination is unsafe or already exists."
+            case .deadline(let context): return "MKV derivation exceeded its 180-second deadline: \(context)"
             case .limit: return "MKV derivation exceeded its time or byte limit."
             }
         }
@@ -37,9 +38,22 @@ enum LocalMatroskaDerivedMedia {
                        maximumBytes: Int64 = 536_870_912,
                        packetProgress: @Sendable (Int) -> Void = { _ in }) async throws -> Receipt {
         let deadline = ContinuousClock.now + .seconds(180)
+        var phase = "source-validation"
+        var track = "none"
+        var count = 0
+        var audioPackets: Int64 = 0
+        var videoPTS = [Int64]()
+        var lastMKVPTS: Int64?
+        var lastAudioPTS: Int64?
+        var lastVideoPTS: Int64?
+        var writerState = { "writerStatus=uninitialized audioReady=unavailable videoReady=unavailable" }
         func check() throws {
             try Task.checkCancellation()
-            guard ContinuousClock.now < deadline else { throw Failure.limit }
+            guard ContinuousClock.now < deadline else {
+                let state = "phase=\(phase) track=\(track) packetCount=\(count) appendedAudio=\(audioPackets) appendedVideo=\(videoPTS.count)"
+                let timing = "lastMKVPTS=\(lastMKVPTS ?? -1) lastAppendedAudioPTS=\(lastAudioPTS ?? -1) lastAppendedVideoPTS=\(lastVideoPTS ?? -1) (milliseconds)"
+                throw Failure.deadline("\(state) \(timing) \(writerState())")
+            }
         }
         try check()
         let fm = FileManager.default
@@ -56,6 +70,7 @@ enum LocalMatroskaDerivedMedia {
         try fm.createDirectory(at: staging, withIntermediateDirectories: false,
                                attributes: [.posixPermissions: 0o700])
         defer { try? fm.removeItem(at: staging) }
+        phase = "writer-startup"
         let output = staging.appendingPathComponent("derived.mov")
         let writer = try AVAssetWriter(outputURL: output, fileType: .mov)
         writer.directoryForTemporaryFiles = staging
@@ -64,6 +79,9 @@ enum LocalMatroskaDerivedMedia {
         let rate = Int32(reader.audio.sampleRate)
         let video = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: videoFormat)
         let audio = AVAssetWriterInput(mediaType: .audio, outputSettings: nil, sourceFormatHint: audioFormat)
+        writerState = {
+            "writerStatus=\(writer.status.rawValue) audioReady=\(audio.isReadyForMoreMediaData) videoReady=\(video.isReadyForMoreMediaData)"
+        }
         video.mediaTimeScale = 1000
         writer.movieTimeScale = 1000 * rate / gcd(1000, rate)
         guard writer.canAdd(video), writer.canAdd(audio) else { throw Failure.unsupported("compressed tracks") }
@@ -74,18 +92,18 @@ enum LocalMatroskaDerivedMedia {
         defer { if writer.status == .writing { writer.cancelWriting() } }
         writer.startSession(atSourceTime: .zero)
 
-        var videoPTS = [Int64]()
         var pending: LocalMatroskaReader.Packet?
-        var audioPackets: Int64 = 0
         var removed: Int64 = 0
         var payloadBytes: Int64 = 0
-        var count = 0
 
         func append(_ packet: LocalMatroskaReader.Packet, into input: AVAssetWriterInput,
                     format: CMFormatDescription, pts: CMTime, duration: CMTime, trim: CMTime? = nil) throws {
+            track = input === video ? "video" : "audio"
+            phase = "preparing-append"
             try check()
             payloadBytes += Int64(packet.bytes.count)
             guard payloadBytes <= maximumBytes else { throw Failure.limit }
+            phase = "waiting-for-input-readiness"
             while !input.isReadyForMoreMediaData {
                 try check()
                 guard writer.status == .writing else { throw Failure.unsupported("writer stopped") }
@@ -93,8 +111,11 @@ enum LocalMatroskaDerivedMedia {
                 // The monotonic deadline also bounds a stalled writer input.
                 Darwin.usleep(2_000)
             }
+            phase = "appending-packet"
             let buffer = try sample(packet, format: format, pts: pts, duration: duration, endTrim: trim)
             guard input.append(buffer) else { throw Failure.unsupported("packet append: \(String(describing: writer.error))") }
+            if input === video { lastVideoPTS = packet.presentationMilliseconds }
+            else { lastAudioPTS = packet.presentationMilliseconds }
         }
 
         func appendVideo(_ packet: LocalMatroskaReader.Packet, duration: Int64) throws {
@@ -104,9 +125,13 @@ enum LocalMatroskaDerivedMedia {
             videoPTS.append(packet.presentationMilliseconds)
         }
 
+        phase = "reading-mkv-packets"
         try reader.forEachPacket { packet in
             try check()
             count += 1
+            lastMKVPTS = packet.presentationMilliseconds
+            track = packet.trackNumber == reader.video.number ? "video" : "audio"
+            phase = "packet-progress-callback"
             packetProgress(count)
             try check()
             if packet.trackNumber == reader.video.number {
@@ -126,11 +151,15 @@ enum LocalMatroskaDerivedMedia {
                            duration: CMTime(value: 1024, timescale: rate), trim: trim)
                 audioPackets += 1
             }
+            phase = "reading-mkv-packets"
+            track = "none"
         }
         guard let last = pending else { throw Failure.unsupported("no video") }
         try appendVideo(last, duration: Int64(last.durationMilliseconds))
         let videoEnd = last.presentationMilliseconds + Int64(last.durationMilliseconds)
         let audioFrames = audioPackets * 1024 - removed
+        phase = "finishing-writer"
+        track = "none"
         video.markAsFinished()
         audio.markAsFinished()
 
@@ -141,10 +170,13 @@ enum LocalMatroskaDerivedMedia {
 
         // Track metadata is not enough: Apple must expose the exact PCM frames
         // after trim, with no implicit leading priming removal or extra padding.
+        phase = "hashing-derived-output"
         let digest = try hash(output, maximumBytes: maximumBytes, check: check)
+        phase = "verifying-native-output"
         try await verifyNative(output, rate: rate, channels: reader.audio.channels, audioFrames: audioFrames,
                                videoPTS: videoPTS, videoEnd: videoEnd, width: reader.video.width, height: reader.video.height,
                                check: check)
+        phase = "rechecking-source"
         try reader.verifyUnchanged()
         try check()
         // Same-volume atomic create, never replacing an existing item, even
@@ -234,11 +266,16 @@ enum LocalMatroskaDerivedMedia {
         let audioRange = try await audios[0].load(.timeRange)
         let audioSegments = try await audios[0].load(.segments)
         try check()
+        let expectedVideo = CMTimeRange(start: .zero, duration: CMTime(value: videoEnd, timescale: 1000))
+        let expectedAudio = CMTimeRange(start: .zero, duration: CMTime(value: audioFrames, timescale: rate))
         guard !audioSegments.isEmpty, audioSegments.allSatisfy({ !$0.isEmpty }),
-              videoRange.start == .zero, audioRange.start == .zero,
-              videoRange.duration == CMTime(value: videoEnd, timescale: 1000),
-              audioRange.duration == CMTime(value: audioFrames, timescale: rate) else {
-            throw Failure.unsupported("native track bounds or AAC trim")
+              videoRange.start == expectedVideo.start, audioRange.start == expectedAudio.start,
+              videoRange.duration == expectedVideo.duration,
+              audioRange.duration == expectedAudio.duration else {
+            let mappings = audioSegments.prefix(8).map { segment in
+                "empty=\(segment.isEmpty) source=\(describe(segment.timeMapping.source)) target=\(describe(segment.timeMapping.target))"
+            }.joined(separator: "; ")
+            throw Failure.unsupported("native track bounds or AAC trim: actualVideo=\(describe(videoRange)) expectedVideo=\(describe(expectedVideo)) actualAudio=\(describe(audioRange)) expectedAudio=\(describe(expectedAudio)) audioSegmentMappings=[\(mappings)] (count=\(audioSegments.count))")
         }
 
         let audioReader = try AVAssetReader(asset: asset)
@@ -293,6 +330,13 @@ enum LocalMatroskaDerivedMedia {
             index += 1
         }
         guard videoReader.status == .completed, index == videoPTS.count else { throw Failure.unsupported("native video frame count") }
+    }
+
+    private static func describe(_ range: CMTimeRange) -> String {
+        func describeTime(_ time: CMTime) -> String {
+            "\(time.value)/\(time.timescale) flags=\(time.flags.rawValue) epoch=\(time.epoch)"
+        }
+        return "(start=\(describeTime(range.start)), duration=\(describeTime(range.duration)))"
     }
 
     private static func hash(_ url: URL, maximumBytes: Int64, check: () throws -> Void) throws -> (String, Int64) {

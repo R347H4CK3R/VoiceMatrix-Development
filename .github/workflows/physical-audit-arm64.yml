@@ -22,9 +22,9 @@ jobs:
           python-version: '3.12'
       - name: Require exact public source and externally approved hosted scope
         env:
-          ALLOWED_CODE_PARENT: 9512542824614febf04ea20b85f9e64dcc4cbaec
-          APPROVAL_SHA256: e0240b01eb83897db82ae2268a2bf79220758aaecba21302122483d6916386b5
-          APPROVAL_JSON: '{"approvalDateUTC":"2026-11-19","approvedBy":"Coordinating maintainer (one official FFmpeg preflight retry)","baselineIPA":{"sha256":"04d199d356a5fde59101d3909a35abf05e8dd1129141e0add66e1e45006c5d11","size":1330407101},"graphSHA256":"ff9369012927524e241f0cf3bcca1a72177947e02ef7933beef716377c87de72","iphoneOSSDK":"26.5","modelLocks":{"Diarization":"137ad0aba1483d0ba3c74cb5380ab05f5cd76a5eb47aa69b9de41c353315e7e0","F5TTS":"e51680c87462bb26433613fe61f7da735c59ab770020f5705a6159cda78bdb70","ParakeetASR":"f58c59e24e41e17f701d7b2b7fc4aa45343c232a2119fb6540357f676a6416ce"},"noFurtherDistribution":true,"noPersonalRecordings":true,"runtimeRevision":"42da8f3ed18ca1c0f1462032db5dc05ce77362a1","schemaVersion":1,"scope":"private-noncommercial-hardware-audit-only","xcodeVersion":"Xcode 26.6","xcodegenSHA256":"a450f63bdd650c280cfce0fef6c94dbb19c5bf8dc32811361fd5d2e912718503"}'
+          ALLOWED_CODE_PARENT: 6856b7e0474bc76f4909ab6483ce19a50a83664e
+          APPROVAL_SHA256: 5c32e539b3d1149dc002986559079b9800e1d8877942ef0697b14fee99d63f05
+          APPROVAL_JSON: '{"approvalDateUTC":"2026-11-19","approvedBy":"Coordinating maintainer (one exact vendored graph attempt)","baselineIPA":{"sha256":"04d199d356a5fde59101d3909a35abf05e8dd1129141e0add66e1e45006c5d11","size":1330407101},"graphSHA256":"2d2f397374be883181f421002ba25ef80231dab94ed331d7651bb4ebe68ee5f6","iphoneOSSDK":"26.5","modelLocks":{"Diarization":"137ad0aba1483d0ba3c74cb5380ab05f5cd76a5eb47aa69b9de41c353315e7e0","F5TTS":"e51680c87462bb26433613fe61f7da735c59ab770020f5705a6159cda78bdb70","ParakeetASR":"f58c59e24e41e17f701d7b2b7fc4aa45343c232a2119fb6540357f676a6416ce"},"noFurtherDistribution":true,"noPersonalRecordings":true,"runtimeRevision":"42da8f3ed18ca1c0f1462032db5dc05ce77362a1","schemaVersion":1,"scope":"private-noncommercial-hardware-audit-only","xcodeVersion":"Xcode 26.6","xcodegenSHA256":"a450f63bdd650c280cfce0fef6c94dbb19c5bf8dc32811361fd5d2e912718503"}'
         run: |
           set -euo pipefail
           activation_guard() { printf 'audit_activation_failed_guard=%s\n' "$1" >&2; exit 1; }
